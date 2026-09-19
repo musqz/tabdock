@@ -78,11 +78,18 @@ before or after the browser; the extension reconnects with backoff.
   (`firefox`, `zen`, `firedragon`...). Panel shows that browser's model.
 - **Non-browser window active:** keep showing the last browser's panel (default); config option
   `follow = last | hide` (see open question).
-- **Autohide:** one GTK window, `_NET_WM_WINDOW_TYPE_DOCK`, undecorated, keep-above, on the configured
-  monitor + side. Collapsed = 2 px wide hover strip at the screen edge; pointer enter -> expand to the
-  configured width after ~120 ms; pointer leave -> collapse after ~400 ms (not while a menu/drag is
-  active). Overlay by default (no strut), so windows are not resized. Fullscreen windows sit above the
-  dock layer in Openbox, so the panel stays out of the way during fullscreen video.
+- **Autohide (as built):** two `_NET_WM_WINDOW_TYPE_DOCK` windows, undecorated, keep-above, on the
+  configured monitor + side. The *strip* (3 px, always mapped) is the hover target and is tinted in
+  the active browser's colour; the *panel* (full width) is mapped only while expanded and is only ever
+  resized while unmapped (resizing a mapped GTK window while its content appears makes GTK snap it
+  back to the content's minimum width). Pointer enter -> panel after ~120 ms; leave -> hidden after
+  ~400 ms. Overlay by default (no strut). Fullscreen windows sit above the dock layer in Openbox,
+  so the panel stays out of the way during fullscreen video.
+- **Animation:** none built in (user runs picom): the panel only maps/unmaps, so compositor
+  open/close animations apply; `configs/picom-sidepanel.conf` is the rule.
+- **Active browser always visible:** the panel header names the browser in its accent colour (Firefox
+  orange, Zen purple, FireDragon red, LibreWolf blue) and the collapsed strip carries the same
+  colour, so it is clear which browser is active even with window borders hidden.
 - **Pin toggle:** header button / hotkey sets `_NET_WM_STRUT_PARTIAL` so the panel stays open and
   windows are laid out beside it; unpin removes the strut and returns to autohide.
 - **Left/right:** `side = left | right` and `monitor = primary | <output name>` in
@@ -126,13 +133,15 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
 - **M0 skeleton (done):** dirs, `.gitignore`, git init, config loader, README stub. Write `docs/PROTOCOL.md`.
 - **M1 tracer bullet (done, verified with headless Firefox 156):** extension connects, sends snapshot; relay + socket;
   panel prints the tab list in a plain GTK list. Proves the whole pipe end to end in Firefox 156.
-- **M2 real panel:** dock window, autohide strip, left/right + monitor from config, container sections,
+- **M2 real panel (done, verified under Openbox in Xephyr: `tests/e2e_x11.py`):** dock window, autohide strip, left/right + monitor from config, container sections,
   colors/icons, click-to-activate + focus, follow `_NET_ACTIVE_WINDOW`, pin/strut.
 - **M3 two-way editing:** new tab in container, close, move, pin, container create/rename/recolor/
   delete from the panel, search box, favicons cache. Autostart from `~/.config/openbox/autostart`
   (fits its phased structure), `install.sh` with `--uninstall`.
 - **M4 workspaces** via `tabs.hide()`; optional native tab-group display.
-- **M5 more browsers:** Zen (native, cheap), then FireDragon and LibreWolf as **native packages**
+- **M5 more browsers:** Zen (native, cheap; verified: Zen 1.22 reads `~/.mozilla/native-messaging-hosts`
+  and passes `tests/e2e_firefox.py --firefox /usr/bin/zen-browser`, no separate `~/.zen` manifest
+  needed, so `install.sh` already covers it), then FireDragon and LibreWolf as **native packages**
   (user runs: `yay -S firedragon-bin`, `sudo pacman -S librewolf`, then removes the Flatpaks; check the
   existing `~/.firedragon` / `~/.librewolf` profiles are picked up). `install.sh` writes the
   native-messaging manifest to each browser's dir (`~/.mozilla`, `~/.zen`, `~/.firedragon`,
@@ -149,7 +158,7 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
    may allow unsigned installs.
 3. **Focus stealing:** Openbox may refuse focus changes from the browser; fallback `wmctrl -ia`.
 4. **Hover strip vs. other edge users:** on a right-edge panel the browser scrollbar shares the edge on a
-   maximised window. Keep the strip at 2 px and prefer outer monitor edges (see Context).
+   maximised window. Keep the strip at 3 px and prefer outer monitor edges (see Context).
 5. **Firefox still shows its own tab strip:** the panel replaces it visually only if the user hides the
    strip (userChrome.css snippet documented in `docs/`; not shipped as an install step).
 
@@ -177,4 +186,4 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
 - v1 target is native Firefox 156; Zen is the cheap second target; FireDragon/LibreWolf come in M5 as
   native (non-Flatpak) installs.
 - Python + GTK3 (already installed, no build step). Go/C not needed.
-- Width 320 px, overlay autohide, 2 px hover strip.
+- Width 320 px, overlay autohide, 3 px hover strip.

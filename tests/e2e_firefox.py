@@ -153,10 +153,10 @@ def main():
         m.call("Addon:Install", {"path": xpi, "temporary": True})
         print("extension installed; waiting for first snapshot ...")
 
-        first = out.wait_for(r"== Firefox (\S+) \(pid (\d+)\) window \d+ ==")
-        assert int(first.group(2)) == ff.pid, f"browserPid {first.group(2)} != firefox pid {ff.pid}"
+        first = out.wait_for(r"== (\S+) (\S+) \(pid (\d+)\) window \d+ ==")
+        assert int(first.group(3)) == ff.pid, f"browserPid {first.group(3)} != browser pid {ff.pid}"
         out.wait_for(r"New Tab \[(\d+)\]")
-        print(f"OK browser->panel: hello (Firefox {first.group(1)}, pid matches) + snapshot")
+        print(f"OK browser->panel: hello ({first.group(1)} {first.group(2)}, pid matches) + snapshot")
         out.wait_for(r"\[Personal\]")
         print("OK containers listed")
 
@@ -178,7 +178,7 @@ def main():
         panel.wait(timeout=TIMEOUT)
         panel, out = start_panel(env)
         procs.append(panel)
-        out.wait_for(r"== Firefox .* window \d+ ==")
+        out.wait_for(r"== \S+ .* window \d+ ==")
         out.wait_for(r"marionette-tab \[\d+\]")
         print("OK panel restart: relay reconnected and extension resynced")
         print("ALL OK")

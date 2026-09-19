@@ -1,0 +1,20 @@
+# openbox-sidepanel config -> ~/.config/openbox-sidepanel/config.toml
+# Reload a running panel with: kill -HUP $(pgrep -f 'sidepanel$')   (or restart it)
+
+# Which screen edge the panel sits on: "left" or "right".
+# Tip: pick an outer edge of your monitor layout (the pointer stops there, so hover-to-open is easy).
+side = "left"
+
+# "primary" or an output name as shown by `xrandr`, e.g. "HDMI-1" or "DP-1".
+monitor = "primary"
+
+# Width in pixels when expanded (100-1000).
+width = 320
+
+# What to show while a non-browser window (terminal, file manager, ...) is active:
+#   "last" keeps the panel of the browser you used last, "hide" removes the panel.
+follow = "last"
+
+# Start pinned: the panel stays open and windows are laid out beside it (an outer screen
+# edge only; on an inner edge it stays open as an overlay). false = autohide on hover.
+pinned = false

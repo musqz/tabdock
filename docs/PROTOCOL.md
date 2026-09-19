@@ -14,7 +14,7 @@ directions, with two additions: it sends `resync` to the extension whenever the 
 
 | type    | fields | notes |
 |---------|--------|-------|
-| `hello` | `browser`, `version`, `browserPid` (added by relay) | sent on every resync, before `state` |
+| `hello` | `browser`, `version`, `browserPid` (added by relay) | sent on every resync, before `state`. `browser` is what `getBrowserInfo()` reports, which is unreliable (Zen says "Firefox"), so the panel names the browser from `/proc/<browserPid>/exe` and only falls back to this |
 | `state` | `focusedWindowId`, `containers[]`, `windows[]` | full snapshot, debounced 50 ms after any change |
 
 `containers[]`: `{cookieStoreId, name, color, colorCode, icon}`.
