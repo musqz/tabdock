@@ -123,8 +123,8 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
 
 ## Milestones
 
-- **M0 skeleton:** dirs, `.gitignore`, git init, config loader, README stub. Write `docs/PROTOCOL.md`.
-- **M1 tracer bullet (no browser UI polish):** extension connects, sends snapshot; relay + socket;
+- **M0 skeleton (done):** dirs, `.gitignore`, git init, config loader, README stub. Write `docs/PROTOCOL.md`.
+- **M1 tracer bullet (done, verified with headless Firefox 156):** extension connects, sends snapshot; relay + socket;
   panel prints the tab list in a plain GTK list. Proves the whole pipe end to end in Firefox 156.
 - **M2 real panel:** dock window, autohide strip, left/right + monitor from config, container sections,
   colors/icons, click-to-activate + focus, follow `_NET_ACTIVE_WINDOW`, pin/strut.

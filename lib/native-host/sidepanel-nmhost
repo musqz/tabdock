@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Native-messaging relay between the browser extension and the panel.
+
+The browser spawns this (one process per browser instance). It speaks native
+messaging on stdio (4-byte native-endian length + JSON) and line-delimited JSON
+on the panel's Unix socket. It waits for the panel to appear, and every time the
+panel (re)connects it asks the extension to "resync" so the panel gets a
+fresh hello + state.
+"""
+import json
+import os
+import select
+import socket
+import struct
+import sys
+
+# deliberately standalone (one copyable file); keep in sync with sidepanel/config.py socket_path()
+SOCKET = os.environ.get("SIDEPANEL_SOCKET") or os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "openbox-sidepanel.sock"
+)
+RETRY_S = 1.0
+
+
+def to_browser(obj):
+    data = json.dumps(obj, separators=(",", ":")).encode()
+    try:
+        sys.stdout.buffer.write(struct.pack("=I", len(data)) + data)
+        sys.stdout.buffer.flush()
+    except BrokenPipeError:
+        sys.exit(0)
+
+
+def drop_panel(sock):
+    """Panel went away: tell the extension so it stops building snapshots nobody reads."""
+    sock.close()
+    to_browser({"type": "panel_disconnected"})
+    return None
+
+
+def connect_panel():
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.connect(SOCKET)
+    except OSError:
+        s.close()
+        return None
+    return s
+
+
+def main():
+    browser_pid = os.getppid()
+    sock = None
+    from_browser = b""
+    from_panel = b""
+
+    while True:
+        if sock is None:
+            sock = connect_panel()
+            if sock is not None:
+                from_panel = b""
+                to_browser({"type": "resync"})
+
+        # the timeout doubles as the panel reconnect interval
+        ready, _, _ = select.select([0] + ([sock] if sock else []), [], [], RETRY_S)
+
+        if 0 in ready:
+            chunk = os.read(0, 65536)
+            if not chunk:
+                return  # browser closed the port
+            from_browser += chunk
+            while len(from_browser) >= 4:
+                (size,) = struct.unpack("=I", from_browser[:4])
+                if len(from_browser) < 4 + size:
+                    break
+                raw, from_browser = from_browser[4 : 4 + size], from_browser[4 + size :]
+                if sock is None:
+                    continue  # nobody listening; the resync on connect refreshes state
+                try:
+                    msg = json.loads(raw)
+                except ValueError:
+                    continue  # never let one bad message kill the relay
+                if not isinstance(msg, dict):
+                    continue
+                if msg.get("type") == "hello":
+                    msg["browserPid"] = browser_pid
+                try:
+                    sock.sendall(json.dumps(msg, separators=(",", ":")).encode() + b"\n")
+                except OSError:
+                    sock = drop_panel(sock)
+                    break
+
+        if sock is not None and sock in ready:
+            try:
+                chunk = sock.recv(65536)
+            except OSError:
+                chunk = b""
+            if not chunk:
+                sock = drop_panel(sock)
+                continue
+            from_panel += chunk
+            *lines, from_panel = from_panel.split(b"\n")
+            for line in lines:
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(msg, dict):
+                    to_browser(msg)
+
+
+if __name__ == "__main__":
+    main()

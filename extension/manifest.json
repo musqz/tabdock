@@ -1,0 +1,16 @@
+{
+  "manifest_version": 2,
+  "name": "Openbox Sidepanel",
+  "version": "0.1.0",
+  "description": "Mirrors tabs and containers to the openbox-sidepanel desktop panel and executes its commands.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "openbox-sidepanel@musqz.local"
+    }
+  },
+  "permissions": ["tabs", "cookies", "contextualIdentities", "nativeMessaging"],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  }
+}

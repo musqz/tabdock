@@ -1,0 +1,7 @@
+{
+  "name": "openbox_sidepanel",
+  "description": "Relay between the Openbox Sidepanel extension and the desktop panel",
+  "path": "@HOST_PATH@",
+  "type": "stdio",
+  "allowed_extensions": ["openbox-sidepanel@musqz.local"]
+}
