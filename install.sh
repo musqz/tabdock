@@ -22,7 +22,8 @@ receipt="$share/.installed"  # every path install created, one per line: what --
 manifest_name="openbox_sidepanel.json"
 apps_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 desktop_name="openbox-sidepanel.desktop"
-# native-messaging manifest dirs; Firefox and Zen both read ~/.mozilla (verified for Zen 1.22)
+# native-messaging manifest dirs. One manifest in ~/.mozilla serves Firefox, Zen, FireDragon,
+# Waterfox and LibreWolf: each was verified with tests/e2e_firefox.py --firefox <browser>.
 nm_dirs=("$HOME/.mozilla/native-messaging-hosts")
 
 installed=()

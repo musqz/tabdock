@@ -2,6 +2,10 @@
 
 ## 0.2.0 (unreleased)
 
+- Verified on Firefox, Zen, FireDragon, Waterfox and LibreWolf (native packages) with the same extension and
+  the single `~/.mozilla/native-messaging-hosts` manifest, so no per-browser manifest directories are
+  needed. Waterfox gets its own accent colour (teal).
+
 - No terminal needed to start the panel. The native-messaging relay starts it, detached, when a browser
   with the extension opens and none is running. A panel that dies before it ever listens is started again
   (at most three times); once a relay has seen a panel it never starts one, so a panel quit with its `✕` is

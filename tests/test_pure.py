@@ -236,9 +236,11 @@ class MatchTest(unittest.TestCase):
         self.assertEqual(accent({"browser": "Firefox"}), "#ff7139")
         self.assertEqual(accent({"browser": "LibreWolf"}), "#3fa9f5")
         self.assertEqual(accent({"browser": "Zen"}), "#9d7cd8")
+        self.assertEqual(accent({"browser": "Waterfox"}), "#2ec4b6")
         self.assertEqual(accent({"browser": "Mystery"}), "#8f9bb3")
         self.assertEqual(accent({}), "#8f9bb3")
-        self.assertEqual(len({accent({"browser": b}) for b in ("Firefox", "Zen", "FireDragon", "LibreWolf")}), 4)
+        browsers = ("Firefox", "Zen", "FireDragon", "LibreWolf", "Waterfox")
+        self.assertEqual(len({accent({"browser": b}) for b in browsers}), 5)  # each one recognisable at a glance
 
 
 if __name__ == "__main__":

@@ -43,7 +43,13 @@ def group_tabs(state):
     return groups
 
 
-ACCENTS = {"firefox": "#ff7139", "zen": "#9d7cd8", "firedragon": "#e5484d", "librewolf": "#3fa9f5"}
+ACCENTS = {
+    "firefox": "#ff7139",
+    "zen": "#9d7cd8",
+    "firedragon": "#e5484d",
+    "librewolf": "#3fa9f5",
+    "waterfox": "#2ec4b6",
+}
 DEFAULT_ACCENT = "#8f9bb3"
 
 

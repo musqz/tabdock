@@ -2,7 +2,12 @@
 
 A desktop side panel for Openbox/X11 that shows the tabs and containers of the focused
 Firefox-family browser, kept in two-way sync through a small WebExtension. Goal: a Zen-style
-sidebar (containers, workspaces, autohide) that works in Firefox, FireDragon, LibreWolf, Zen.
+sidebar (containers, workspaces, autohide) that works in Firefox, Zen, FireDragon, Waterfox and LibreWolf.
+
+**Browsers.** All five run from the same extension and the one native-messaging manifest that
+`install.sh` writes, and each passes `tests/e2e_firefox.py --firefox <browser>` (native packages; Flatpak
+and Snap builds cannot start the helper). Each gets its own colour on the strip and header:
+Firefox orange, Zen purple, FireDragon red, Waterfox teal, LibreWolf blue.
 
 Status: **0.2.0, installable.** An autohiding dock on the left or right screen edge, following
 whichever supported browser is active, with a real install, a lint-clean extension ready for signing,
@@ -15,7 +20,7 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost
 ## How it behaves
 
 - **Collapsed:** a 3 px strip at the screen edge, tinted in the active browser's colour
-  (Firefox orange, Zen purple, FireDragon red, LibreWolf blue). Hover it and the panel opens
+  (see Browsers above). Hover it and the panel opens
   after ~120 ms; it closes ~400 ms after the pointer leaves.
 - **Open:** the header always names the browser (in its colour), so you can tell which browser
   you are looking at even when window borders are hidden. Below it, one collapsible section per

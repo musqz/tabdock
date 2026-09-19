@@ -38,7 +38,8 @@ npx web-ext sign --source-dir extension --channel=unlisted --artifacts-dir web-e
 
 3. The signed `.xpi` is written to `web-ext-artifacts/`. Install it in each browser:
    `about:addons` -> gear icon -> **Install Add-on From File...** -> pick the signed file. It survives
-   restarts. Use the same file for Firefox and Zen (LibreWolf and FireDragon later, see the plan).
+   restarts. Use the same signed file in every browser (Firefox, Zen, FireDragon, Waterfox, LibreWolf);
+   each has its own add-ons list, so install it once per browser.
 
 The add-on id `openbox-sidepanel@musqz.local` is fixed in the manifest and must match the native-messaging
 manifest (a test checks this). AMO rejects a version number it has already signed, so bump `VERSION`

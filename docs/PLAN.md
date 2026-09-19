@@ -143,14 +143,12 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
 - **M3 two-way editing:** new tab in container, close, move, pin, container create/rename/recolor/
   delete from the panel, search box, favicons cache.
 - **M4 workspaces** via `tabs.hide()`; optional native tab-group display.
-- **M5 more browsers:** Zen (native, cheap; verified: Zen 1.22 reads `~/.mozilla/native-messaging-hosts`
-  and passes `tests/e2e_firefox.py --firefox /usr/bin/zen-browser`, no separate `~/.zen` manifest
-  needed, so `install.sh` already covers it), then FireDragon and LibreWolf as **native packages**
-  (user runs: `yay -S firedragon-bin`, `sudo pacman -S librewolf`, then removes the Flatpaks; check the
-  existing `~/.firedragon` / `~/.librewolf` profiles are picked up). `install.sh` writes the
-  native-messaging manifest to each browser's dir (`~/.mozilla`, `~/.zen`, `~/.firedragon`,
-  `~/.librewolf` `/native-messaging-hosts/`; verify the exact path per browser). PID matching works
-  again; `WM_CLASS` stays as fallback. Only start after M2/M3 are solid.
+- **M5 more browsers (done, pulled forward):** verified with `tests/e2e_firefox.py --firefox <browser>` on
+  Firefox, Zen, FireDragon (`firedragon-bin`), Waterfox (`waterfox-bin`) and LibreWolf (`librewolf`), all
+  native packages. Every one reads `~/.mozilla/native-messaging-hosts`, so the single manifest from
+  `install.sh` covers them and no per-browser directories (`~/.zen`, `~/.firedragon`, `~/.librewolf`) are
+  needed. Process-based identification tells them apart (Zen even reports itself as "Firefox"); Waterfox
+  has its own accent colour. The signed `.xpi` is installed once per browser.
 - **Later, only if wanted:** drag-and-drop reorder, tree tabs, Zen-workspace import, AUR packaging.
 
 ## Risks
