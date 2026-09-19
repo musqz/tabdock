@@ -135,9 +135,13 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
   panel prints the tab list in a plain GTK list. Proves the whole pipe end to end in Firefox 156.
 - **M2 real panel (done, verified under Openbox in Xephyr: `tests/e2e_x11.py`):** dock window, autohide strip, left/right + monitor from config, container sections,
   colors/icons, click-to-activate + focus, follow `_NET_ACTIVE_WINDOW`, pin/strut.
+- **M2.5 permanent install (done, pulled forward from M3 because it makes the tool usable daily):**
+  copy-install with receipt and `--uninstall`, autostart line for the phased Openbox autostart,
+  lint-clean extension with icons and AMO metadata, reproducible `.xpi`, `docs/RELEASE.md`. Signing
+  the extension (AMO unlisted) is a step only the user can do; installing the signed `.xpi` makes it survive
+  browser restarts.
 - **M3 two-way editing:** new tab in container, close, move, pin, container create/rename/recolor/
-  delete from the panel, search box, favicons cache. Autostart from `~/.config/openbox/autostart`
-  (fits its phased structure), `install.sh` with `--uninstall`.
+  delete from the panel, search box, favicons cache.
 - **M4 workspaces** via `tabs.hide()`; optional native tab-group display.
 - **M5 more browsers:** Zen (native, cheap; verified: Zen 1.22 reads `~/.mozilla/native-messaging-hosts`
   and passes `tests/e2e_firefox.py --firefox /usr/bin/zen-browser`, no separate `~/.zen` manifest

@@ -1,11 +1,22 @@
 {
   "manifest_version": 2,
   "name": "Openbox Sidepanel",
-  "version": "0.1.0",
-  "description": "Mirrors tabs and containers to the openbox-sidepanel desktop panel and executes its commands.",
+  "version": "0.2.0",
+  "description": "Shows your tabs and containers in the openbox-sidepanel desktop panel. Talks only to a local helper; nothing leaves your computer.",
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  },
   "browser_specific_settings": {
     "gecko": {
-      "id": "openbox-sidepanel@musqz.local"
+      "id": "openbox-sidepanel@musqz.local",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
     }
   },
   "permissions": ["tabs", "cookies", "contextualIdentities", "nativeMessaging"],

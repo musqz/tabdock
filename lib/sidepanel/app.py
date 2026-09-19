@@ -1,4 +1,5 @@
 import argparse
+import os
 import signal
 import sys
 
@@ -116,8 +117,18 @@ def _watch_stdin(panel):
     reader.read_line_async(GLib.PRIORITY_DEFAULT, None, on_line)
 
 
+def _version():
+    """The VERSION file sits two levels above this package, in a checkout and once installed."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "VERSION")) as f:
+            return f.read().strip()
+    except OSError:
+        return "unknown"
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="sidepanel", description="Desktop side panel for Firefox-family browsers")
+    parser.add_argument("--version", action="version", version=f"sidepanel {_version()}")
     parser.add_argument(
         "--debug",
         action="store_true",

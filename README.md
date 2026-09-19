@@ -4,9 +4,9 @@ A desktop side panel for Openbox/X11 that shows the tabs and containers of the f
 Firefox-family browser, kept in two-way sync through a small WebExtension. Goal: a Zen-style
 sidebar (containers, workspaces, autohide) that works in Firefox, FireDragon, LibreWolf, Zen.
 
-Status: **M2, the real panel.** An autohiding dock on the left or right screen edge, following
-whichever supported browser is active. Two-way editing (new/close/move tabs, containers) and
-workspaces come next. See [docs/PLAN.md](docs/PLAN.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
+Status: **0.2.0, installable.** An autohiding dock on the left or right screen edge, following
+whichever supported browser is active, with a real install, a lint-clean extension ready for signing,
+and autostart instructions. Two-way editing (new/close/move tabs, containers) and workspaces come next. See [docs/PLAN.md](docs/PLAN.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ```
 Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost  <-- unix socket -->  sidepanel
@@ -29,17 +29,35 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost
   edge (a neighbouring monitor beyond it) the panel stays open as an overlay instead.
 - The panel never takes keyboard focus, so clicking it does not steal focus from the browser.
 
-## Try it (development)
+## Install
 
 Needs `python-gobject` (GTK 3) and `python-xlib` on X11. Native browser installs only, no Flatpak/Snap.
 
 ```bash
-./install.sh                # native-messaging manifest for Firefox (points at this checkout)
-./sidepanel                 # the panel; add --debug for a console view (no GUI)
+./install.sh                                   # program -> ~/.local, plus the native-messaging manifest
+packaging/build-extension.sh                   # unsigned .xpi; signing and autostart: docs/RELEASE.md
 ```
 
-Then in Firefox open `about:debugging#/runtime/this-firefox`, "Load Temporary Add-on...",
-and pick `extension/manifest.json`. `./install.sh --uninstall` removes the manifest.
+Release Firefox and Zen only keep **signed** extensions, so a permanent setup needs the extension
+signed once (free, via addons.mozilla.org, unlisted) and one line in your Openbox autostart. Both are
+walked through, with a reboot check, in [docs/RELEASE.md](docs/RELEASE.md).
+`./install.sh --uninstall` removes exactly what was installed.
+
+## Development
+
+Run from the checkout with `./sidepanel` (add `--debug` for a console view without a GUI). To try the
+extension without signing, load it as a temporary add-on: `about:debugging#/runtime/this-firefox` ->
+"Load Temporary Add-on..." -> `extension/manifest.json` (forgotten on browser restart). Run
+`./install.sh` first so the browser can start the relay.
+
+## Troubleshooting
+
+- **"Waiting for a browser with the Sidepanel extension":** the extension is not installed or
+  enabled, or the native-messaging manifest is missing; see [docs/RELEASE.md](docs/RELEASE.md).
+- **The panel only opens on part of the screen edge:** another tool's invisible hotspot windows
+  (for example `fittsmon`'s `[Left]` position) sit above the strip and catch the pointer first. Find them
+  with `xwininfo -root -tree | grep -E ' (2x[0-9]+|[0-9]+x2)\+'`, remove that position from the other tool's
+  config, or move the panel to a free edge.
 
 ## Configuration
 
@@ -81,10 +99,12 @@ native-messaging directory. `e2e_x11.py` opens a small Xephyr window on your des
 
 | Path | What |
 |------|------|
-| `sidepanel` | main executable |
+| `sidepanel`, `VERSION` | main executable and the version it reports |
+| `install.sh` | install / uninstall (see docs/RELEASE.md) |
 | `lib/sidepanel/` | panel: socket server, model, geometry, autohide, X11 helpers, GTK dock |
 | `lib/native-host/` | native-messaging relay |
-| `extension/` | the WebExtension (MV2) |
+| `extension/` | the WebExtension (MV2), with icons |
+| `packaging/` | `build-extension.sh` (reproducible .xpi); AUR packaging later |
 | `configs/` | native-messaging manifest template, sample config, picom rule |
-| `docs/` | plan and protocol |
+| `docs/` | plan, protocol, install and release guide |
 | `tests/` | unit, protocol and end-to-end tests |

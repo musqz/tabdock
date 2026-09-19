@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """End-to-end check with a real headless Firefox (slow, needs /usr/bin/firefox; not part of discovery).
 
-Scratch profile + throwaway $HOME, so your real profile and native-messaging dir are untouched.
-Installs extension/ as a temporary add-on through Marionette and checks, against
-a real `sidepanel --debug` process:
+Scratch profile + throwaway $HOME, so your real profile, ~/.local and native-messaging dir are
+untouched. It exercises what ships: install.sh puts the program into the scratch $HOME and the
+panel runs from that installed copy; packaging/build-extension.sh builds the .xpi, which is
+installed as a temporary add-on through Marionette. Then, against a real `sidepanel --debug`:
   browser -> panel : tabs appear, new tabs show up, panel restart triggers a resync
   panel -> browser : `activate <id>` switches the active tab
 
@@ -20,7 +21,6 @@ import sys
 import tempfile
 import threading
 import time
-import zipfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 TIMEOUT = 60
@@ -99,8 +99,9 @@ def free_port():
 
 
 def start_panel(env):
+    installed = os.path.join(env["HOME"], ".local", "bin", "sidepanel")  # the copy install.sh made
     proc = subprocess.Popen(
-        [os.path.join(ROOT, "sidepanel"), "--debug"],
+        [installed, "--debug"],
         env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1,
     )
     return proc, Output(proc)
@@ -131,10 +132,11 @@ def main():
                 'user_pref("browser.aboutwelcome.enabled", false);\n'
             )
 
-        xpi = os.path.join(tmp, "sidepanel.xpi")
-        with zipfile.ZipFile(xpi, "w") as z:
-            for name in ("manifest.json", "background.js"):
-                z.write(os.path.join(ROOT, "extension", name), name)
+        with open(os.path.join(ROOT, "VERSION")) as f:
+            version = f.read().strip()
+        subprocess.run([os.path.join(ROOT, "packaging", "build-extension.sh")], env={**env, "OUT_DIR": tmp},
+                       check=True, capture_output=True)
+        xpi = os.path.join(tmp, f"openbox-sidepanel-{version}.xpi")
 
         panel, out = start_panel(env)
         procs.append(panel)
