@@ -1,7 +1,14 @@
 import os
 import tomllib
 
-DEFAULTS = {"side": "left", "monitor": "primary", "width": 320, "follow": "last", "pinned": False}
+DEFAULTS = {
+    "side": "left",
+    "monitor": "primary",
+    "width": 320,
+    "follow": "last",
+    "pinned": False,
+    "start_with_browser": True,  # read by the native-messaging relay, not by the panel itself
+}
 CHOICES = {"side": ("left", "right"), "follow": ("last", "hide")}
 
 
@@ -32,8 +39,9 @@ def validate(user):
         raise ValueError(f'width must be an integer between 100 and 1000 (got {cfg["width"]!r})')
     if not isinstance(cfg["monitor"], str) or not cfg["monitor"]:
         raise ValueError('monitor must be "primary" or an output name such as "HDMI-1"')
-    if not isinstance(cfg["pinned"], bool):
-        raise ValueError(f'pinned must be true or false (got {cfg["pinned"]!r})')
+    for key in ("pinned", "start_with_browser"):
+        if not isinstance(cfg[key], bool):
+            raise ValueError(f"{key} must be true or false (got {cfg[key]!r})")
     return cfg
 
 

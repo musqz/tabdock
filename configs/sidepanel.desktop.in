@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Sidepanel
+GenericName=Browser side panel
+Comment=Tabs and containers of your browser in an autohiding side panel
+Keywords=tabs;containers;browser;sidebar;panel;
+Exec=@BIN@
+Icon=@ICON@
+Terminal=false
+StartupNotify=false
+Categories=Utility;

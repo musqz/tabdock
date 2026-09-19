@@ -154,7 +154,7 @@ def main(argv=None):
     server = Server(config.socket_path(), panel.on_message, panel.on_close)
     try:
         server.start()
-    except (RuntimeError, GLib.Error) as e:  # already running, or socket dir missing/unwritable
+    except (RuntimeError, GLib.Error, OSError) as e:  # already running, or socket dir missing/unwritable
         print(f"sidepanel: {e}", file=sys.stderr)
         return 1
 

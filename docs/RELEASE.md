@@ -52,21 +52,35 @@ The manifest declares that no data is collected, and nothing leaves your compute
 automatic updates for everyone. It is desktop-only (uncheck Android) and the description must explain that
 a local helper is required.
 
-## 3. Start the panel at login
+## 3. Start the panel
 
-Add this to `~/.config/openbox/autostart`, after picom (4.0 s) so the compositor rules apply from
-the first frame:
+You never need a terminal. Any of these works, and they combine freely (a second instance refuses to
+start, and each browser's helper waits for the panel):
 
-```bash
-(sleep 5.0s && ~/.local/bin/sidepanel) &         # Sidepanel
-```
+- **With the browser (default).** Opening a browser that has the extension starts the panel if none is
+  running. This happens once per browser start, so a panel you quit with its `✕` stays gone until the next
+  browser start. The panel keeps running after the browser closes. Turn it off with
+  `start_with_browser = false` in `~/.config/openbox-sidepanel/config.toml`. Its output goes to
+  `$XDG_RUNTIME_DIR/openbox-sidepanel.log` if it ever fails to start.
+- **From the application menu.** `install.sh` adds a "Sidepanel" entry (`~/.local/share/applications/`),
+  which jgmenu, rofi and similar launchers list.
+- **At login.** Add this to `~/.config/openbox/autostart`, after picom (4.0 s) so the compositor rules
+  apply from the first frame:
 
-A second instance refuses to start, and each browser's helper waits for the panel, so the start order
-relative to the browsers does not matter.
+  ```bash
+  (sleep 5.0s && ~/.local/bin/sidepanel) &         # Sidepanel
+  ```
+- **From a keyboard shortcut.** In `~/.config/openbox/rc.xml`, inside `<keyboard>`:
+  `<keybind key="W-p"><action name="Execute"><command>/home/you/.local/bin/sidepanel</command></action></keybind>`
+  (pressing it while the panel runs does nothing).
+
+Starting with the browser only needs the extension to be installed; with an autostart line the panel is
+also there before any browser opens.
 
 ## 4. Reboot check
 
-1. Log in again: `pgrep -a -f 'sidepanel$'` shows the panel.
+1. Log in again. With an autostart line, `pgrep -a -f 'sidepanel$'` already shows the panel; otherwise
+   open Firefox and it appears.
 2. Open Firefox: the extension is enabled in `about:addons` and the panel lists your tabs. Same for Zen.
 
 If the panel says "Waiting for a browser with the Sidepanel extension":

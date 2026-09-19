@@ -4,6 +4,8 @@ frames on the relay's stdio) and, in the first class, also the panel (Unix socke
 import json
 import os
 import select
+import shlex
+import signal
 import socket
 import struct
 import subprocess
@@ -48,7 +50,8 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.sock_path = os.path.join(self.tmp.name, "sp.sock")
-        self.env = {**os.environ, "SIDEPANEL_SOCKET": self.sock_path}
+        # never start a real panel from a test (it would open dock windows on your desktop)
+        self.env = {**os.environ, "SIDEPANEL_SOCKET": self.sock_path, "SIDEPANEL_NO_LAUNCH": "1"}
         self.procs = []
 
     def tearDown(self):
@@ -61,8 +64,8 @@ class Base(unittest.TestCase):
                     f.close()
         self.tmp.cleanup()
 
-    def spawn(self, cmd, **kw):
-        p = subprocess.Popen(cmd, env=self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0, **kw)
+    def spawn(self, cmd, env=None, **kw):
+        p = subprocess.Popen(cmd, env=env or self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0, **kw)
         self.procs.append(p)
         return p
 
@@ -122,6 +125,175 @@ class RelayTest(Base):
         conn, _ = srv.accept()
         self.addCleanup(conn.close)
         self.assertEqual(read_frame(relay), {"type": "resync"})
+
+
+FAKE_PANEL = """#!/usr/bin/env python3
+import os, sys, time
+with open(sys.argv[1], "a") as f:
+    f.write(f"{os.getpid()} {os.getsid(0)}\\n")
+if len(sys.argv) > 2 and sys.argv[2] == "stay":  # a panel that keeps running
+    time.sleep(60)
+"""
+
+
+class LaunchTest(Base):
+    """The relay starts the panel once, only if none is running when the relay starts."""
+
+    def setUp(self):
+        super().setUp()
+        self.marker = os.path.join(self.tmp.name, "started")
+        fake = os.path.join(self.tmp.name, "fake-panel")
+        with open(fake, "w") as f:
+            f.write(FAKE_PANEL)
+        os.chmod(fake, 0o755)
+        self.cfg_home = os.path.join(self.tmp.name, "cfg")
+        self.fake_cmd = f"{shlex.quote(fake)} {shlex.quote(self.marker)}"
+        self.launch_env = {
+            **self.env,
+            "SIDEPANEL_PANEL_CMD": self.fake_cmd,  # exits at once, like a panel that died on startup
+            "XDG_RUNTIME_DIR": self.tmp.name,  # where the relay keeps the panel's log
+            "XDG_CONFIG_HOME": self.cfg_home,
+        }
+        del self.launch_env["SIDEPANEL_NO_LAUNCH"]
+        self.stay_env = {**self.launch_env, "SIDEPANEL_PANEL_CMD": self.fake_cmd + " stay"}
+        self.addCleanup(self.kill_started)
+
+    def kill_started(self):
+        for line in self.started():  # the "stay" fakes run in their own session: stop them explicitly
+            try:
+                os.kill(int(line.split()[0]), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+    def started(self):
+        try:
+            with open(self.marker) as f:
+                return f.read().splitlines()
+        except FileNotFoundError:
+            return []
+
+    def wait_started(self):
+        deadline = time.monotonic() + TIMEOUT
+        while not self.started():
+            self.assertLess(time.monotonic(), deadline, "the relay never started the panel")
+            time.sleep(0.05)
+        return self.started()
+
+    def write_config(self, text):
+        os.makedirs(os.path.join(self.cfg_home, "openbox-sidepanel"))
+        with open(os.path.join(self.cfg_home, "openbox-sidepanel", "config.toml"), "w") as f:
+            f.write(text)
+
+    def listen(self):
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        srv.bind(self.sock_path)
+        srv.listen(1)
+        srv.settimeout(TIMEOUT)
+        self.addCleanup(srv.close)
+        return srv
+
+    def test_starts_the_panel_detached_and_keeps_stdout_clean(self):
+        relay = self.spawn([RELAY], env=self.stay_env)
+        pid, sid = map(int, self.wait_started()[0].split())
+        self.assertEqual(sid, pid)  # its own session: it survives the relay and the browser
+        self.assertNotEqual(sid, os.getsid(relay.pid))
+        # stdout is the native-messaging channel: the panel must not have touched it
+        self.assertEqual(select.select([relay.stdout.fileno()], [], [], 0.3)[0], [])
+        self.assertTrue(os.path.exists(os.path.join(self.tmp.name, "openbox-sidepanel.log")))
+
+    def test_a_panel_that_is_still_starting_is_not_started_twice(self):
+        self.spawn([RELAY], env=self.stay_env)
+        self.wait_started()
+        time.sleep(2.5)  # two more retry cycles with nobody listening yet: the first panel is still alive
+        self.assertEqual(len(self.started()), 1)
+
+    def test_a_panel_that_dies_at_startup_is_retried_but_only_three_times(self):
+        relay = self.spawn([RELAY], env=self.launch_env)  # this fake exits at once, every time
+        deadline = time.monotonic() + TIMEOUT
+        while len(self.started()) < 3:
+            self.assertLess(time.monotonic(), deadline, "the relay did not retry")
+            time.sleep(0.05)
+        time.sleep(2.5)
+        self.assertEqual(len(self.started()), 3)  # and then it gives up instead of looping forever
+        # every child was reaped: none is left as a zombie of the relay
+        children = subprocess.run(["ps", "--ppid", str(relay.pid), "-o", "stat="], capture_output=True, text=True)
+        self.assertEqual(children.stdout.split(), [])
+
+    def test_does_not_start_one_when_a_panel_is_listening(self):
+        srv = self.listen()
+        relay = self.spawn([RELAY], env=self.launch_env)
+        conn, _ = srv.accept()
+        self.addCleanup(conn.close)
+        self.assertEqual(read_frame(relay), {"type": "resync"})
+        time.sleep(1.5)
+        self.assertEqual(self.started(), [])
+
+    def test_a_panel_that_goes_away_is_not_restarted(self):
+        srv = self.listen()
+        relay = self.spawn([RELAY], env=self.launch_env)
+        conn, _ = srv.accept()
+        self.assertEqual(read_frame(relay), {"type": "resync"})
+        conn.close()  # the user quits the panel...
+        srv.close()
+        os.unlink(self.sock_path)
+        self.assertEqual(read_frame(relay), {"type": "panel_disconnected"})
+        time.sleep(2.5)  # ...and the relay keeps waiting instead of undoing that
+        self.assertEqual(self.started(), [])
+
+    def test_config_can_turn_it_off(self):
+        self.write_config("start_with_browser = false\n")
+        self.spawn([RELAY], env=self.launch_env)
+        time.sleep(1.5)
+        self.assertEqual(self.started(), [])
+
+    def test_unreadable_config_keeps_the_default(self):
+        self.write_config("start_with_browser = [\n")
+        self.spawn([RELAY], env=self.launch_env)
+        self.wait_started()
+
+    def test_environment_can_turn_it_off(self):
+        self.spawn([RELAY], env={**self.launch_env, "SIDEPANEL_NO_LAUNCH": "1"})
+        time.sleep(1.5)
+        self.assertEqual(self.started(), [])
+
+
+class SingleInstanceTest(Base):
+    def panel(self):
+        return self.spawn([sys.executable, PANEL, "--debug"])
+
+    def wait_connectable(self):
+        deadline = time.monotonic() + TIMEOUT
+        while True:
+            probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                probe.connect(self.sock_path)
+                return
+            except OSError:
+                self.assertLess(time.monotonic(), deadline, "no panel ever listened on the socket")
+                time.sleep(0.05)
+            finally:
+                probe.close()
+
+    def test_only_one_of_many_simultaneous_panels_survives(self):
+        # two browsers opening together each start a panel: that used to race on the stale-socket cleanup
+        panels = [self.panel() for _ in range(6)]
+        deadline = time.monotonic() + TIMEOUT
+        while sum(p.poll() is None for p in panels) > 1 and time.monotonic() < deadline:
+            time.sleep(0.05)
+        time.sleep(1.0)  # a slow loser would have exited by now
+        alive = [p for p in panels if p.poll() is None]
+        self.assertEqual(len(alive), 1)
+        self.assertEqual({p.returncode for p in panels if p.poll() is not None}, {1})  # refused, not crashed
+        self.wait_connectable()  # and the survivor really owns the socket
+
+    def test_a_killed_panel_does_not_block_the_next_one(self):
+        first = self.panel()
+        self.wait_connectable()
+        first.kill()  # no cleanup: a stale socket file and lock file stay behind
+        first.wait()
+        second = self.panel()
+        self.wait_connectable()
+        self.assertIsNone(second.poll())  # it took over
 
 
 class PanelDebugTest(Base):

@@ -6,19 +6,29 @@ messaging on stdio (4-byte native-endian length + JSON) and line-delimited JSON
 on the panel's Unix socket. It waits for the panel to appear, and every time the
 panel (re)connects it asks the extension to "resync" so the panel gets a
 fresh hello + state.
+
+If no panel is running when the relay starts, it starts one (detached), so opening
+a browser with the extension is enough. If that panel dies before it ever listens
+(crashed, or lost a race with another starting panel) it is started again, at most
+MAX_LAUNCHES times in all. Once this relay has seen a panel it never starts one
+again, so a panel quit with its X button stays quit.
 """
 import json
 import os
 import select
+import shlex
 import socket
 import struct
+import subprocess
 import sys
+import tomllib
 
 # deliberately standalone (one copyable file); keep in sync with sidepanel/config.py socket_path()
 SOCKET = os.environ.get("SIDEPANEL_SOCKET") or os.path.join(
     os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "openbox-sidepanel.sock"
 )
 RETRY_S = 1.0
+MAX_LAUNCHES = 3
 
 
 def to_browser(obj):
@@ -47,18 +57,65 @@ def connect_panel():
     return s
 
 
+def launch_enabled():
+    """start_with_browser from config.toml (default true). SIDEPANEL_NO_LAUNCH=1 turns it off (tests)."""
+    if os.environ.get("SIDEPANEL_NO_LAUNCH"):
+        return False
+    path = os.path.join(
+        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "openbox-sidepanel", "config.toml"
+    )
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f).get("start_with_browser", True) is not False
+    except (OSError, ValueError):
+        return True  # no or unreadable config: keep the default; the panel reports config errors itself
+
+
+def start_panel():
+    """Start the panel detached from this relay and from the browser, so it outlives both.
+
+    Its stdio must never be ours: stdout is the native-messaging channel to the browser.
+    Returns the Popen (kept only to reap it and to notice it dying), or None if nothing could be run.
+    """
+    override = os.environ.get("SIDEPANEL_PANEL_CMD")  # a test hook
+    cmd = shlex.split(override) if override else [
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "sidepanel")
+    ]
+    log = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "openbox-sidepanel.log")
+    try:
+        with open(log, "ab") as out:
+            return subprocess.Popen(
+                cmd, stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True, close_fds=True
+            )
+    except OSError:
+        return None  # nothing to run here; the panel can still be started by hand
+
+
 def main():
     browser_pid = os.getppid()
     sock = None
     from_browser = b""
     from_panel = b""
+    may_launch = True  # only while this relay has never seen a panel
+    launches = 0
+    panel_proc = None  # the panel we started, until it exits
 
     while True:
+        if panel_proc is not None and panel_proc.poll() is not None:
+            panel_proc = None  # exited: reaped here so it does not linger as a zombie
         if sock is None:
             sock = connect_panel()
             if sock is not None:
+                may_launch = False
                 from_panel = b""
                 to_browser({"type": "resync"})
+            elif may_launch and panel_proc is None:  # nothing running, and nothing of ours still starting
+                if launches < MAX_LAUNCHES and launch_enabled():
+                    launches += 1
+                    panel_proc = start_panel()
+                    may_launch = panel_proc is not None
+                else:
+                    may_launch = False
 
         # the timeout doubles as the panel reconnect interval
         ready, _, _ = select.select([0] + ([sock] if sock else []), [], [], RETRY_S)

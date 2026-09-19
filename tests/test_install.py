@@ -1,6 +1,8 @@
 """install.sh against a throwaway $HOME (never touches the real browser config or ~/.local)."""
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -29,9 +31,17 @@ class InstallTest(unittest.TestCase):
         self.relay = os.path.join(self.share, "lib", "native-host", "sidepanel-nmhost")
         self.manifest = os.path.join(self.home, ".mozilla", "native-messaging-hosts", "openbox_sidepanel.json")
 
+    def base_env(self):
+        # XDG_DATA_HOME pinned inside the throwaway home: a real one must never receive test files
+        return {
+            **os.environ,
+            "HOME": self.home,
+            "XDG_DATA_HOME": os.path.join(self.home, ".local", "share"),
+            "PATH": os.path.dirname(self.bin) + ":" + os.environ["PATH"],
+        }
+
     def run_install(self, *args, **env):
-        env = {**os.environ, "HOME": self.home, "PATH": os.path.dirname(self.bin) + ":" + os.environ["PATH"], **env}
-        return subprocess.run([INSTALL, *args], env=env, capture_output=True, text=True)
+        return subprocess.run([INSTALL, *args], env={**self.base_env(), **env}, capture_output=True, text=True)
 
     def test_installs_a_self_contained_working_copy(self):
         done = self.run_install()
@@ -129,17 +139,59 @@ class InstallTest(unittest.TestCase):
         for rel in ("install.sh", "sidepanel", "VERSION"):
             os.makedirs(os.path.dirname(os.path.join(checkout, rel)), exist_ok=True)
             shutil.copy2(os.path.join(ROOT, rel), os.path.join(checkout, rel))
-        for sub in ("lib", "configs"):
+        for sub in ("lib", "configs", "extension"):
             shutil.copytree(os.path.join(ROOT, sub), os.path.join(checkout, sub), ignore=shutil.ignore_patterns("__pycache__"))
         os.makedirs(os.path.join(checkout, "lib", "sidepanel", "newpkg"))
         for rel in ("newpkg/__init__.py", "newpkg/data.css"):
             with open(os.path.join(checkout, "lib", "sidepanel", rel), "w") as f:
                 f.write("x\n")
-        env = {**os.environ, "HOME": self.home, "PATH": os.path.dirname(self.bin) + ":" + os.environ["PATH"]}
-        done = subprocess.run([os.path.join(checkout, "install.sh")], env=env, capture_output=True, text=True)
+        done = subprocess.run([os.path.join(checkout, "install.sh")], env=self.base_env(), capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stderr)
         for rel in ("newpkg/__init__.py", "newpkg/data.css"):
             self.assertTrue(os.path.isfile(os.path.join(self.share, "lib", "sidepanel", rel)), rel)
+
+    def test_installs_a_menu_entry_and_removes_it_again(self):
+        self.assertEqual(self.run_install().returncode, 0)
+        entry = os.path.join(self.home, ".local", "share", "applications", "openbox-sidepanel.desktop")
+        with open(entry) as f:
+            text = f.read()
+        self.assertIn(f"Exec={self.bin}\n", text)  # absolute: launchers do not share your shell's PATH
+        icon = re.search(r"^Icon=(.*)$", text, re.M).group(1)
+        self.assertTrue(os.path.isfile(icon), icon)
+        self.assertNotIn("@", text)  # every placeholder was filled
+        if shutil.which("desktop-file-validate"):
+            checked = subprocess.run(["desktop-file-validate", entry], capture_output=True, text=True)
+            self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+        self.assertEqual(self.run_install("--uninstall").returncode, 0)
+        self.assertFalse(os.path.exists(entry))
+        self.assertEqual(files_under(self.home), [])
+
+    def exec_as_a_launcher_reads_it(self):
+        entry = os.path.join(self.home, ".local", "share", "applications", "openbox-sidepanel.desktop")
+        with open(entry) as f:
+            value = re.search(r"^Exec=(.*)$", f.read(), re.M).group(1)
+        return shlex.split(value.replace("%%", "%"))  # quoting first, then the %% -> % field-code rule
+
+    def test_menu_entry_survives_awkward_paths(self):
+        for name in ("a&b", "my home", "100%", "semi;colon", "it's"):
+            with self.subTest(home=name):
+                self.home = os.path.join(self.tmp.name, name)
+                os.makedirs(self.home)
+                self.layout()
+                done = self.run_install()
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(self.exec_as_a_launcher_reads_it(), [self.bin])  # one word: the real path
+
+    def test_a_character_a_menu_entry_cannot_express_skips_only_that_entry(self):
+        self.home = os.path.join(self.tmp.name, "dollar$ign")
+        os.makedirs(self.home)
+        self.layout()
+        done = self.run_install()
+        self.assertEqual(done.returncode, 0, done.stderr)  # the rest of the install is unaffected
+        self.assertIn("menu entry", done.stderr)
+        self.assertFalse(os.path.exists(os.path.join(self.home, ".local", "share", "applications")))
+        self.assertTrue(os.path.exists(self.manifest))
+        self.assertEqual(self.run_install("--uninstall").returncode, 0)
 
     def test_replaces_an_identical_hand_copied_launcher(self):
         # what happens when the launcher is copied to ~/.local/bin by hand: it cannot find its files

@@ -324,6 +324,25 @@ def main():
         wait_for(lambda: find("openbox-sidepanel-strip") is None, "the strip window is gone once the panel exited")
         ok("quit button: the panel exits with code 0, removes its socket and its windows")
 
+        # -- a browser start is enough: the relay launches the real panel, which outlives the relay ---
+        relay_env = {**panel_env, "SIDEPANEL_SOCKET": os.path.join(tmp, "launched.sock"), "XDG_RUNTIME_DIR": tmp}
+        relay_env.pop("SIDEPANEL_NO_LAUNCH", None)
+        relay = subprocess.Popen(
+            [os.path.join(ROOT, "lib", "native-host", "sidepanel-nmhost")],
+            env=relay_env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        )
+        procs.append(relay)
+        launched_strip = wait_for(lambda: find("openbox-sidepanel-strip"), "the relay never started the panel")
+        panel_pid = int(re.search(r"= (\d+)", prop(launched_strip, "_NET_WM_PID")).group(1))
+        relay.stdin.close()  # the browser goes away
+        relay.wait(timeout=10)
+        time.sleep(0.5)
+        assert os.path.exists(f"/proc/{panel_pid}"), "the launched panel died together with the relay"
+        assert wininfo(launched_strip)["mapped"], "the launched panel lost its strip"
+        os.kill(panel_pid, signal.SIGTERM)
+        wait_for(lambda: not os.path.exists(f"/proc/{panel_pid}"), "launched panel stops on SIGTERM")
+        ok("relay start: opening a browser starts the panel, and it keeps running after the relay exits")
+
         panel_log.flush()
         log = open(os.path.join(tmp, "panel.log")).read()
         assert "Traceback" not in log and "WARNING" not in log, log

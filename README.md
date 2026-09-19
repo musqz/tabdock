@@ -37,14 +37,18 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost
 Needs `python-gobject` (GTK 3) and `python-xlib` on X11. Native browser installs only, no Flatpak/Snap.
 
 ```bash
-./install.sh                                   # program -> ~/.local, plus the native-messaging manifest
-packaging/build-extension.sh                   # unsigned .xpi; signing and autostart: docs/RELEASE.md
+./install.sh                     # program -> ~/.local, browser manifest, "Sidepanel" menu entry
+packaging/build-extension.sh     # unsigned .xpi; signing and starting: docs/RELEASE.md
 ```
 
 Release Firefox and Zen only keep **signed** extensions, so a permanent setup needs the extension
-signed once (free, via addons.mozilla.org, unlisted) and one line in your Openbox autostart. Both are
-walked through, with a reboot check, in [docs/RELEASE.md](docs/RELEASE.md).
-`./install.sh --uninstall` removes exactly what was installed.
+signed once (free, via addons.mozilla.org, unlisted). Signing, a reboot check and all the ways to
+start the panel are in [docs/RELEASE.md](docs/RELEASE.md).
+
+**You never need a terminal to start it:** opening a browser that has the extension starts the panel if
+none is running (`start_with_browser`), and there is a "Sidepanel" entry in your application menu; an
+Openbox autostart line or a keybinding work too. `./install.sh --uninstall` removes exactly what was
+installed.
 
 ## Development
 
@@ -54,6 +58,10 @@ extension without signing, load it as a temporary add-on: `about:debugging#/runt
 `./install.sh` first so the browser can start the relay.
 
 ## Troubleshooting
+
+- **The panel does not appear when a browser opens:** run `sidepanel` in a terminal to see why it cannot
+  start (a bad `config.toml` is reported there); when the browser starts it, the output goes to
+  `$XDG_RUNTIME_DIR/openbox-sidepanel.log` instead. A panel that dies at startup is retried up to three times.
 
 - **"Waiting for a browser with the Sidepanel extension":** the extension is not installed or
   enabled, or the native-messaging manifest is missing; see [docs/RELEASE.md](docs/RELEASE.md).
@@ -73,6 +81,7 @@ Copy [configs/config.toml](configs/config.toml) to `~/.config/openbox-sidepanel/
 | `width` | `320` | expanded width in px (100-1000) |
 | `follow` | `"last"` | `"last"` or `"hide"` while a non-browser window is active |
 | `pinned` | `false` | start pinned |
+| `start_with_browser` | `true` | start the panel when a browser with the extension opens and none is running |
 
 Tip: use an outer edge of your monitor layout; the pointer stops there, so hover-to-open is easy.
 Reload a running panel with `kill -HUP $(pgrep -f 'sidepanel$')`. The header has a pin toggle, a

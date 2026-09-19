@@ -1,7 +1,7 @@
 """Unix-socket server for the native-messaging relays (line-delimited JSON, GLib main loop)."""
+import fcntl
 import json
 import os
-import socket
 
 from gi.repository import Gio, GLib
 
@@ -60,9 +60,10 @@ class Server:
         self.on_close = on_close
         self.conns = set()
         self.service = None
+        self._lock = None
 
     def start(self):
-        _claim(self.path)
+        self._lock = _claim(self.path)  # held for the life of the process
         self.service = Gio.SocketService.new()
         self.service.add_address(
             Gio.UnixSocketAddress.new(self.path), Gio.SocketType.STREAM, Gio.SocketProtocol.DEFAULT, None
@@ -80,6 +81,7 @@ class Server:
                 os.unlink(self.path)
             except FileNotFoundError:
                 pass
+            self._lock.close()  # the lock file itself stays: removing it would race a starting panel
 
     def _incoming(self, _service, gconn, _source):
         self.conns.add(Connection(self, gconn))
@@ -87,16 +89,21 @@ class Server:
 
 
 def _claim(path):
-    """Refuse to start if a live panel owns the socket; clear a stale socket file."""
-    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    """Take the single-instance lock, then clear any stale socket file. Returns the lock file.
+
+    An exclusive lock, which the kernel drops when the process dies however it dies, replaces
+    probing the socket. Probing raced: two panels starting together (two browsers opening at once
+    both start one) could each see the other's not-yet-listening socket as stale and delete it,
+    leaving an orphaned panel nobody can reach.
+    """
+    lock = open(path + ".lock", "w")
     try:
-        probe.connect(path)
-    except (FileNotFoundError, ConnectionRefusedError):
-        try:
-            os.unlink(path)
-        except FileNotFoundError:
-            pass
-        return
-    finally:
-        probe.close()
-    raise RuntimeError(f"another sidepanel is already listening on {path}")
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock.close()
+        raise RuntimeError(f"another sidepanel is already listening on {path}") from None
+    try:
+        os.unlink(path)  # only ever a leftover of a dead panel: we hold the lock
+    except FileNotFoundError:
+        pass
+    return lock

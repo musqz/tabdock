@@ -19,8 +19,14 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.validate({}), config.DEFAULTS)
 
     def test_override(self):
-        cfg = config.validate({"side": "right", "width": 400, "pinned": True, "monitor": "DP-1"})
-        self.assertEqual((cfg["side"], cfg["width"], cfg["pinned"], cfg["monitor"]), ("right", 400, True, "DP-1"))
+        cfg = config.validate(
+            {"side": "right", "width": 400, "pinned": True, "monitor": "DP-1", "start_with_browser": False}
+        )
+        self.assertEqual(
+            (cfg["side"], cfg["width"], cfg["pinned"], cfg["monitor"], cfg["start_with_browser"]),
+            ("right", 400, True, "DP-1", False),
+        )
+        self.assertTrue(config.DEFAULTS["start_with_browser"])  # on unless the user opts out
 
     def test_rejects_bad_values(self):
         for bad in (
@@ -30,6 +36,8 @@ class ConfigTest(unittest.TestCase):
             {"width": "wide"},
             {"width": True},
             {"pinned": "yes"},
+            {"start_with_browser": "yes"},
+            {"start_with_browser": 1},
             {"monitor": ""},
             {"sdie": "left"},  # typo in a key
         ):

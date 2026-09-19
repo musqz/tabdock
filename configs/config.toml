@@ -15,6 +15,11 @@ width = 320
 #   "last" keeps the panel of the browser you used last, "hide" removes the panel.
 follow = "last"
 
+# Start the panel when a browser with the extension opens and no panel is running (a browser start
+# is enough, no autostart needed). A panel you quit with the X button is not restarted until the next
+# browser start. false = only start it yourself (app menu, autostart line, keybinding).
+start_with_browser = true
+
 # Start pinned: the panel stays open and windows are laid out beside it (an outer screen
 # edge only; on an inner edge it stays open as an overlay). false = autohide on hover.
 pinned = false

@@ -2,6 +2,16 @@
 
 ## 0.2.0 (unreleased)
 
+- No terminal needed to start the panel. The native-messaging relay starts it, detached, when a browser
+  with the extension opens and none is running. A panel that dies before it ever listens is started again
+  (at most three times); once a relay has seen a panel it never starts one, so a panel quit with its `✕` is
+  not undone (`start_with_browser` in `config.toml` turns it off). `install.sh` also installs a "Sidepanel"
+  application-menu entry (quoted correctly for paths with spaces or `%`) and its icon. The launcher explains
+  itself when copied by hand, and `install.sh` replaces such an identical copy with the link.
+- Single instance is now an exclusive lock instead of probing the socket: two panels started together (two
+  browsers opening at once) could each take the other's not-yet-listening socket for a stale one and delete
+  it. The lock is released by the kernel when the panel dies, however it dies.
+
 - Panel header: the pin state is now unmistakable (`pin` outlined and dim, `pinned` as a filled pill in the
   browser's colour, tooltip says what a click does), and a `✕` quit button stops the panel cleanly.
   `tests/e2e_x11.py` clicks both under a real Openbox.

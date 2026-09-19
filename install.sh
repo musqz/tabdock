@@ -20,6 +20,8 @@ bin="$PREFIX/bin/sidepanel"
 relay="$share/lib/native-host/sidepanel-nmhost"
 receipt="$share/.installed"  # every path install created, one per line: what --uninstall removes
 manifest_name="openbox_sidepanel.json"
+apps_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+desktop_name="openbox-sidepanel.desktop"
 # native-messaging manifest dirs; Firefox and Zen both read ~/.mozilla (verified for Zen 1.22)
 nm_dirs=("$HOME/.mozilla/native-messaging-hosts")
 
@@ -62,6 +64,7 @@ install_files() {
     put 755 "$root/lib/native-host/sidepanel-nmhost" "$relay"
     put 644 "$root/configs/config.toml" "$share/configs/config.toml"
     put 644 "$root/configs/picom-sidepanel.conf" "$share/configs/picom-sidepanel.conf"
+    put 644 "$root/extension/icons/icon-96.png" "$share/icon.png"  # for the menu entry
 }
 
 link_bin() {
@@ -105,6 +108,42 @@ write_manifests() {
     done
 }
 
+# A path as a Desktop Entry Exec value: '%' doubled (it starts a field code) and the path quoted
+# when it holds a character launchers would split on. Characters that need backslash escaping
+# inside quotes (" ` $ \) are not supported: return 1 and the caller skips the entry.
+desktop_exec() {
+    local p="${1//%/%%}"
+    case $p in
+        *[\"\`\$\\]*) return 1 ;;
+        *[[:space:]\;\<\>~\|\&\'*?#\(\)]*) printf '"%s"' "$p" ;;
+        *) printf '%s' "$p" ;;
+    esac
+}
+
+# A menu entry so the panel can be started without a terminal (jgmenu, rofi, ... read these).
+write_desktop_entry() {
+    local file="$apps_dir/$desktop_name" content verb=installed exec_value
+    exec_value="$(desktop_exec "$bin")" || {
+        echo "warning: $bin has characters a menu entry cannot express; skipping the menu entry" >&2
+        return 0
+    }
+    content="$(<"$root/configs/sidepanel.desktop.in")"
+    content="${content//@BIN@/$exec_value}"
+    content="${content//@ICON@/$share/icon.png}"
+    if [[ -e $file && "$(<"$file")" == "$content" ]]; then
+        printf '%-10s %s\n' unchanged "$file"
+    else
+        [[ -e $file ]] && verb=updated
+        mkdir -p -- "$apps_dir"
+        printf '%s\n' "$content" > "$file"
+        printf '%-10s %s\n' "$verb" "$file"
+    fi
+    if command -v desktop-file-validate > /dev/null; then
+        desktop-file-validate "$file" || echo "warning: desktop-file-validate complains about $file" >&2
+    fi
+    installed+=("$file")
+}
+
 # files an earlier version installed that this one no longer ships
 remove_stale() {
     local old path keep
@@ -140,15 +179,19 @@ do_install() {
     install_files
     link_bin
     write_manifests
+    write_desktop_entry
     remove_stale
     write_receipt
     verify
     cat <<EOF
 
 Next:
-  1. Autostart: add this line to ~/.config/openbox/autostart, after picom starts:
-         (sleep 5.0s && $bin) &
-  2. Install the signed browser extension: see docs/RELEASE.md
+  1. Install the signed browser extension: see docs/RELEASE.md
+  2. Starting the panel, any of these:
+       - it starts by itself when a browser with the extension opens (start_with_browser in config.toml)
+       - "Sidepanel" in your application menu
+       - at login: add this line to ~/.config/openbox/autostart, after picom starts:
+             (sleep 5.0s && $(printf '%q' "$bin")) &
   3. Optional animation: cp $share/configs/picom-sidepanel.conf ~/.config/picom/include/sidepanel.conf
      and include it from your picom rules (see the comments in that file).
 EOF
