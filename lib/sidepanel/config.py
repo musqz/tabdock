@@ -3,7 +3,7 @@ import tomllib
 
 DEFAULTS = {
     "side": "left",
-    "monitor": "primary",
+    "monitor": "outer",
     "width": 320,
     "follow": "last",
     "pinned": False,
@@ -38,7 +38,7 @@ def validate(user):
     if isinstance(cfg["width"], bool) or not isinstance(cfg["width"], int) or not 100 <= cfg["width"] <= 1000:
         raise ValueError(f'width must be an integer between 100 and 1000 (got {cfg["width"]!r})')
     if not isinstance(cfg["monitor"], str) or not cfg["monitor"]:
-        raise ValueError('monitor must be "primary" or an output name such as "HDMI-1"')
+        raise ValueError('monitor must be "outer", "primary" or an output name such as "HDMI-1"')
     for key in ("pinned", "start_with_browser"):
         if not isinstance(cfg[key], bool):
             raise ValueError(f"{key} must be true or false (got {cfg[key]!r})")

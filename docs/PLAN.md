@@ -92,7 +92,7 @@ before or after the browser; the extension reconnects with backoff.
   colour, so it is clear which browser is active even with window borders hidden.
 - **Pin toggle:** header button / hotkey sets `_NET_WM_STRUT_PARTIAL` so the panel stays open and
   windows are laid out beside it; unpin removes the strut and returns to autohide.
-- **Left/right:** `side = left | right` and `monitor = primary | <output name>` in
+- **Left/right:** `side = left | right` and `monitor = outer | primary | <output name>` in
   `~/.config/openbox-sidepanel/config.toml`; changing it reloads on SIGHUP or `sidepanel --reload`.
 - **Content:** header (browser name + pin + side flip); pinned row; one collapsible section per
   container (colored bar, icon, name, `+` for a new tab in that container); a "no container" section;
@@ -179,7 +179,8 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
 
 ## Decisions (confirmed by user)
 
-- Default `side = left`, `monitor = primary` (HDMI-1 outer edge); switchable in config.
+- Default `side = left`, `monitor = outer` (the monitor at the screen's outer edge for the side, HDMI-1
+  on the user's layout, and DP-1's edge for `right`); switchable in config.
 - `follow = last`: when a non-browser window is active, keep showing the last browser's panel.
 - Workspaces (M4) are exclusive, Zen-style, via `tabs.hide()`.
 

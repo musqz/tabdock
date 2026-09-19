@@ -21,3 +21,6 @@ pkg/
 
 # linked worktrees for background sessions
 .claude/
+
+# tool state written next to the sources by `web-ext sign`
+extension/.amo-upload-uuid

@@ -3,6 +3,24 @@
 TRIGGER_PX = 3  # width of the collapsed hover strip
 
 
+def outer_monitor(rects, side, primary=None):
+    """Index of the monitor that owns the screen's outer edge on `side` ("left" or "right").
+
+    Only an outer edge can reserve space (see strut()), and it is where the pointer stops, so
+    that is where a panel belongs whatever the monitor layout. When several monitors share
+    that edge (stacked vertically) the primary one wins, then the tallest, then the first.
+    """
+    if side == "left":
+        edge = min(x for x, _, _, _ in rects)
+        candidates = [i for i, (x, _, _, _) in enumerate(rects) if x == edge]
+    else:
+        edge = max(x + w for x, _, w, _ in rects)
+        candidates = [i for i, (x, _, w, _) in enumerate(rects) if x + w == edge]
+    if primary in candidates:
+        return primary
+    return max(candidates, key=lambda i: (rects[i][3], -i))
+
+
 def dock_rect(mon, side, width, expanded):
     mx, my, mw, mh = mon
     w = width if expanded else TRIGGER_PX

@@ -31,8 +31,10 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost
   and clicking a tab brings that browser forward; `follow = "hide"` removes the panel instead.
 - **Pin:** the `pin` button keeps the panel open and reserves the space (windows are laid out
   beside it). While pinned it reads `pinned` on a filled pill in the browser's colour; unpinned it is a
-  dim outlined `pin`. The reservation only works on an outer edge of your monitor layout; on an inner
-  edge (a neighbouring monitor beyond it) the panel stays open as an overlay instead.
+  dim outlined `pin`. Space can only be reserved on an **outer** edge of the whole screen (X11 cannot do it
+  on an edge shared with another monitor), which is why `monitor = "outer"` is the default (see Multiple
+  monitors below). If you pin on an inner edge anyway, the panel stays open as an overlay, windows can slide
+  under it, and the button says `pinned (overlay)` with a tooltip explaining why.
 - **Quit:** the `✕` at the far right of the header stops the panel (it stays gone until you run
   `sidepanel` again or log in again; the browser extension just waits).
 - The panel never takes keyboard focus, so clicking it does not steal focus from the browser.
@@ -82,15 +84,27 @@ Copy [configs/config.toml](configs/config.toml) to `~/.config/openbox-sidepanel/
 | key | default | meaning |
 |-----|---------|---------|
 | `side` | `"left"` | screen edge, `"left"` or `"right"` |
-| `monitor` | `"primary"` | `"primary"` or an `xrandr` output name such as `"HDMI-1"` |
+| `monitor` | `"outer"` | `"outer"` (the monitor at the screen's outer edge for `side`), `"primary"`, or an `xrandr` output name such as `"HDMI-1"` |
 | `width` | `320` | expanded width in px (100-1000) |
 | `follow` | `"last"` | `"last"` or `"hide"` while a non-browser window is active |
 | `pinned` | `false` | start pinned |
 | `start_with_browser` | `true` | start the panel when a browser with the extension opens and none is running |
 
 Tip: use an outer edge of your monitor layout; the pointer stops there, so hover-to-open is easy.
-Reload a running panel with `kill -HUP $(pgrep -f 'sidepanel$')`. The header has a pin toggle, a
-side switch (`⇄`) and a quit button (`✕`); pin and side apply until the next restart or reload.
+The config is read at startup: quit the panel (`✕`) and start it again from the menu. The header has a
+pin toggle, a side switch (`⇄`) and a quit button (`✕`); pin and side apply until the next restart.
+
+### Multiple monitors
+
+Pinning only makes tiling and maximising respect the panel when it sits on an **outer** edge of the whole
+screen, because that is all X11 lets a window reserve. `monitor = "outer"` (the default) therefore puts the
+panel on the leftmost monitor for `side = "left"` and on the rightmost for `side = "right"`. It works in any
+layout (a reversed arrangement just works), and the `⇄` button hops to the other outer edge. The panel also
+follows monitors being plugged in, unplugged or rearranged, without a restart. Use `"primary"` or an output
+name only if you want the panel on a specific monitor even when its edge borders another one (then a pinned
+panel is an overlay). Verified with `tests/e2e_multihead.py` under a real Openbox with two monitors: a pin on
+the outer left edge shrinks only the left monitor's maximised windows, and on the outer right edge only the
+right one's.
 
 ## Animation (picom)
 
@@ -107,6 +121,7 @@ be observed in the nested test display, so tune the durations and direction in y
 python3 -m unittest discover -s tests     # pure logic, relay protocol, panel routing, GTK view, install.sh
 python3 tests/e2e_firefox.py              # slow: real headless Firefox with the extension
 python3 tests/e2e_x11.py                  # slow: the dock under real Openbox in a nested Xephyr window
+python3 tests/e2e_multihead.py            # slow: two monitors under real Openbox: tiling respects a pinned panel
 ```
 
 The end-to-end scripts use scratch profiles and displays and never touch your real profile or

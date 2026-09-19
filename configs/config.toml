@@ -5,8 +5,15 @@
 # Tip: pick an outer edge of your monitor layout (the pointer stops there, so hover-to-open is easy).
 side = "left"
 
-# "primary" or an output name as shown by `xrandr`, e.g. "HDMI-1" or "DP-1".
-monitor = "primary"
+# Which monitor the panel sits on:
+#   "outer"   the monitor at the outer edge of the whole screen for `side` (the leftmost monitor for
+#             "left", the rightmost for "right"). Only an outer edge can reserve space when pinned, so
+#             tiling and maximising respect the panel, and the pointer stops there. Works in any
+#             layout and follows monitors being plugged in or moved.
+#   "primary" the primary monitor, even if its edge borders another monitor (then a pinned panel can
+#             only overlay, and the pin button says so)
+#   "DP-1"    a named output, as shown by `xrandr`
+monitor = "outer"
 
 # Width in pixels when expanded (100-1000).
 width = 320

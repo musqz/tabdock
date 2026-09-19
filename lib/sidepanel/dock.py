@@ -70,6 +70,10 @@ class DockView:
         self._last = None  # (conn, state, folds, accent) of the last render, to skip identical ones
         self._accent = None
         self._warned_monitor = False
+        self._overlay = False  # pinned, but on an inner edge where no space can be reserved
+        self._relayout_id = None
+        self._screen_handlers = []
+        self._closed = False
 
         GLib.set_prgname("openbox-sidepanel")
         self._css = Gtk.CssProvider()
@@ -120,6 +124,10 @@ class DockView:
         self.strip.show()
         self.autohide.set_pinned(self.cfg["pinned"])  # pinned: expands (and shows the panel) right away
         self._place()  # the strut needs the panel window realized
+        screen = Gdk.Screen.get_default()
+        for signal in ("monitors-changed", "size-changed"):  # docking, xrandr: follow the new layout
+            self._screen_handlers.append((screen, screen.connect(signal, self._on_monitors_changed)))
+        self.win.connect("destroy", self._teardown)
 
     # -- view API used by app.Panel ------------------------------------------------
 
@@ -169,12 +177,25 @@ class DockView:
         self.cfg["side"] = side
         self._place()
 
+    def _refresh_pin(self):
+        # the state must be readable at a glance: the words, the filled pill and the tooltip all change
+        pinned = self.pin_btn.get_active()
+        if pinned and self._overlay:
+            label = "pinned (overlay)"
+            tip = (
+                "Unpin. This screen edge borders another monitor, so windows are not resized to make "
+                'room. An outer screen edge can reserve space: set monitor = "outer".'
+            )
+        elif pinned:
+            label, tip = "pinned", "Unpin: let the panel hide again"
+        else:
+            label, tip = "pin", "Pin: keep the panel open"
+        self.pin_btn.set_label(label)
+        self.pin_btn.set_tooltip_text(tip)
+
     def _on_pin_toggled(self, button):
-        # the state must be readable at a glance: the word, the filled pill and the tooltip all change
-        pinned = button.get_active()
-        button.set_label("pinned" if pinned else "pin")
-        button.set_tooltip_text("Unpin: let the panel hide again" if pinned else "Pin: keep the panel open")
-        self.set_pinned(pinned)
+        self._refresh_pin()
+        self.set_pinned(button.get_active())
 
     def set_pinned(self, pinned):
         if pinned == self.cfg["pinned"] and pinned == self.autohide.pinned:
@@ -215,22 +236,36 @@ class DockView:
         win.add(box)
         return win
 
-    def _monitors(self):
+    def _layout(self):
+        """([(x, y, w, h)], [output names], primary index or None) of the connected monitors."""
         display = Gdk.Display.get_default()
-        return display, [display.get_monitor(i) for i in range(display.get_n_monitors())]
+        monitors = [display.get_monitor(i) for i in range(display.get_n_monitors())]
+        if not monitors:  # a moment in the middle of an xrandr change: treat the screen as one monitor
+            root = Gdk.Screen.get_default().get_root_window()
+            return [(0, 0, root.get_width(), root.get_height())], [None], 0
+        rects = []
+        for m in monitors:
+            r = m.get_geometry()
+            rects.append((r.x, r.y, r.width, r.height))
+        primary = display.get_primary_monitor()
+        return rects, [m.get_model() for m in monitors], (monitors.index(primary) if primary in monitors else None)
 
     def _monitor_rect(self):
-        display, monitors = self._monitors()
+        """The monitor the panel sits on: "outer" (the screen-edge monitor for the side), "primary",
+        or an output name. A name that is not connected falls back to "outer"."""
+        rects, names, primary = self._layout()
         name = self.cfg["monitor"]
-        mon = None
-        if name != "primary":
-            mon = next((m for m in monitors if m.get_model() == name), None)
-            if mon is None and not self._warned_monitor:
+        if name == "primary":
+            index = primary if primary is not None else 0
+        elif name != "outer" and name in names:
+            self._warned_monitor = False  # seen again: warn once more if it goes missing later
+            index = names.index(name)
+        else:  # "outer", or an output name that is not connected
+            if name != "outer" and not self._warned_monitor:
                 self._warned_monitor = True
-                print(f"sidepanel: no monitor named {name!r}, using the primary one", file=sys.stderr)
-        mon = mon or display.get_primary_monitor() or monitors[0]
-        r = mon.get_geometry()
-        return (r.x, r.y, r.width, r.height)
+                print(f"sidepanel: no monitor named {name!r}, using the outer screen edge", file=sys.stderr)
+            index = geometry.outer_monitor(rects, self.cfg["side"], primary)
+        return rects[index]
 
     def _place(self):
         mon = self._monitor_rect()
@@ -242,13 +277,40 @@ class DockView:
         self._sync_strut(mon)
 
     def _sync_strut(self, mon):
-        if self.x is None or not self.win.get_realized():
-            return
         values = None
         if self.cfg["pinned"] and not self.hidden:
-            screen_w = max(m.get_geometry().x + m.get_geometry().width for m in self._monitors()[1])
+            screen_w = max(x + w for x, _, w, _ in self._layout()[0])
             values = geometry.strut(mon, screen_w, self.cfg["side"], self.cfg["width"])
-        self.x.set_strut(self.win.get_window().get_xid(), values)
+        # pinned on an inner edge cannot reserve space: the pin says so instead of silently overlaying
+        self._set_overlay(self.cfg["pinned"] and not self.hidden and values is None)
+        if self.x is not None and self.win.get_realized():
+            self.x.set_strut(self.win.get_window().get_xid(), values)
+
+    def _set_overlay(self, overlay):
+        if overlay != self._overlay:
+            self._overlay = overlay
+            self._refresh_pin()
+
+    def _on_monitors_changed(self, *_args):
+        # plugging a screen or an xrandr change emits several signals in a burst: re-place once, after
+        if self._relayout_id is None:
+            self._relayout_id = GLib.timeout_add(300, self._relayout)
+
+    def _relayout(self):
+        self._relayout_id = None
+        if not self._closed:
+            self._place()
+        return False
+
+    def _teardown(self, *_args):
+        """The panel window is gone: stop reacting to monitor changes."""
+        self._closed = True
+        if self._relayout_id is not None:
+            GLib.source_remove(self._relayout_id)
+            self._relayout_id = None
+        for screen, handler in self._screen_handlers:
+            screen.disconnect(handler)
+        self._screen_handlers = []
 
     def _apply(self, expanded):
         if self.hidden:

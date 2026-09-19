@@ -188,8 +188,8 @@ class DockViewTest(unittest.TestCase):
 
     def test_side_change_moves_both_windows(self):
         view = self.make()
-        mon = view._monitor_rect()
         view.set_side("right")
+        mon = view._monitor_rect()  # with monitor = "outer" the right side may be another monitor
         self.assertEqual(view.strip.get_position(), geometry.dock_rect(mon, "right", view.cfg["width"], False)[:2])
         self.assertEqual(view.win.get_position(), geometry.dock_rect(mon, "right", view.cfg["width"], True)[:2])
 
@@ -200,11 +200,115 @@ class DockViewTest(unittest.TestCase):
         view.set_hidden(False)
         self.assertEqual(self.shown, {view.strip, view.win})  # pinned: panel comes back too
 
-    def test_unknown_monitor_falls_back_to_primary(self):
-        with mock.patch("sys.stderr"):
-            view = self.make(monitor="NOPE-9")
-            rect = view._monitor_rect()
-        self.assertEqual(rect, self.make(monitor="primary")._monitor_rect())
+    # -- which monitor: fake layouts stand in for real hardware -------------------------------
+
+    HDMI, DP = (0, 0, 2560, 1440), (2560, 180, 1920, 1080)
+    YOURS = ([HDMI, DP], ["HDMI-1", "DP-1"], 0)  # primary HDMI-1 on the left
+    MIRRORED = ([(0, 180, 1920, 1080), (1920, 0, 2560, 1440)], ["DP-1", "HDMI-1"], 1)  # primary on the right
+
+    def with_layout(self, view, layout, **cfg):
+        view._layout = lambda: layout
+        view.cfg.update(cfg)
+        return view._monitor_rect()
+
+    def test_outer_follows_the_layout_whatever_its_shape(self):
+        view = self.make()  # default: monitor = "outer"
+        rects, _, _ = self.YOURS
+        self.assertEqual(self.with_layout(view, self.YOURS, side="left"), rects[0])
+        self.assertEqual(self.with_layout(view, self.YOURS, side="right"), rects[1])
+        rects, _, _ = self.MIRRORED
+        self.assertEqual(self.with_layout(view, self.MIRRORED, side="left"), rects[0])  # DP-1 now
+        self.assertEqual(self.with_layout(view, self.MIRRORED, side="right"), rects[1])  # HDMI-1 now
+
+    def test_primary_and_named_monitors_are_still_available(self):
+        view = self.make()
+        rects, _, _ = self.MIRRORED
+        self.assertEqual(self.with_layout(view, self.MIRRORED, side="left", monitor="primary"), rects[1])
+        self.assertEqual(self.with_layout(view, self.MIRRORED, side="right", monitor="DP-1"), rects[0])
+
+    def test_unknown_monitor_warns_once_and_uses_the_outer_edge(self):
+        rects, _, _ = self.MIRRORED
+        with mock.patch("sys.stderr") as err:
+            view = self.make(monitor="NOPE-9")  # building it already measures the monitors: one warning
+            first = self.with_layout(view, self.MIRRORED, side="left")
+            second = view._monitor_rect()
+        self.assertEqual((first, second), (rects[0], rects[0]))
+        warnings = [c for c in err.write.call_args_list if "NOPE-9" in str(c)]
+        self.assertEqual(len(warnings), 1)
+
+    def test_pin_says_so_when_the_edge_cannot_reserve_space(self):
+        view = self.make(monitor="primary", pinned=True)
+        view._layout = lambda: self.MIRRORED  # primary is HDMI-1 on the right: its left edge is inner
+        view._place()
+        self.assertEqual(view.pin_btn.get_label(), "pinned (overlay)")
+        self.assertIn('"outer"', view.pin_btn.get_tooltip_text())  # and says what to do about it
+        view.cfg["monitor"] = "outer"  # the panel moves to the real outer edge: it can reserve space
+        view._place()
+        self.assertEqual(view.pin_btn.get_label(), "pinned")
+        view.set_pinned(False)
+        self.assertEqual(view.pin_btn.get_label(), "pin")
+
+    def test_a_layout_change_moves_the_panel(self):
+        from sidepanel import geometry
+
+        view = self.make()
+        view.cfg["side"] = "left"
+        view._layout = lambda: self.YOURS
+        view._relayout()
+        self.assertEqual(view.strip.get_position(), geometry.dock_rect(self.HDMI, "left", view.cfg["width"], False)[:2])
+        view._layout = lambda: self.MIRRORED  # monitors swapped (or another one plugged in)
+        view._relayout()
+        left = self.MIRRORED[0][0]
+        self.assertEqual(view.strip.get_position(), geometry.dock_rect(left, "left", view.cfg["width"], False)[:2])
+
+    def test_no_monitors_at_all_falls_back_to_the_whole_screen(self):
+        view = self.make()
+        with mock.patch.object(Gdk.Display, "get_n_monitors", return_value=0):  # mid-xrandr moment
+            rects, names, primary = view._layout()
+            view._relayout()  # must not raise inside a timer callback
+        self.assertEqual((len(rects), names, primary), (1, [None], 0))
+        self.assertEqual(rects[0][:2], (0, 0))
+        self.assertGreater(rects[0][2], 0)
+
+    def test_missing_monitor_warns_again_only_after_it_was_seen_again(self):
+        dp_only = ([(0, 0, 1920, 1080)], ["HDMI-1"], 0)
+        with mock.patch("sys.stderr") as err:
+            view = self.make(monitor="DP-1")
+            view._layout = lambda: dp_only  # DP-1 absent
+            for _ in range(3):
+                view._relayout()  # layout changes that do not bring it back are not news
+            once = len([c for c in err.write.call_args_list if "DP-1" in str(c)])
+            view._layout = lambda: self.MIRRORED  # DP-1 is back...
+            view._relayout()
+            view._layout = lambda: dp_only  # ...and gone again
+            view._relayout()
+            twice = len([c for c in err.write.call_args_list if "DP-1" in str(c)])
+        self.assertEqual((once, twice), (1, 2))
+
+    def test_closing_the_panel_stops_it_reacting_to_monitor_changes(self):
+        view = self.make()
+        view._on_monitors_changed()  # a re-place is pending...
+        self.assertIsNotNone(view._relayout_id)
+        view.win.destroy()  # ...and the panel window goes away
+        self.assertIsNone(view._relayout_id)
+        self.assertEqual(view._screen_handlers, [])
+        moved = []
+        view._place = lambda: moved.append(1)
+        view._relayout()  # a late callback does nothing on a dead view
+        self.assertEqual(moved, [])
+
+    def test_a_burst_of_monitor_signals_re_places_once(self):
+        from gi.repository import GLib
+
+        view = self.make()
+        view._on_monitors_changed()
+        first = view._relayout_id
+        view._on_monitors_changed()
+        view._on_monitors_changed()
+        self.assertIsNotNone(first)
+        self.assertEqual(view._relayout_id, first)  # debounced: one pending re-place, not three
+        GLib.source_remove(first)
+        view._relayout_id = None
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from sidepanel import config  # noqa: E402
 from sidepanel.autohide import Autohide  # noqa: E402
-from sidepanel.geometry import TRIGGER_PX, dock_rect, strut  # noqa: E402
+from sidepanel.geometry import TRIGGER_PX, dock_rect, outer_monitor, strut  # noqa: E402
 from sidepanel.model import accent, ancestors, detect_browser, match_browser, owns_window  # noqa: E402
 
 
@@ -27,6 +27,9 @@ class ConfigTest(unittest.TestCase):
             ("right", 400, True, "DP-1", False),
         )
         self.assertTrue(config.DEFAULTS["start_with_browser"])  # on unless the user opts out
+        self.assertEqual(config.DEFAULTS["monitor"], "outer")  # layout-independent unless a name is given
+        for monitor in ("outer", "primary", "HDMI-1"):
+            self.assertEqual(config.validate({"monitor": monitor})["monitor"], monitor)
 
     def test_rejects_bad_values(self):
         for bad in (
@@ -85,6 +88,39 @@ class GeometryTest(unittest.TestCase):
         mon = (0, 0, 1920, 1080)
         self.assertIsNotNone(strut(mon, 1920, "left", 300))
         self.assertIsNotNone(strut(mon, 1920, "right", 300))
+
+
+class OuterMonitorTest(unittest.TestCase):
+    HDMI, DP = (0, 0, 2560, 1440), (2560, 180, 1920, 1080)
+
+    def test_your_layout(self):
+        rects = [self.HDMI, self.DP]
+        self.assertEqual(outer_monitor(rects, "left", 0), 0)  # HDMI-1 owns the left edge
+        self.assertEqual(outer_monitor(rects, "right", 0), 1)  # DP-1 owns the right edge
+
+    def test_mirrored_layout_gives_the_mirrored_answer(self):
+        dp, hdmi = (0, 180, 1920, 1080), (1920, 0, 2560, 1440)  # DP-1 left, HDMI-1 right (and primary)
+        self.assertEqual(outer_monitor([dp, hdmi], "left", 1), 0)
+        self.assertEqual(outer_monitor([dp, hdmi], "right", 1), 1)
+
+    def test_order_of_the_monitor_list_does_not_matter(self):
+        self.assertEqual(outer_monitor([self.DP, self.HDMI], "left", 1), 1)
+        self.assertEqual(outer_monitor([self.DP, self.HDMI], "right", 1), 0)
+
+    def test_single_monitor_and_three_monitors(self):
+        self.assertEqual((outer_monitor([self.HDMI], "left"), outer_monitor([self.HDMI], "right")), (0, 0))
+        three = [(0, 0, 1920, 1080), (1920, 0, 2560, 1440), (4480, 0, 1920, 1080)]
+        self.assertEqual((outer_monitor(three, "left", 1), outer_monitor(three, "right", 1)), (0, 2))
+
+    def test_vertically_stacked_monitors_prefer_primary_then_tallest_then_first(self):
+        stacked = [(0, 0, 1920, 1080), (0, 1080, 2560, 1440)]
+        self.assertEqual(outer_monitor(stacked, "left", 0), 0)  # the primary wins
+        self.assertEqual(outer_monitor(stacked, "left", None), 1)  # else the tallest
+        equal = [(0, 0, 1920, 1080), (0, 1080, 1920, 1080)]
+        self.assertEqual(outer_monitor(equal, "left", None), 0)  # else the first
+
+    def test_a_primary_on_an_inner_edge_is_ignored(self):
+        self.assertEqual(outer_monitor([self.HDMI, self.DP], "right", 0), 1)  # HDMI-1 is primary but inner
 
 
 class FakeClock:

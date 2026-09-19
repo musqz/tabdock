@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## Unreleased
+
+- `monitor = "outer"` is the new default: the panel sits on the monitor that owns the screen's outer edge for
+  `side` (leftmost for left, rightmost for right), so a pinned panel can reserve space and tiling respects it in
+  any monitor layout, including a reversed one. `"primary"` and output names still work; a name that is not
+  connected falls back to the outer edge. The panel now follows monitors being plugged in, unplugged or
+  rearranged. Pinning on an inner edge (which X11 cannot reserve space on) says so: `pinned (overlay)`, with a
+  tooltip. `tests/e2e_multihead.py` checks the real Openbox behaviour on two monitors.
+
+## 0.2.0
 
 - Verified on Firefox, Zen, FireDragon, Waterfox and LibreWolf (native packages) with the same extension and
   the single `~/.mozilla/native-messaging-hosts` manifest, so no per-browser manifest directories are
