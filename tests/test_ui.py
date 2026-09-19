@@ -54,7 +54,8 @@ class DockViewTest(unittest.TestCase):
         from sidepanel.dock import DockView
 
         self.activated = []
-        view = DockView({**DEFAULTS, **cfg}, lambda *a: self.activated.append(a), lambda: None)
+        self.quit_calls = []
+        view = DockView({**DEFAULTS, **cfg}, lambda *a: self.activated.append(a), lambda: self.quit_calls.append(1))
         self.addCleanup(view.win.destroy)
         self.addCleanup(view.strip.destroy)
         return view
@@ -76,6 +77,49 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(self.shown, {view.strip, view.win})
         self.assertEqual(view.win.get_size()[0], 280)
         self.assertTrue(view.pin_btn.get_active())
+
+    def test_pin_state_is_readable_at_a_glance(self):
+        view = self.make()
+        self.assertEqual(view.pin_btn.get_label(), "pin")
+        self.assertIn("Pin", view.pin_btn.get_tooltip_text())
+        self.assertFalse(view.pin_btn.get_active())
+
+        view.pin_btn.set_active(True)  # a click
+        self.assertEqual(view.pin_btn.get_label(), "pinned")  # the word changes, not just a colour
+        self.assertIn("Unpin", view.pin_btn.get_tooltip_text())  # the tooltip says what a click does now
+        self.assertTrue(view.autohide.pinned and view.cfg["pinned"])
+
+        view.set_pinned(False)  # e.g. from a config reload
+        self.assertEqual(view.pin_btn.get_label(), "pin")
+        self.assertFalse(view.pin_btn.get_active())
+
+    def test_pin_from_config_starts_labelled_pinned(self):
+        view = self.make(pinned=True)
+        self.assertEqual(view.pin_btn.get_label(), "pinned")
+
+    def test_pin_label_follows_a_config_reload(self):
+        view = self.make()
+        view.reconfigure({**DEFAULTS, "pinned": True})
+        self.assertEqual(view.pin_btn.get_label(), "pinned")
+        view.reconfigure({**DEFAULTS, "pinned": False})
+        self.assertEqual(view.pin_btn.get_label(), "pin")
+
+    def test_quit_button_quits(self):
+        view = self.make()
+        self.assertEqual(view.quit_btn.get_tooltip_text(), "Quit sidepanel")
+        view.quit_btn.clicked()
+        self.assertEqual(self.quit_calls, [1])
+
+    def test_header_button_order_is_pin_flip_quit(self):
+        view = self.make()
+        header = view.content.get_children()[0]
+
+        def position(button):
+            return header.child_get_property(button, "position")
+
+        # packed with pack_end: the first one packed is rightmost, so quit is far right, then flip, then pin
+        self.assertLess(position(view.quit_btn), position(view.flip_btn))
+        self.assertLess(position(view.flip_btn), position(view.pin_btn))
 
     def test_show_renders_header_sections_and_tabs(self):
         view = self.make()

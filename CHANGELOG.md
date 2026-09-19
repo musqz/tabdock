@@ -2,6 +2,9 @@
 
 ## 0.2.0 (unreleased)
 
+- Panel header: the pin state is now unmistakable (`pin` outlined and dim, `pinned` as a filled pill in the
+  browser's colour, tooltip says what a click does), and a `✕` quit button stops the panel cleanly.
+  `tests/e2e_x11.py` clicks both under a real Openbox.
 - Permanent install. `install.sh` now copies the program to `~/.local/share/openbox-sidepanel` with
   `~/.local/bin/sidepanel` linking to it (`PREFIX`/`SUDO` overrides), points the native-messaging
   manifest at the installed relay, keeps a receipt so `--uninstall` removes exactly what it created

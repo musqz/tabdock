@@ -25,8 +25,11 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost
   `follow = "last"` (default) the panel keeps showing the last browser while you use other apps,
   and clicking a tab brings that browser forward; `follow = "hide"` removes the panel instead.
 - **Pin:** the `pin` button keeps the panel open and reserves the space (windows are laid out
-  beside it). The reservation only works on an outer edge of your monitor layout; on an inner
+  beside it). While pinned it reads `pinned` on a filled pill in the browser's colour; unpinned it is a
+  dim outlined `pin`. The reservation only works on an outer edge of your monitor layout; on an inner
   edge (a neighbouring monitor beyond it) the panel stays open as an overlay instead.
+- **Quit:** the `✕` at the far right of the header stops the panel (it stays gone until you run
+  `sidepanel` again or log in again; the browser extension just waits).
 - The panel never takes keyboard focus, so clicking it does not steal focus from the browser.
 
 ## Install
@@ -72,8 +75,8 @@ Copy [configs/config.toml](configs/config.toml) to `~/.config/openbox-sidepanel/
 | `pinned` | `false` | start pinned |
 
 Tip: use an outer edge of your monitor layout; the pointer stops there, so hover-to-open is easy.
-Reload a running panel with `kill -HUP $(pgrep -f 'sidepanel$')`. The header has a pin toggle and
-a side switch (`⇄`); both apply until the next restart or reload.
+Reload a running panel with `kill -HUP $(pgrep -f 'sidepanel$')`. The header has a pin toggle, a
+side switch (`⇄`) and a quit button (`✕`); pin and side apply until the next restart or reload.
 
 ## Animation (picom)
 

@@ -38,7 +38,11 @@ CSS = """
 .sp-empty {{ padding: 16px; color: #7d8594; }}
 button.sp-btn {{ padding: 0 6px; min-height: 0; min-width: 0; background: none; border: none; box-shadow: none; color: #aab2c0; }}
 button.sp-btn:hover {{ color: #ffffff; }}
-button.sp-btn:checked {{ color: {accent}; }}
+button.sp-btn.sp-pin {{ border: 1px solid #454b58; border-radius: 9px; padding: 0 8px; }}
+button.sp-btn.sp-pin:hover {{ border-color: #7d8594; }}
+button.sp-btn.sp-pin:checked {{ background-color: {accent}; border-color: {accent}; color: #1b1d23; font-weight: bold; }}
+button.sp-btn.sp-quit {{ margin-left: 6px; }}
+button.sp-btn.sp-quit:hover {{ color: #ff6b6b; }}
 """
 
 # Firefox container icon names -> a glyph (best effort; unknown names fall back to a dot)
@@ -85,11 +89,16 @@ class DockView:
         header.get_style_context().add_class("sp-header")
         self.browser_name = Gtk.Label(label="", xalign=0)
         self.browser_name.get_style_context().add_class("sp-browser")
+        self.quit_btn = self._button("✕", "Quit sidepanel", Gtk.Button)
+        self.quit_btn.get_style_context().add_class("sp-quit")
+        self.quit_btn.connect("clicked", lambda _b: on_quit())
         self.flip_btn = self._button("⇄", "Switch side", Gtk.Button)
         self.flip_btn.connect("clicked", lambda _b: self.set_side("right" if self.cfg["side"] == "left" else "left"))
-        self.pin_btn = self._button("pin", "Keep the panel open", Gtk.ToggleButton)
-        self.pin_btn.connect("toggled", lambda b: self.set_pinned(b.get_active()))
+        self.pin_btn = self._button("pin", "Pin: keep the panel open", Gtk.ToggleButton)
+        self.pin_btn.get_style_context().add_class("sp-pin")
+        self.pin_btn.connect("toggled", self._on_pin_toggled)
         header.pack_start(self.browser_name, True, True, 0)
+        header.pack_end(self.quit_btn, False, False, 0)  # rightmost
         header.pack_end(self.flip_btn, False, False, 0)
         header.pack_end(self.pin_btn, False, False, 0)
 
@@ -160,6 +169,13 @@ class DockView:
         self.cfg["side"] = side
         self._place()
 
+    def _on_pin_toggled(self, button):
+        # the state must be readable at a glance: the word, the filled pill and the tooltip all change
+        pinned = button.get_active()
+        button.set_label("pinned" if pinned else "pin")
+        button.set_tooltip_text("Unpin: let the panel hide again" if pinned else "Pin: keep the panel open")
+        self.set_pinned(pinned)
+
     def set_pinned(self, pinned):
         if pinned == self.cfg["pinned"] and pinned == self.autohide.pinned:
             return
@@ -172,9 +188,8 @@ class DockView:
         """Apply a reloaded config (SIGHUP). The file wins over runtime pin/side changes."""
         self.cfg = dict(cfg)
         self._warned_monitor = False
-        self.pin_btn.set_active(self.cfg["pinned"])
-        self.autohide.set_pinned(self.cfg["pinned"])
-        self._place()
+        self.set_pinned(self.cfg["pinned"])  # syncs the button, autohide and strut in one place
+        self._place()  # side, width or monitor may have changed too
 
     # -- windows -------------------------------------------------------------------
 

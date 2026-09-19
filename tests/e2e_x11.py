@@ -267,6 +267,27 @@ def main():
         wait_for(lambda: not panel_mapped(), "unpinned panel collapses")
         ok("pinned: panel stays open and reserves work area; unpinned: strut gone, autohide back")
 
+        # -- the pin button itself (header: pin, flip and quit buttons, right-aligned) --------------
+        HEADER_Y = 20
+
+        def click_pin_until(condition, what):
+            # Sweep clicks across where the pin can be (left of the side-switch button) instead of
+            # trusting one pixel offset that depends on fonts and theme padding.
+            for x in range(WIDTH - 125, WIDTH - 70, 5):
+                run("xdotool", "mousemove", str(x), str(HEADER_Y), "click", "1")
+                time.sleep(0.15)
+                if condition():
+                    return
+            raise AssertionError(f"no click on the header's pin region: {what}")
+
+        expand()
+        click_pin_until(lambda: has_strut(panel_win()), "strut after clicking the pin button")
+        time.sleep(0.3)
+        screenshot(os.path.join(shots, "pinned-by-click.png"))
+        click_pin_until(lambda: not has_strut(panel_win()), "strut removed after clicking pin again")
+        collapse()
+        ok("pin button: one click pins (reserves space), the next unpins (autohide again)")
+
         # -- side switch --------------------------------------------------------------------------
         write_cfg(side="right", width=WIDTH)
         wait_for(lambda: wininfo(strip)["x"] == SCREEN[0] - STRIP, "strip moved to the right edge")
@@ -287,6 +308,22 @@ def main():
         ok("follow = hide: panel disappears over other apps and returns for a browser")
 
         assert panel.poll() is None, "panel crashed"
+
+        # -- the quit button ends the panel cleanly -----------------------------------------------
+        write_cfg(side="left", width=WIDTH)
+        expand()
+        assert os.path.exists(sock_path)
+        for x in (WIDTH - 14, WIDTH - 20, WIDTH - 26):  # the quit button is the rightmost header element
+            run("xdotool", "mousemove", str(x), str(HEADER_Y), "click", "1")
+            time.sleep(0.2)
+            if panel.poll() is not None:
+                break
+        wait_for(lambda: panel.poll() is not None, "panel exits after the quit button")
+        assert panel.returncode == 0, f"panel exit code {panel.returncode}"
+        assert not os.path.exists(sock_path), "the panel left its socket behind"
+        wait_for(lambda: find("openbox-sidepanel-strip") is None, "the strip window is gone once the panel exited")
+        ok("quit button: the panel exits with code 0, removes its socket and its windows")
+
         panel_log.flush()
         log = open(os.path.join(tmp, "panel.log")).read()
         assert "Traceback" not in log and "WARNING" not in log, log
