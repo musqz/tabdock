@@ -1,0 +1,23 @@
+# local-only assistant notes, never committed
+CLAUDE.md
+claude.md
+
+# python / build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.o
+*.a
+*.so
+web-ext-artifacts/
+*.xpi
+
+# arch packaging artifacts
+src/
+pkg/
+*.pkg.tar.zst
+*.pkg.tar.xz
+*.tar.gz
+
+# linked worktrees for background sessions
+.claude/
