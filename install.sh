@@ -65,16 +65,23 @@ install_files() {
 }
 
 link_bin() {
-    local target="$share/sidepanel"
+    local target="$share/sidepanel" note=
     if [[ -L $bin && "$(readlink -- "$bin")" == "$target" ]]; then
         printf '%-10s %s\n' unchanged "$bin"
-    elif [[ -e $bin || -L $bin ]]; then
-        die "$bin already exists and is not this install; remove or move it first"
-    else
-        $SUDO mkdir -p -- "${bin%/*}"
-        $SUDO ln -s -- "$target" "$bin"
-        printf '%-10s %s -> %s\n' installed "$bin" "$target"
+        installed+=("$bin")
+        return
     fi
+    if [[ -f $bin && ! -L $bin ]] && cmp -s -- "$root/sidepanel" "$bin"; then
+        # A launcher copied there by hand can never find its files. It is identical to ours,
+        # so replacing it with the link loses nothing.
+        $SUDO rm -f -- "$bin"
+        note=" (replaced an identical hand-copied launcher)"
+    elif [[ -e $bin || -L $bin ]]; then
+        die "$bin already exists and is not this install (a hand-copied or different launcher?); remove or move it first"
+    fi
+    $SUDO mkdir -p -- "${bin%/*}"
+    $SUDO ln -s -- "$target" "$bin"
+    printf '%-10s %s -> %s%s\n' installed "$bin" "$target" "$note"
     installed+=("$bin")
 }
 

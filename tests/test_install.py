@@ -141,6 +141,32 @@ class InstallTest(unittest.TestCase):
         for rel in ("newpkg/__init__.py", "newpkg/data.css"):
             self.assertTrue(os.path.isfile(os.path.join(self.share, "lib", "sidepanel", rel)), rel)
 
+    def test_replaces_an_identical_hand_copied_launcher(self):
+        # what happens when the launcher is copied to ~/.local/bin by hand: it cannot find its files
+        os.makedirs(os.path.dirname(self.bin))
+        shutil.copy2(os.path.join(ROOT, "sidepanel"), self.bin)
+        broken = subprocess.run([self.bin, "--version"], capture_output=True, text=True)
+        self.assertNotEqual(broken.returncode, 0)
+
+        done = self.run_install()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("hand-copied", done.stdout)
+        self.assertTrue(os.path.islink(self.bin))
+        self.assertEqual(os.readlink(self.bin), os.path.join(self.share, "sidepanel"))
+        self.assertEqual(subprocess.run([self.bin, "--version"], capture_output=True).returncode, 0)
+        removed = self.run_install("--uninstall")
+        self.assertEqual(removed.returncode, 0)
+        self.assertFalse(os.path.lexists(self.bin))  # it is ours now and goes away with the install
+
+    def test_launcher_without_its_files_explains_instead_of_a_traceback(self):
+        alone = os.path.join(self.tmp.name, "alone")
+        os.makedirs(alone)
+        shutil.copy2(os.path.join(ROOT, "sidepanel"), alone)
+        ran = subprocess.run([os.path.join(alone, "sidepanel")], capture_output=True, text=True)
+        self.assertEqual(ran.returncode, 1)
+        self.assertIn("install.sh", ran.stderr)
+        self.assertNotIn("Traceback", ran.stderr)
+
     def test_refuses_to_replace_a_foreign_command(self):
         os.makedirs(os.path.dirname(self.bin))
         with open(self.bin, "w") as f:
