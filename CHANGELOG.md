@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Show more than one browser. With two or more browsers open, chips under the header choose what the panel
+  lists: `auto` (the browser in use, as before), a single browser (kept whichever window has focus), or `all`,
+  which gives every browser its own foldable section (click its header). Each browser keeps its own colour on
+  its header, active tab and drop marker; clicking a tab of a browser that is not in use activates it and
+  raises that browser's window (found by process when it has not been in use since the panel started); drags,
+  drops and reordering stay inside one browser; two profiles of one browser are numbered. New config key
+  `view = "auto" | "all"` picks the starting mode. Only the panel changed, not the extension: `./install.sh`
+  and a panel restart are enough, no new signing. Tested with unit tests and under a real Openbox with two
+  browsers (`tests/e2e_x11.py`: real clicks on the chips, the headers and a tab of the browser not in use).
+
 - `packaging/sign-extension.sh` signs a new release with your addons.mozilla.org credentials: it asks for the
   JWT issuer and the (hidden) JWT secret one at a time, validates their shape before anything is sent (the
   usual mistakes: an issuer without `user:`, a secret cut off or pasted with debris), lints, signs, and verifies

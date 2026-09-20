@@ -6,10 +6,11 @@ DEFAULTS = {
     "monitor": "outer",
     "width": 320,
     "follow": "last",
+    "view": "auto",
     "pinned": False,
     "start_with_browser": True,  # read by the native-messaging relay, not by the panel itself
 }
-CHOICES = {"side": ("left", "right"), "follow": ("last", "hide")}
+CHOICES = {"side": ("left", "right"), "follow": ("last", "hide"), "view": ("auto", "all")}
 
 
 def socket_path():

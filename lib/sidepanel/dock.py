@@ -1,4 +1,5 @@
-"""The panel: an autohiding dock with the focused browser's containers and tabs.
+"""The panel: an autohiding dock with the containers and tabs of the browser in use, of one chosen
+browser, or of all open browsers (chips under the header choose).
 
 Two dock windows on the same screen edge:
   * the strip: a thin, always-mapped window. It is the hover target and is tinted in the
@@ -25,6 +26,7 @@ from gi.repository import Gdk, GdkX11, GLib, Gtk, Pango  # noqa: E402,F401
 from . import geometry  # noqa: E402
 from .autohide import Autohide  # noqa: E402
 from .model import (  # noqa: E402
+    ACCENTS,
     DEFAULT_ACCENT,
     NO_CONTAINER,
     accent,
@@ -59,7 +61,30 @@ button.sp-btn.sp-quit:hover {{ color: #ff6b6b; }}
 .sp-row.dragging {{ opacity: 0.45; }}
 .sp-row.drop-before {{ box-shadow: inset 0 2px 0 0 {accent}; }}
 .sp-row.drop-after {{ box-shadow: inset 0 -2px 0 0 {accent}; }}
+.sp-chips {{ padding: 4px 6px 3px 6px; background-color: #1b1d23; }}
+button.sp-btn.sp-chip {{ border: 1px solid #454b58; border-radius: 9px; padding: 0 8px; }}
+button.sp-btn.sp-chip:hover {{ border-color: #7d8594; color: #ffffff; }}
+button.sp-btn.sp-chip.selected {{ background-color: {accent}; border-color: {accent}; color: #1b1d23; font-weight: bold; }}
+.sp-bhead {{ background-color: #23262e; border-top: 1px solid #2f3440; }}
 """
+
+
+def acc_class(colour):
+    """The style class that carries one browser's colour, so several browsers can show at once."""
+    return "acc-" + colour.lstrip("#")
+
+
+# The colours that must differ from row to row (with several browsers listed, "the accent" is no
+# longer one colour): the active tab, the drop marker and the chips. Fixed, so loaded once.
+BROWSER_CSS = "".join(
+    f".sp-row.active.{acc_class(c)} {{ border-left-color: {c}; }}"
+    f".sp-row.drop-before.{acc_class(c)} {{ box-shadow: inset 0 2px 0 0 {c}; }}"
+    f".sp-row.drop-after.{acc_class(c)} {{ box-shadow: inset 0 -2px 0 0 {c}; }}"
+    f"button.sp-btn.sp-chip.{acc_class(c)} {{ border-color: {c}; }}"
+    f"button.sp-btn.sp-chip.{acc_class(c)}:hover {{ border-color: shade({c}, 1.35); }}"
+    f"button.sp-btn.sp-chip.selected.{acc_class(c)} {{ background-color: {c}; border-color: {c}; }}"
+    for c in (*ACCENTS.values(), DEFAULT_ACCENT)
+)
 
 # Firefox container icon names -> a glyph (best effort; unknown names fall back to a dot)
 ICONS = {
@@ -78,23 +103,25 @@ def _schedule(ms, fn):
 
 
 class DockView:
-    def __init__(self, cfg, on_activate, on_quit, xconn=None, on_command=None):
+    def __init__(self, cfg, on_activate, on_quit, xconn=None, on_command=None, on_choose=None):
         self.cfg = dict(cfg)
         self.on_activate = on_activate
         self.on_command = on_command  # on_command(conn, message): what a drop asks the browser to do
+        self.on_choose = on_choose  # on_choose("auto" | "all" | conn): a chip was clicked
         self.x = xconn
-        self._meta = {}  # row widget -> what it stands for (kind, id, group, click handler, draggable)
+        self._meta = {}  # row widget -> what it stands for (kind, id, group, conn, click handler, draggable)
         self._row_order = []  # row widgets in display order
         self._press = None  # the button-1 press in progress: {box, x, y, t, dragging, target, after}
         self._deferred = None  # a state update that arrived mid-drag, applied after the drop
         self._dump_path = os.environ.get("SIDEPANEL_LAYOUT_DUMP")  # a test hook: off unless set at start
         self._dump_pending = False
-        self.conn = None
-        self.info = {}
-        self.state = {}
-        self.collapsed = set()  # (browser pid, cookieStoreId) of folded container sections
+        self.sources = []  # [(conn, hello, state)] of the browsers listed
+        self._names = {}  # conn -> how its browser is called (numbered when two share a name)
+        self._choices = ()  # (conn, label, colour) of the chips built
+        self._chip_buttons = []  # (key, button)
+        self.collapsed = set()  # (browser pid, cookieStoreId) of folded container sections; (pid, None) a folded browser
         self.hidden = False
-        self._last = None  # (conn, state, folds, accent) of the last render, to skip identical ones
+        self._last = None  # what the last render showed, to skip identical ones
         self._accent = None
         self._warned_monitor = False
         self._overlay = False  # pinned, but on an inner edge where no space can be reserved
@@ -108,6 +135,11 @@ class DockView:
             Gdk.Screen.get_default(), self._css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
         self._set_accent(DEFAULT_ACCENT)
+        per_browser = Gtk.CssProvider()
+        per_browser.load_from_data(BROWSER_CSS.encode())
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), per_browser, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
 
         self.strip = self._dock_window("sp-strip", "openbox-sidepanel-strip")
         self.win = self._dock_window("sp-panel", "openbox-sidepanel-panel")
@@ -133,12 +165,22 @@ class DockView:
         header.pack_end(self.flip_btn, False, False, 0)
         header.pack_end(self.pin_btn, False, False, 0)
 
+        # which browser(s) to list; wraps onto more lines when many browsers are open, and only
+        # shown when there is a choice to make
+        self.chips = Gtk.FlowBox()
+        self.chips.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.chips.set_homogeneous(False)
+        self.chips.set_column_spacing(4)
+        self.chips.set_row_spacing(3)
+        self.chips.get_style_context().add_class("sp-chips")
+
         self.scroll = Gtk.ScrolledWindow()
         self.scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.scroll.add(self.list)
 
         self.content.pack_start(header, False, False, 0)
+        self.content.pack_start(self.chips, False, False, 0)
         self.content.pack_start(self.scroll, True, True, 0)
         self.win.get_child().add(self.content)
         self.win.get_child().show_all()  # the panel window itself is only shown while expanded
@@ -165,33 +207,43 @@ class DockView:
         """XIDs of our own windows (so the panel can ignore them as 'active window')."""
         return {w.get_window().get_xid() for w in (self.strip, self.win) if w.get_window() is not None}
 
-    def show(self, conn, info, state):
+    def show(self, sources, mode="auto", choices=(), focus=None):
+        """List the browsers in `sources` ([(conn, hello, state)]). `mode` ("auto", "all" or a conn) and
+        `choices` ([(conn, label, colour)] of every connected browser) drive the chips; `focus` is the
+        hello of the browser whose colour the header and the strip wear (the only one listed, by default)."""
         if self._press is not None and not self._pressing():
             self._end_press()  # a press whose release never came: let go of the hold and the drag marks
         if self._pressing():
-            self._deferred = (conn, info, state)  # rows are being pressed or dragged: redraw after the drop
+            self._deferred = (sources, mode, choices, focus)  # rows are being pressed or dragged: redraw after the drop
             return
         self._deferred = None
-        self.conn = conn
-        self.info = info
-        self.state = state
-        self.browser_name.set_text(info.get("browser") or "browser")
-        self.browser_name.set_tooltip_text(browser_label(info))
-        colour = accent(info)
-        snapshot = (conn, state, frozenset(self.collapsed), colour)
-        self._set_accent(colour)
+        self.sources = list(sources)
+        self._names = {conn: label for conn, label, _colour in choices}
+        if focus is None and len(self.sources) == 1:
+            focus = self.sources[0][1]
+        if len(self.sources) == 1:
+            conn, info, _state = self.sources[0]
+            self.browser_name.set_text(self._name(conn, info))
+            self.browser_name.set_tooltip_text(browser_label(info))
+        else:
+            self.browser_name.set_text("All browsers")
+            self.browser_name.set_tooltip_text(None)
+        self._set_accent(accent(focus) if focus else DEFAULT_ACCENT)  # only the strip and header wear it: no rebuild
+        snapshot = (self.sources, frozenset(self.collapsed), mode, tuple(choices))
         if snapshot != self._last:
             self._last = snapshot
+            self._set_chips(mode, choices)
             self._rebuild()
 
-    def clear(self):
+    def clear(self, mode="auto", choices=()):
+        """Nothing to list (yet). The chips stay when browsers are connected: they lead to another one."""
         self._end_press()
         self._deferred = None
-        self.conn = None
-        self.info = {}
-        self.state = {}
+        self.sources = []
+        self._names = {}
         self._last = None
         self._meta, self._row_order = {}, []
+        self._set_chips(mode, choices)
         self.browser_name.set_text("")
         self._set_accent(DEFAULT_ACCENT)
         self._replace_rows([self._label("Waiting for a browser with the Sidepanel extension", "sp-empty", wrap=True)])
@@ -373,6 +425,35 @@ class DockView:
         button.get_style_context().add_class("sp-btn")
         return button
 
+    def _set_chips(self, mode, choices):
+        """One chip per browser plus "auto" and "all". The buttons are only rebuilt when a browser
+        comes or goes; a click just moves the highlight. Hidden while there is nothing to choose."""
+        if tuple(choices) != self._choices:
+            self._choices = tuple(choices)
+            for child in self.chips.get_children():
+                self.chips.remove(child)
+            self._chip_buttons = []
+            entries = [("auto", "auto", None, "Follow the browser you are using")]
+            entries += [(conn, label, colour, f"Show only {label}") for conn, label, colour in choices]
+            entries.append(("all", "all", None, "Show every open browser"))
+            for key, label, colour, tip in entries:
+                button = self._button(label, tip, Gtk.Button)
+                button.get_style_context().add_class("sp-chip")
+                if colour:
+                    button.get_style_context().add_class(acc_class(colour))
+                button.connect("clicked", lambda _b, key=key: self._choose(key))
+                self.chips.add(button)
+                self._chip_buttons.append((key, button))
+            self.chips.show_all()
+        for key, button in self._chip_buttons:
+            ctx = button.get_style_context()
+            (ctx.add_class if key == mode else ctx.remove_class)("selected")
+        self.chips.set_visible(len(self._choices) > 1)
+
+    def _choose(self, key):
+        if self.on_choose is not None:
+            self.on_choose(key)
+
     def _label(self, text, css_class, markup=False, wrap=False):
         label = Gtk.Label(xalign=0)
         (label.set_markup if markup else label.set_text)(text)
@@ -383,8 +464,9 @@ class DockView:
         label.get_style_context().add_class(css_class)
         return label
 
-    def _row(self, child, kind, ident, group, on_click, active=False, draggable=True, pinned=False):
-        """A row. Hover/active styling lives on the EventBox: a windowless label gets no prelight.
+    def _row(self, child, kind, ident, group, conn, colour, on_click, active=False, draggable=True, pinned=False):
+        """A row of the browser `conn`, in its colour. Hover/active styling lives on the EventBox: a
+        windowless label gets no prelight.
 
         A click and a drag share one press, so they never both happen: the click fires on release,
         and moving DRAG_THRESHOLD px with the button down turns the press into a drag instead.
@@ -397,11 +479,13 @@ class DockView:
         box.connect("motion-notify-event", self._on_motion)
         box.connect("button-release-event", self._on_release)
         box.get_style_context().add_class("sp-row")
+        box.get_style_context().add_class(acc_class(colour))
         if active:
             box.get_style_context().add_class("active")
         box.add(child)
         self._meta[box] = {
-            "kind": kind, "id": ident, "group": group, "click": on_click, "draggable": draggable, "pinned": pinned,
+            "kind": kind, "id": ident, "group": group, "conn": conn, "click": on_click,
+            "draggable": draggable, "pinned": pinned,
         }
         self._row_order.append(box)
         return box
@@ -452,12 +536,13 @@ class DockView:
         return True
 
     def _drop_candidates(self, box):
-        """The rows the dragged one can be dropped between: same kind; for tabs the same container and the
-        same pinned-ness, because Firefox keeps pinned tabs in front and clamps a move across that line."""
+        """The rows the dragged one can be dropped between: same browser and kind; for tabs the same container
+        and the same pinned-ness, because Firefox keeps pinned tabs in front and clamps a move across that line."""
         meta = self._meta[box]
         return [
             b for b in self._row_order
             if self._meta[b]["draggable"]
+            and self._meta[b]["conn"] is meta["conn"]
             and self._meta[b]["kind"] == meta["kind"]
             and (
                 meta["kind"] == "section"
@@ -505,9 +590,12 @@ class DockView:
         if p["target"] is not None:
             self._unmark(p["target"])
 
-    def _command(self, message):
-        if self.on_command is not None and self.conn is not None:
-            self.on_command(self.conn, message)
+    def _command(self, conn, message):
+        if self.on_command is not None:
+            self.on_command(conn, message)
+
+    def _state_of(self, conn):
+        return next((state for c, _info, state in self.sources if c is conn), None)
 
     def _drop(self, p):
         box, target = p["box"], p["target"]
@@ -515,27 +603,31 @@ class DockView:
         self.autohide.set_held(False)
         if target is None or box not in self._meta or target not in self._meta:
             return
+        meta = self._meta[box]
+        conn, state = meta["conn"], self._state_of(meta["conn"])
+        if state is None:
+            return  # the browser went away under the drag
         candidates = self._drop_candidates(box)
         at = candidates.index(target) + (1 if p["after"] else 0)
         before = self._meta[candidates[at]]["id"] if at < len(candidates) else None  # lands in front of this
-        meta = self._meta[box]
         if meta["kind"] == "section":
             ids = [self._meta[b]["id"] for b in candidates]
             order = reordered(ids, meta["id"], before)
             if order != ids:
-                self._command({"type": "set_container_order", "order": order})
-                self.state = {**self.state, "containerOrder": order}  # show it at once; the browser confirms
+                self._command(conn, {"type": "set_container_order", "order": order})
+                # show it at once; the browser confirms
+                self.sources = [(c, i, {**s, "containerOrder": order} if c is conn else s) for c, i, s in self.sources]
                 self._last = None
                 self._rebuild()
         else:
             # the tabs it can land among: same container and same pinned-ness (see _drop_candidates)
-            group = next((tabs for c, tabs in group_tabs(self.state) if c["cookieStoreId"] == meta["group"]), [])
+            group = next((tabs for c, tabs in group_tabs(state) if c["cookieStoreId"] == meta["group"]), [])
             group = [t for t in group if bool(t.get("pinned")) == meta["pinned"]]
             if meta["id"] not in {t["id"] for t in group}:
                 return  # the state changed under the drag (browser switched, tab closed): nothing to do
             index = tab_move_index(group, meta["id"], before)
             if index is not None:
-                self._command({"type": "move_tab", "tabId": meta["id"], "index": index})
+                self._command(conn, {"type": "move_tab", "tabId": meta["id"], "index": index})
 
     # -- test hook ---------------------------------------------------------------------
 
@@ -553,15 +645,17 @@ class DockView:
             return False
         wx, wy = self.win.get_position()
         root = self.win.get_child()
-        rows = []
-        for box in self._row_order:
-            meta = self._meta.get(box)
-            if meta is None:
-                continue
-            a = box.get_allocation()
-            pos = box.translate_coordinates(root, 0, 0) or (a.x, a.y)  # unmapped: the list-relative fallback
-            rows.append({"kind": meta["kind"], "id": meta["id"], "group": meta["group"],
-                         "x": wx + pos[0], "y": wy + pos[1], "w": a.width, "h": a.height})
+
+        def spot(widget, kind, ident, group=None):
+            a = widget.get_allocation()
+            pos = widget.translate_coordinates(root, 0, 0) or (a.x, a.y)  # unmapped: the list-relative fallback
+            return {"kind": kind, "id": ident, "group": group,
+                    "x": wx + pos[0], "y": wy + pos[1], "w": a.width, "h": a.height}
+
+        rows = [spot(box, self._meta[box]["kind"], self._meta[box]["id"], self._meta[box]["group"])
+                for box in self._row_order if box in self._meta]
+        if self.chips.get_visible():
+            rows += [spot(button, "chip", button.get_label()) for _key, button in self._chip_buttons]
         with open(path + ".tmp", "w") as f:
             json.dump(rows, f)
         os.replace(path + ".tmp", path)
@@ -587,21 +681,46 @@ class DockView:
 
     def _rebuild(self):
         self._meta, self._row_order = {}, []
-        window = focused_window(self.state)
-        if window is None:
-            self._replace_rows([self._label("No browser windows", "sp-empty", wrap=True)])
-            return
+        many = len(self.sources) > 1
         rows = []
-        for container, tabs in group_tabs(self.state):
+        for conn, info, state in self.sources:
             # per browser process: two profiles of the same browser fold independently
-            key = (self.info.get("browserPid") or self.info.get("browser"), container["cookieStoreId"])
-            folded = key in self.collapsed
-            rows.append(self._section(container, tabs, key, folded))
-            if not folded:
-                rows.extend(self._tab_row(tab, window["id"], container["cookieStoreId"]) for tab in tabs)
-        self._replace_rows(rows)
+            browser = info.get("browserPid") or info.get("browser")
+            colour = accent(info)
+            window = focused_window(state)
+            if many:  # each browser gets its own header, which folds the whole browser away
+                folded = (browser, None) in self.collapsed
+                rows.append(self._browser_row(conn, colour, self._name(conn, info), window, (browser, None), folded))
+                if folded:
+                    continue
+            if window is None:
+                rows.append(self._label("No browser windows", "sp-empty", wrap=True))
+                continue
+            for container, tabs in group_tabs(state):
+                key = (browser, container["cookieStoreId"])
+                folded = key in self.collapsed
+                rows.append(self._section(container, tabs, key, folded, conn, colour, state))
+                if not folded:
+                    rows.extend(self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour) for tab in tabs)
+        self._replace_rows(rows or [self._label("No browser windows", "sp-empty", wrap=True)])
 
-    def _section(self, container, tabs, key, folded):
+    def _name(self, conn, info):
+        return self._names.get(conn) or info.get("browser") or "browser"
+
+    def _browser_row(self, conn, colour, name, window, key, folded):
+        count = len(window["tabs"]) if window else 0
+        markup = (
+            f'<span foreground="{colour}">▌</span> <b><span foreground="{colour}">{GLib.markup_escape_text(name)}</span></b> '
+            f'<span alpha="60%">({count})</span>  <span alpha="50%">{"▸" if folded else "▾"}</span>'
+        )
+        row = self._row(
+            self._label(markup, "sp-section", markup=True), "browser", None, None, conn, colour,
+            lambda: self._toggle(key), draggable=False,
+        )
+        row.get_style_context().add_class("sp-bhead")
+        return row
+
+    def _section(self, container, tabs, key, folded, conn, browser_colour, state):
         colour = container.get("colorCode") or DEFAULT_ACCENT
         icon = ICONS.get(container.get("icon"), "●")
         name = GLib.markup_escape_text(container["name"])
@@ -615,9 +734,9 @@ class DockView:
         cid = container["cookieStoreId"]
         # "No container" stays first, and a store the browser does not list as a container (private
         # windows, say) cannot be ordered: the next snapshot would put it straight back
-        known = {c["cookieStoreId"] for c in self.state.get("containers") or []}
+        known = {c["cookieStoreId"] for c in state.get("containers") or []}
         return self._row(
-            label, "section", cid, None, (lambda: self._toggle(key)) if tabs else (lambda: None),
+            label, "section", cid, None, conn, browser_colour, (lambda: self._toggle(key)) if tabs else (lambda: None),
             draggable=cid != NO_CONTAINER and cid in known,
         )
 
@@ -626,10 +745,10 @@ class DockView:
         self._last = None
         self._rebuild()
 
-    def _tab_row(self, tab, window_id, group):
+    def _tab_row(self, tab, window_id, group, conn, colour):
         label = self._label(tab_label(tab), "sp-tab")
         label.set_tooltip_text("\n".join(filter(None, (tab.get("title"), tab.get("url")))))
         return self._row(
-            label, "tab", tab["id"], group, lambda: self.on_activate(self.conn, tab["id"], window_id),
+            label, "tab", tab["id"], group, conn, colour, lambda: self.on_activate(conn, tab["id"], window_id),
             active=bool(tab.get("active")), pinned=bool(tab.get("pinned")),
         )

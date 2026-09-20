@@ -25,11 +25,14 @@ class FakeView:
     def __init__(self):
         self.calls = []
 
-    def show(self, conn, info, state):
-        self.calls.append(("show", info["browser"]))
+    def show(self, sources, mode, choices, focus):
+        self.calls.append(("show", "+".join(info["browser"] for _conn, info, _state in sources)))
+        self.last = {"sources": [conn for conn, _info, _state in sources], "mode": mode,
+                     "choices": [(label, colour) for _conn, label, colour in choices], "focus": focus}
 
-    def clear(self):
+    def clear(self, mode="auto", choices=()):
         self.calls.append(("clear",))
+        self.cleared = {"mode": mode, "choices": [label for _conn, label, _colour in choices]}
 
     def set_hidden(self, hidden):
         self.calls.append(("hidden", hidden))
@@ -50,9 +53,17 @@ class FakeX:
 
     def __init__(self):
         self.activated = []
+        self.clients = []  # XIDs bottom to top, as _NET_CLIENT_LIST_STACKING gives them
+        self.pids = {}  # xid -> pid, asked for lazily
 
     def window_info(self, xid):
         return self.WINDOWS[xid]
+
+    def client_windows(self):
+        return self.clients
+
+    def window_pid(self, xid):
+        return self.pids.get(xid)
 
     def activate(self, xid):
         self.activated.append(xid)
@@ -69,7 +80,7 @@ class PanelTest(unittest.TestCase):
     def setUp(self):
         self.x = FakeX()
         self.view = FakeView()
-        self.panel = Panel({"follow": "last"}, self.x)
+        self.panel = Panel({"follow": "last", "view": "auto"}, self.x)
         self.panel.view = self.view
         self.ff, self.zen = FakeConn(), FakeConn()
         self.panel.on_message(self.ff, {"type": "hello", "browser": "Firefox"})
@@ -116,7 +127,7 @@ class PanelTest(unittest.TestCase):
         self.assertIs(self.panel.current, self.zen)
 
     def test_late_hello_matches_the_already_active_window(self):
-        panel = Panel({"follow": "last"}, self.x)
+        panel = Panel({"follow": "last", "view": "auto"}, self.x)
         panel.view = FakeView()
         panel.follow(ZEN_XID)  # zen is active before its extension connects
         first, second = FakeConn(), FakeConn()
@@ -145,6 +156,7 @@ class PanelTest(unittest.TestCase):
     def test_browser_without_state_yet_never_shows_another_browsers_tabs(self):
         libre = FakeConn()
         self.panel.on_message(libre, {"type": "hello", "browser": "LibreWolf"})  # hello, state not yet arrived
+        self.view.calls.clear()  # (the hello redraws the browser still shown: it has a new chip now)
         self.panel.follow(LIBRE_XID)
         self.assertIs(self.panel.current, libre)
         self.assertEqual(self.view.calls[-1], ("clear",))  # placeholder, not the previous browser's tabs
@@ -173,8 +185,133 @@ class PanelTest(unittest.TestCase):
         self.panel.activate_tab(self.ff, 7, 1)
         self.assertEqual(self.x.activated, [FIREFOX_XID])
 
+    # -- which browsers are listed: the one in use, one chosen with its chip, or all of them ----------------
+
+    def test_every_browser_is_a_choice_in_its_own_colour(self):
+        self.assertEqual(self.view.last["mode"], "auto")
+        self.assertEqual(self.view.last["choices"], [("Firefox", "#ff7139"), ("Zen", "#9d7cd8")])
+
+    def test_two_profiles_of_one_browser_are_told_apart(self):
+        second = FakeConn()
+        self.panel.on_message(second, {"type": "hello", "browser": "Firefox"})
+        labels = [label for label, _colour in self.view.last["choices"]]
+        self.assertEqual(labels, ["Firefox 1", "Zen", "Firefox 2"])
+
+    def test_choosing_a_browser_keeps_showing_it_whichever_window_has_the_focus(self):
+        self.panel.choose(self.zen)
+        self.assertEqual(self.view.calls[-1], ("show", "Zen"))
+        self.panel.follow(FIREFOX_XID)  # working in Firefox does not change what the panel lists...
+        self.assertEqual(self.view.calls[-1], ("show", "Zen"))
+        self.assertIs(self.panel.current, self.ff)  # ...but "auto" knows where you are
+        self.panel.choose("auto")
+        self.assertEqual(self.view.calls[-1], ("show", "Firefox"))
+
+    def test_all_lists_every_browser_that_has_sent_its_tabs(self):
+        libre = FakeConn()
+        self.panel.on_message(libre, {"type": "hello", "browser": "LibreWolf"})  # still starting: no tabs yet
+        self.panel.choose("all")
+        self.assertEqual(self.view.calls[-1], ("show", "Firefox+Zen"))
+        self.panel.on_message(libre, state(TAB))
+        self.assertEqual(self.view.calls[-1], ("show", "Firefox+Zen+LibreWolf"))
+
+    def test_in_all_any_browser_updates_the_list_and_the_one_in_use_sets_the_colour(self):
+        self.panel.choose("all")
+        self.panel.follow(ZEN_XID)
+        self.assertEqual(self.view.last["focus"]["browser"], "Zen")
+        self.view.calls.clear()
+        self.panel.on_message(self.ff, state(TAB))  # not the browser in use, but it is listed
+        self.assertEqual(self.shown(), ["Firefox+Zen"])
+
+    def test_the_configured_view_is_the_starting_mode_and_a_reload_applies_it(self):
+        panel = Panel({"follow": "last", "view": "all"}, self.x)
+        panel.view = FakeView()
+        panel.on_message(self.ff, {"type": "hello", "browser": "Firefox"})
+        panel.on_message(self.ff, state(TAB))
+        panel.on_message(self.zen, {"type": "hello", "browser": "Zen"})
+        panel.on_message(self.zen, state(TAB))
+        self.assertEqual(panel.view.calls[-1], ("show", "Firefox+Zen"))
+        panel.choose(self.zen)
+        panel.reconfigure({"follow": "last", "view": "all"})  # the file wins over a chip clicked since
+        self.assertEqual(panel.view.calls[-1], ("show", "Firefox+Zen"))
+
+    def test_the_chosen_browser_closing_goes_back_to_auto(self):
+        self.panel.choose(self.zen)
+        self.panel.on_close(self.zen)
+        self.assertEqual(self.panel.mode, "auto")
+        self.assertEqual(self.view.calls[-1], ("show", "Firefox"))
+
+    def test_a_browser_closing_leaves_all_without_it(self):
+        self.panel.choose("all")
+        self.panel.on_close(self.zen)  # not the one in use
+        self.assertEqual(self.panel.mode, "all")
+        self.assertEqual(self.view.calls[-1], ("show", "Firefox"))
+        self.assertEqual(self.view.last["choices"], [("Firefox", "#ff7139")])
+
+    def test_choosing_an_unknown_browser_is_ignored(self):
+        self.panel.choose(FakeConn())
+        self.assertEqual(self.panel.mode, "auto")
+
+    def test_activate_raises_the_browser_that_owns_the_tab_when_listing_several(self):
+        self.panel.follow(ZEN_XID)
+        self.panel.follow(FIREFOX_XID)  # Firefox is in use; Zen was in use before
+        self.panel.choose("all")
+        self.panel.activate_tab(self.ff, 7, 1)
+        self.assertEqual(self.x.activated, [])  # already the focused window
+        self.panel.activate_tab(self.zen, 7, 1)
+        self.assertEqual(self.zen.sent[-1], {"type": "activate_tab", "tabId": 7, "windowId": 1})
+        self.assertEqual(self.x.activated, [ZEN_XID])
+
+    def test_a_browser_not_yet_in_use_is_found_by_its_process_and_never_by_our_own_window(self):
+        libre = FakeConn()
+        self.panel.on_message(libre, {"type": "hello", "browser": "LibreWolf", "browserPid": 4242})
+        self.x.clients = [300, 301, PANEL_XID]  # the panel is on top, and a child of the browser
+        self.x.pids = {300: 5000, 301: 5001, PANEL_XID: 5002}
+        with mock.patch("sidepanel.app.owns_window", side_effect=lambda browser, window: window >= 5001):
+            self.panel.activate_tab(libre, 7, 1)
+        self.assertEqual(self.x.activated, [301])  # topmost window of the browser, not the panel's own
+
+    def test_a_remembered_window_that_was_closed_is_replaced_by_one_still_open(self):
+        self.panel.on_message(self.zen, {"type": "hello", "browser": "Zen", "browserPid": 4242})
+        self.panel.follow(ZEN_XID)  # seen active...
+        self.panel.follow(TERM_XID)
+        self.x.clients = [300, TERM_XID]  # ...but ZEN_XID has since been closed; another Zen window is open
+        self.x.pids = {300: 5000, TERM_XID: 9}
+        with mock.patch("sidepanel.app.owns_window", side_effect=lambda browser, window: window == 5000):
+            self.panel.activate_tab(self.zen, 7, 1)
+        self.assertEqual(self.x.activated, [300])
+        self.assertNotIn(ZEN_XID, self.panel.browser_xids.values())
+
+    def test_a_remembered_window_that_is_still_open_is_used_without_asking_for_pids(self):
+        self.panel.follow(ZEN_XID)
+        self.panel.follow(TERM_XID)
+        self.x.clients = [ZEN_XID, TERM_XID]
+        self.x.window_pid = mock.Mock(side_effect=AssertionError("no need to look at any process"))
+        self.panel.activate_tab(self.zen, 7, 1)
+        self.assertEqual(self.x.activated, [ZEN_XID])
+
+    def test_the_panels_own_window_being_active_does_not_raise_the_browser_again(self):
+        self.panel.follow(FIREFOX_XID)
+        self.panel.follow(PANEL_XID)  # e.g. the pointer is on the panel: still "Firefox in use"
+        self.panel.activate_tab(self.ff, 7, 1)
+        self.assertEqual(self.x.activated, [])
+
+    def test_the_chips_stay_while_a_chosen_browser_has_no_tabs_yet(self):
+        libre = FakeConn()
+        self.panel.on_message(libre, {"type": "hello", "browser": "LibreWolf"})  # no state yet
+        self.panel.choose(libre)
+        self.assertEqual(self.view.calls[-1], ("clear",))
+        self.assertEqual(self.view.cleared, {"mode": libre, "choices": ["Firefox", "Zen", "LibreWolf"]})  # a way out
+
+    def test_a_browser_with_no_window_at_all_is_just_told(self):
+        libre = FakeConn()
+        self.panel.on_message(libre, {"type": "hello", "browser": "LibreWolf", "browserPid": 4242})
+        with mock.patch("sidepanel.app.owns_window", return_value=False):
+            self.panel.activate_tab(libre, 7, 1)
+        self.assertEqual(libre.sent[-1]["type"], "activate_tab")
+        self.assertEqual(self.x.activated, [])
+
     def test_reconfigure_to_last_unhides(self):
-        self.panel.reconfigure({"follow": "last"})
+        self.panel.reconfigure({"follow": "last", "view": "auto"})
         self.assertEqual(self.view.calls, [("reconfigure",), ("hidden", False)])
 
     def test_debug_console_can_reorder_tabs_and_containers(self):

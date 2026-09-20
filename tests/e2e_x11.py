@@ -8,7 +8,8 @@ xdotool, xprop, xwininfo and ImageMagick (`magick`).
 
 Checks: dock type + strip geometry, no strut while autohiding, hover expand/collapse, click on
 a tab reaches the browser without stealing focus, the strip colour follows the active browser,
-raising the browser when clicking while another app is active, pin -> strut, side switch,
+raising the browser when clicking while another app is active, dragging to reorder, the chips
+and the all-browsers list (folding, raising the right browser), pin -> strut, side switch,
 and follow=hide.
 
     python3 tests/e2e_x11.py [--shots DIR]
@@ -328,6 +329,96 @@ def main():
         got = messages("activate_tab")
         assert got and got[-1]["tabId"] == 3, got
         ok("a plain click still activates a tab after all the dragging")
+        collapse()
+
+        # -- several browsers: chips choose what is listed, "all" gives each browser a foldable section -----
+        def rows_now():
+            try:
+                with open(layout_dump) as f:
+                    return json.load(f)
+            except (OSError, ValueError):
+                return []
+
+        def count(kind):
+            return len([r for r in rows_now() if r["kind"] == kind])
+
+        def of_kind(kind):
+            return [r for r in rows_now() if r["kind"] == kind]
+
+        def chip(label):
+            return wait_for(lambda: next((r for r in of_kind("chip") if r["id"] == label), None), f"chip {label}")
+
+        def click_row(row):
+            run("xdotool", "mousemove", str(row["x"] + row["w"] // 2), str(row["y"] + row["h"] // 2))
+            time.sleep(0.3)  # like a hand: a tooltip from the row passed over goes away before the click
+            run("xdotool", "click", "1")
+
+        def received(ext, kind):
+            time.sleep(0.4)
+            return [m for m in ext.received() if m.get("type") == kind]
+
+        expand()
+        wait_for(lambda: count("chip") == 4, "chips: auto, Firefox, Zen, all")
+        assert count("browser") == 0, "one browser listed: no browser header"
+        screenshot(os.path.join(shots, "chips.png"))
+        ok("two browsers are open: the panel offers the chips auto, Firefox, Zen and all")
+
+        click_row(chip("all"))
+        wait_for(lambda: count("browser") == 2 and count("tab") == 8, "both browsers listed")
+        screenshot(os.path.join(shots, "all-browsers.png"))
+        ff.received()
+        zen.received()
+        run("xdotool", "windowactivate", "--sync", str(ff_win))  # Firefox is the browser in use
+        click_row(of_kind("tab")[4])  # the first tab of the second browser, Zen
+        got = received(zen, "activate_tab")
+        assert got and got[0]["tabId"] == 1, got
+        assert not received(ff, "activate_tab"), "Firefox was told to activate one of Zen's tabs"
+        wait_for(lambda: int(run("xdotool", "getactivewindow").stdout) == zen_win, "Zen raised by the panel")
+        ok("all: a click on a tab of the browser not in use reaches that browser and brings its window forward")
+
+        click_row(of_kind("browser")[1])  # the Zen header
+        wait_for(lambda: count("tab") == 4 and count("browser") == 2, "Zen folded away")
+        screenshot(os.path.join(shots, "all-folded.png"))
+        click_row(of_kind("browser")[1])
+        wait_for(lambda: count("tab") == 8, "Zen unfolded")
+        ok("all: clicking a browser header folds that browser's sections away and back")
+
+        run("xdotool", "windowactivate", "--sync", str(ff_win))
+        click_row(chip("Zen"))
+        wait_for(lambda: count("browser") == 0 and count("tab") == 4, "only Zen listed")
+        collapse()
+        wait_for(lambda: pixel(1, 400, shots) == COLOURS["Zen"], "the strip wears the listed browser's colour")
+        expand()
+        click_row(chip("auto"))
+        collapse()
+        wait_for(lambda: pixel(1, 400, shots) == COLOURS["Firefox"], "auto follows the browser in use again")
+        ok("a chosen browser stays listed while another has the focus; auto follows the focus again")
+
+        write_cfg(side="left", width=WIDTH, view="all")
+        wait_for(lambda: count("browser") == 2, "view = all lists every browser")
+        write_cfg(side="left", width=WIDTH)
+        wait_for(lambda: count("browser") == 0, "back to the browser in use")
+        ok('config: view = "all" lists every browser, and reloading without it goes back to auto')
+
+        # a browser that has not been in use since the panel started is found by its process, not remembered:
+        # its window took the focus when it opened, but its extension only connects afterwards
+        libre_proc, libre_win = xterm("librewolf", "librewolf", 1000)
+        run("xdotool", "windowactivate", "--sync", str(ff_win))
+        libre = FakeExtension(sock_path, "LibreWolf", libre_proc.pid)
+        write_cfg(side="left", width=WIDTH, view="all")
+        wait_for(lambda: count("browser") == 3 and count("tab") == 12, "three browsers listed")
+        libre.received()
+        expand()  # the pointer is out on the desktop after the last step: hover the edge like a person
+        click_row(of_kind("tab")[8])  # the first tab of the third browser, LibreWolf
+        got = received(libre, "activate_tab")
+        assert got and got[0]["tabId"] == 1, got
+        wait_for(lambda: int(run("xdotool", "getactivewindow").stdout) == libre_win, "LibreWolf raised by process")
+        ok("all: the window of a browser never seen in use is found by its process and raised")
+        libre.sock.close()  # the browser goes away
+        wait_for(lambda: count("browser") == 2, "two browsers left after LibreWolf closed")
+        write_cfg(side="left", width=WIDTH)
+        wait_for(lambda: count("browser") == 0, "back to the browser in use")
+        libre_proc.terminate()
         collapse()
 
         # -- pin -> strut on the outer edge; unpin removes it -----------------------------------

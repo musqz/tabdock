@@ -30,11 +30,14 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.DEFAULTS["monitor"], "outer")  # layout-independent unless a name is given
         for monitor in ("outer", "primary", "HDMI-1"):
             self.assertEqual(config.validate({"monitor": monitor})["monitor"], monitor)
+        self.assertEqual(config.DEFAULTS["view"], "auto")  # the browser in use, as before
+        self.assertEqual(config.validate({"view": "all"})["view"], "all")
 
     def test_rejects_bad_values(self):
         for bad in (
             {"side": "top"},
             {"follow": "sometimes"},
+            {"view": "zen"},  # a browser is chosen with its chip, not in the file
             {"width": 50},
             {"width": "wide"},
             {"width": True},
@@ -305,8 +308,12 @@ class MatchTest(unittest.TestCase):
         self.assertEqual(accent({"browser": "Waterfox"}), "#2ec4b6")
         self.assertEqual(accent({"browser": "Mystery"}), "#8f9bb3")
         self.assertEqual(accent({}), "#8f9bb3")
-        browsers = ("Firefox", "Zen", "FireDragon", "LibreWolf", "Waterfox")
-        self.assertEqual(len({accent({"browser": b}) for b in browsers}), 5)  # each one recognisable at a glance
+        from sidepanel.model import KNOWN_BROWSERS
+
+        # every browser the panel recognises has its own colour, so several can be listed together
+        browsers = [name for _key, name in KNOWN_BROWSERS]
+        self.assertEqual(len({accent({"browser": b}) for b in browsers}), len(browsers))
+        self.assertNotIn(accent({"browser": "Floorp"}), ("#8f9bb3", accent({"browser": "Firefox"})))
 
 
 if __name__ == "__main__":

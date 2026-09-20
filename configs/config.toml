@@ -22,6 +22,13 @@ width = 320
 #   "last" keeps the panel of the browser you used last, "hide" removes the panel.
 follow = "last"
 
+# Which browsers the panel lists when it starts:
+#   "auto" the browser you are using (it follows the focus, as `follow` says)
+#   "all"  every open browser, one foldable section each
+# Row of chips under the header (auto, one per browser, all) switches this while running, once two or
+# more browsers are open; a chip picking a single browser keeps that browser listed whatever has focus.
+view = "auto"
+
 # Start the panel when a browser with the extension opens and no panel is running (a browser start
 # is enough, no autostart needed). A panel you quit with the X button is not restarted until the next
 # browser start. false = only start it yourself (app menu, autostart line, keybinding).

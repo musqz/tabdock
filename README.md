@@ -32,6 +32,15 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost
   Drag a tab up or down within its container to move it in the real tab strip. A tab only moves within its own
   container: dropping it well outside that group cancels the drag, and a drag is never also a click. The panel
   stays open for the whole drag, even if the pointer leaves it, and an orange line shows where the row will land.
+- **Several browsers.** While two or more browsers with the extension are open, a row of chips under the
+  header chooses what is listed: `auto` (the browser you are using, the default), one chip per browser
+  (that browser stays listed whichever window has focus), and `all` (every browser, one foldable section
+  each: click a browser's header to fold or unfold it). Every browser the panel recognises keeps its own
+  colour on its header, its active tab and the drop marker (an unknown one is grey), and the strip wears the
+  colour of the browser in use. Clicking a tab
+  of a browser you are not using activates it and brings that browser's window forward; a drag stays inside
+  one browser. Two profiles of one browser show as `Firefox 1` and `Firefox 2`. `view = "all"` in the config
+  starts the panel in the `all` view.
 - **Follows the active window:** focus another browser and the panel switches to it. With
   `follow = "last"` (default) the panel keeps showing the last browser while you use other apps,
   and clicking a tab brings that browser forward; `follow = "hide"` removes the panel instead.
@@ -94,12 +103,14 @@ Copy [configs/config.toml](configs/config.toml) to `~/.config/openbox-sidepanel/
 | `monitor` | `"outer"` | `"outer"` (the monitor at the screen's outer edge for `side`), `"primary"`, or an `xrandr` output name such as `"HDMI-1"` |
 | `width` | `320` | expanded width in px (100-1000) |
 | `follow` | `"last"` | `"last"` or `"hide"` while a non-browser window is active |
+| `view` | `"auto"` | `"auto"` (the browser in use) or `"all"` (every open browser) when the panel starts; the chips switch it while running |
 | `pinned` | `false` | start pinned |
 | `start_with_browser` | `true` | start the panel when a browser with the extension opens and none is running |
 
 Tip: use an outer edge of your monitor layout; the pointer stops there, so hover-to-open is easy.
 The config is read at startup: quit the panel (`✕`) and start it again from the menu. The header has a
-pin toggle, a side switch (`⇄`) and a quit button (`✕`); pin and side apply until the next restart.
+pin toggle, a side switch (`⇄`) and a quit button (`✕`); pin, side and the chosen browsers apply until the
+next restart.
 
 ### Multiple monitors
 

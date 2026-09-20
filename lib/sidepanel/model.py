@@ -87,6 +87,7 @@ ACCENTS = {
     "firedragon": "#e5484d",
     "librewolf": "#3fa9f5",
     "waterfox": "#2ec4b6",
+    "floorp": "#e5b93a",
 }
 DEFAULT_ACCENT = "#8f9bb3"
 
@@ -170,6 +171,17 @@ def detect_browser(info):
             if key in tail:
                 return name
     return info.get("browser") or "browser"
+
+
+def choice_labels(browsers):
+    """[(key, label)] for `browsers` (key -> hello message): the browser's name, numbered
+    ("Waterfox 1", "Waterfox 2") only when a name repeats, e.g. two profiles running at once."""
+    names = {key: info.get("browser") or "browser" for key, info in browsers.items()}
+    seen, labels = {}, []
+    for key, name in names.items():
+        seen[name] = seen.get(name, 0) + 1
+        labels.append((key, name if list(names.values()).count(name) == 1 else f"{name} {seen[name]}"))
+    return labels
 
 
 def browser_label(info):

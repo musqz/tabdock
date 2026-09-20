@@ -11,12 +11,12 @@ from gi.repository import Gio, GioUnix, GLib, GLibUnix  # noqa: E402
 
 from . import config  # noqa: E402
 from .ipc import Server  # noqa: E402
-from .model import detect_browser, match_browser, window_of_tab  # noqa: E402
+from .model import accent, choice_labels, detect_browser, match_browser, owns_window, window_of_tab  # noqa: E402
 from .ui import ConsoleView  # noqa: E402
 
 
 class Panel:
-    """Routes relay messages to the view, picks which browser to show, and sends actions back."""
+    """Routes relay messages to the view, picks which browsers to show, and sends actions back."""
 
     def __init__(self, cfg, x=None):
         self.cfg = cfg
@@ -24,10 +24,10 @@ class Panel:
         self.view = None
         self.browsers = {}  # Connection -> hello message
         self.states = {}  # Connection -> last state message
-        self.current = None  # Connection whose tabs are shown
+        self.current = None  # Connection of the browser in use: the one whose tabs "auto" shows
+        self.mode = cfg["view"]  # "auto" (the browser in use), "all", or the Connection chosen with its chip
         self.active = None  # XID of the active window
-        self.browser_xid = None  # XID of the last active browser window
-        self.on_browser = False  # is the active window a browser window?
+        self.browser_xids = {}  # Connection -> XID of its window when it was last seen active
 
     # -- from the relays -----------------------------------------------------------
 
@@ -38,54 +38,87 @@ class Panel:
             self.follow(self.active)
             if self.current is None:
                 self.current = conn
-                self._render()
+            self._render()  # a new browser is a new choice, whichever one is showing
         elif kind == "state" and conn in self.browsers:
             self.states[conn] = msg
-            if conn is self.current:
+            if conn in self._shown():
                 self._render()
 
     def on_close(self, conn):
         self.browsers.pop(conn, None)
         self.states.pop(conn, None)
+        self.browser_xids.pop(conn, None)
+        if self.mode is conn:
+            self.mode = "auto"  # the browser you had chosen is gone
         if conn is self.current:
             self.current = None
             self.follow(self.active)  # prefer the browser that owns the active window (renders it)...
-            if self.current is None:
-                self.current = next(iter(self.browsers), None)  # ...else any that is left, or nothing
-                self._render()
+            if self.current is not None:
+                return
+            self.current = next(iter(self.browsers), None)  # ...else any that is left, or nothing
+        self._render()
 
     # -- from X11 ------------------------------------------------------------------
 
     def follow(self, xid):
         """The active window changed (or a browser appeared): decide which browser to show."""
-        self.active = xid
         if xid is not None and xid in self.view.xids:
-            return  # our own windows: the browser stays "active" from the user's point of view
+            return  # our own windows: what was active stays "active" from the user's point of view
+        self.active = xid
         pid, wm_class = self.x.window_info(xid) if (self.x and xid) else (None, ())
         match = match_browser(self.browsers, pid, wm_class) if xid else None
         if match is not None:
-            self.on_browser = True
-            self.browser_xid = xid
+            self.browser_xids[match] = xid
             self.current = match
             self.view.set_hidden(False)
             self._render()
-        else:
-            self.on_browser = False
-            if self.cfg["follow"] == "hide":
-                self.view.set_hidden(True)
+        elif self.cfg["follow"] == "hide":
+            self.view.set_hidden(True)
 
     # -- from the view -------------------------------------------------------------
 
     def activate_tab(self, conn, tab_id, window_id):
         conn.send({"type": "activate_tab", "tabId": tab_id, "windowId": window_id})
-        if self.x and self.browser_xid and not self.on_browser:
-            self.x.activate(self.browser_xid)  # the browser was not focused: bring it forward
+        xid = self._window_of(conn)
+        if self.x and xid and xid != self.active:
+            self.x.activate(xid)  # that browser is not the focused window: bring it forward
+
+    def choose(self, mode):
+        """A chip was clicked: "auto" follows the browser in use, "all" lists every browser, and a
+        Connection shows just that browser, whichever window has the focus."""
+        if mode in ("auto", "all") or mode in self.browsers:
+            self.mode = mode
+            self._render()
 
     def reconfigure(self, cfg):
         self.cfg = cfg
+        mode, self.mode = self.mode, cfg["view"]  # the file wins over a chip clicked since, like pin and side
         self.view.reconfigure(cfg)
         if cfg["follow"] == "last":
             self.view.set_hidden(False)
+        if self.mode != mode:
+            self._render()
+
+    def _window_of(self, conn):
+        """XID of a browser's window: the one last seen active if it still exists, else its topmost
+        window (found by process: the browser has not been in use since the panel started, or that
+        window was closed)."""
+        if not self.x:
+            return None
+        windows = self.x.client_windows()
+        xid = self.browser_xids.get(conn)
+        if xid is not None and (not windows or xid in windows):
+            return xid  # (no window list at all: a window manager without it, so trust what we saw)
+        self.browser_xids.pop(conn, None)
+        pid = self.browsers.get(conn, {}).get("browserPid")
+        if not pid:
+            return None
+        ours = self.view.xids
+        for w in reversed(windows):  # topmost first
+            wpid = None if w in ours else self.x.window_pid(w)
+            if wpid and owns_window(pid, wpid):
+                return w
+        return None
 
     def command(self, conn, message):
         """Anything else the panel asks the browser to do (reordering, ...)."""
@@ -106,11 +139,25 @@ class Panel:
         elif len(parts) == 2 and parts[0] == "order":
             self.command(self.current, {"type": "set_container_order", "order": parts[1].split(",")})
 
+    def _shown(self):
+        """The browsers to list: all of them, the one chosen, or the one in use. Only those that have
+        sent their tabs, so a browser still starting up never shows another browser's tabs instead."""
+        if self.mode == "all":
+            conns = list(self.browsers)
+        else:
+            conns = [self.current if self.mode == "auto" else self.mode]
+        return [c for c in conns if c in self.states]
+
     def _render(self):
-        if self.current in self.states:
-            self.view.show(self.current, self.browsers[self.current], self.states[self.current])
-        else:  # nothing to show yet: never leave another browser's tabs under this one's header
-            self.view.clear()
+        shown = self._shown()
+        choices = [(c, label, accent(self.browsers[c])) for c, label in choice_labels(self.browsers)]
+        if not shown:  # nothing to show yet: never leave another browser's tabs under this one's header
+            self.view.clear(self.mode, choices)  # (the chips stay: they are the way to another browser)
+            return
+        sources = [(c, self.browsers[c], self.states[c]) for c in shown]
+        # the header and the strip wear the colour of the browser shown, or, for all of them, of the one in use
+        focus = sources[0][1] if len(sources) == 1 else self.browsers.get(self.current)
+        self.view.show(sources, self.mode, choices, focus)
 
 
 def _watch_stdin(panel):
@@ -179,7 +226,7 @@ def main(argv=None):
             return 1
         from .dock import DockView
 
-        panel.view = DockView(cfg, panel.activate_tab, loop.quit, x, on_command=panel.command)
+        panel.view = DockView(cfg, panel.activate_tab, loop.quit, x, on_command=panel.command, on_choose=panel.choose)
 
     if x is not None:
         x.watch_active_window(panel.follow, loop.quit)

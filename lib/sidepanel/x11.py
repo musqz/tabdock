@@ -22,6 +22,7 @@ class XConn:
         self.root = disp.screen().root
         self.a_active = disp.intern_atom("_NET_ACTIVE_WINDOW")
         self.a_pid = disp.intern_atom("_NET_WM_PID")
+        self.a_stacking = disp.intern_atom("_NET_CLIENT_LIST_STACKING")
         self.a_strut = disp.intern_atom("_NET_WM_STRUT")
         self.a_strut_partial = disp.intern_atom("_NET_WM_STRUT_PARTIAL")
         self._callback = None
@@ -38,17 +39,38 @@ class XConn:
             self._kick()
         return prop.value[0] if prop is not None and len(prop.value) and prop.value[0] else None
 
+    def _pid(self, win):
+        prop = win.get_full_property(self.a_pid, X.AnyPropertyType)
+        return int(prop.value[0]) if prop is not None and len(prop.value) else None
+
     def window_info(self, xid):
         """(pid or None, (WM_CLASS instance, class) or ()) for a window."""
         try:
             win = self.d.create_resource_object("window", xid)
-            prop = win.get_full_property(self.a_pid, X.AnyPropertyType)
-            pid = int(prop.value[0]) if prop is not None and len(prop.value) else None
-            return pid, tuple(win.get_wm_class() or ())
+            return self._pid(win), tuple(win.get_wm_class() or ())
         except error.XError:  # window vanished meanwhile
             return None, ()
         finally:
             self._kick()
+
+    def window_pid(self, xid):
+        """The pid behind a window, or None."""
+        try:
+            return self._pid(self.d.create_resource_object("window", xid))
+        except error.XError:  # window vanished meanwhile
+            return None
+        finally:
+            self._kick()
+
+    def client_windows(self):
+        """XIDs of every window the window manager manages, bottom to top."""
+        try:
+            prop = self.root.get_full_property(self.a_stacking, X.AnyPropertyType)
+        except error.XError:
+            return []
+        finally:
+            self._kick()
+        return list(prop.value) if prop is not None else []
 
     def watch_active_window(self, callback, on_lost):
         """Call callback(xid or None) whenever the active window changes; on_lost() if X goes away."""
