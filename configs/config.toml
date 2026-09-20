@@ -1,18 +1,21 @@
 # openbox-sidepanel config -> ~/.config/openbox-sidepanel/config.toml
-# Reload a running panel with: kill -HUP $(pgrep -f 'sidepanel$')   (or restart it)
+# Read when the panel starts: after a change, quit the panel with the x in its header and start it again
+# from the menu.
 
 # Which screen edge the panel sits on: "left" or "right".
 # Tip: pick an outer edge of your monitor layout (the pointer stops there, so hover-to-open is easy).
 side = "left"
 
-# Which monitor the panel sits on:
-#   "outer"   the monitor at the outer edge of the whole screen for `side` (the leftmost monitor for
-#             "left", the rightmost for "right"). Only an outer edge can reserve space when pinned, so
-#             tiling and maximising respect the panel, and the pointer stops there. Works in any
-#             layout and follows monitors being plugged in or moved.
-#   "primary" the primary monitor, even if its edge borders another monitor (then a pinned panel can
-#             only overlay, and the pin button says so)
-#   "DP-1"    a named output, as shown by `xrandr`
+# Which monitor the panel lives on. You choose, and the panel is only on that monitor; `side` and the
+# header's arrow button then only pick which edge of it:
+#   monitor = "primary"   only on the primary display
+#   monitor = "DP-1"      only on that output (use the names `xrandr` shows, e.g. "HDMI-1")
+#   monitor = "outer"     what you get if you choose nothing: the monitor at the outer edge of the whole
+#                         screen for `side` (the leftmost for "left", the rightmost for "right")
+# Only an outer edge of the whole screen can reserve space when the panel is pinned (tiling and maximising
+# then respect it, and the pointer stops there). A panel on an edge that borders another monitor is an
+# overlay when pinned, and the pin button says so. A named monitor that is not connected falls back to
+# "outer", with a warning.
 monitor = "outer"
 
 # Width in pixels when expanded (100-1000).
