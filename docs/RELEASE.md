@@ -18,28 +18,33 @@ system-wide (the manifest stays per-user). `./install.sh --uninstall` removes ex
 
 ## 2. Get the extension signed (once per version)
 
-```bash
-packaging/build-extension.sh                  # -> web-ext-artifacts/openbox-sidepanel-<version>.xpi (unsigned)
-npx web-ext lint --source-dir extension       # Mozilla's linter: expect 0 errors, 0 warnings
-```
-
-Signing needs a free Mozilla account, which only you can create:
+Signing needs a free Mozilla account, which only you can create. Then:
 
 1. Sign in at <https://addons.mozilla.org/developers/> and open **Manage API Keys**
-   (<https://addons.mozilla.org/developers/addon/api/key/>). Generate credentials: a *JWT issuer*
-   (looks like `user:12345:67`) and a *JWT secret*. Keep the secret private and never commit it.
-2. Sign as **unlisted** (private, automatic, usually done in minutes):
+   (<https://addons.mozilla.org/developers/addon/api/key/>). **Generate new credentials** gives you two values:
+   the *JWT issuer*, which looks like `user:12345678:123` (copy all of it, including the word `user:`), and the
+   *JWT secret*, 64 characters.
+2. Run the script. It asks for the two values one at a time (the secret is hidden while you paste it),
+   checks them before anything is sent, lints the extension, signs it as **unlisted** (private, automatic,
+   usually a few minutes) and verifies that the signature is inside the resulting file:
 
-```bash
-export WEB_EXT_API_KEY='user:12345:67'            # JWT issuer
-export WEB_EXT_API_SECRET='...'                   # JWT secret
-npx web-ext sign --source-dir extension --channel=unlisted --artifacts-dir web-ext-artifacts
-```
+   ```bash
+   packaging/sign-extension.sh
+   ```
 
-3. The signed `.xpi` is written to `web-ext-artifacts/`. Install it in each browser:
-   `about:addons` -> gear icon -> **Install Add-on From File...** -> pick the signed file. It survives
+   The credentials go to web-ext through the script's own environment only: never on a command line, in
+   your shell history, or in the repo. `--save` remembers them in `~/.config/openbox-sidepanel/amo-credentials`
+   (mode 600, outside the repo) so the next release needs no typing; `--forget` deletes that file; `--dry-run`
+   checks everything except contacting Mozilla. It refuses to run if the version has already been signed.
+   If a value has the wrong shape (an issuer without `user:`, a secret that is not 64 characters) it says so
+   and sends nothing.
+3. The signed `.xpi` is written to `web-ext-artifacts/` (the script prints the path). Install it in each
+   browser: `about:addons` -> gear icon -> **Install Add-on From File...** -> pick the signed file. It survives
    restarts. Use the same signed file in every browser (Firefox, Zen, FireDragon, Waterfox, LibreWolf);
    each has its own add-ons list, so install it once per browser.
+
+To build the unsigned file yourself: `packaging/build-extension.sh`, and to lint by hand:
+`npx web-ext lint --source-dir extension` (expect 0 errors, 0 warnings).
 
 The add-on id `openbox-sidepanel@musqz.local` is fixed in the manifest and must match the native-messaging
 manifest (a test checks this). AMO rejects a version number it has already signed, so bump `VERSION`

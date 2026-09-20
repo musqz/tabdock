@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `packaging/sign-extension.sh` signs a new release with your addons.mozilla.org credentials: it asks for the
+  JWT issuer and the (hidden) JWT secret one at a time, validates their shape before anything is sent (the
+  usual mistakes: an issuer without `user:`, a secret cut off or pasted with debris), lints, signs, and verifies
+  that the Mozilla signature is inside the result. The credentials live only in the script's environment, never on
+  a command line, in shell history or in the repo; `--save` optionally keeps them in a mode-600 file under
+  `~/.config`, `--forget` deletes it, `--dry-run` checks everything except contacting Mozilla. Works from any
+  shell (it runs in bash), which avoids the zsh `read -p` trap. Tested with a real pseudo-terminal.
+
 - Reorder by dragging (version 0.3.0). Drag a container section to put your containers in your own order, kept per
   browser profile by the extension (`storage`, since Firefox cannot reorder containers) and shown at once; drag a tab
   within its container to move it in the real tab strip (`tabs.move`, with the exact final-index arithmetic covered by

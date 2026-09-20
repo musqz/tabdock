@@ -51,7 +51,8 @@ Needs `python-gobject` (GTK 3) and `python-xlib` on X11. Native browser installs
 
 ```bash
 ./install.sh                     # program -> ~/.local, browser manifest, "Sidepanel" menu entry
-packaging/build-extension.sh     # unsigned .xpi; signing and starting: docs/RELEASE.md
+packaging/sign-extension.sh      # signs the extension with your Mozilla credentials (safe prompts)
+packaging/build-extension.sh     # just the unsigned .xpi
 ```
 
 Release Firefox and Zen only keep **signed** extensions, so a permanent setup needs the extension
