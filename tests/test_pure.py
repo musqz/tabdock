@@ -32,12 +32,17 @@ class ConfigTest(unittest.TestCase):
             self.assertEqual(config.validate({"monitor": monitor})["monitor"], monitor)
         self.assertEqual(config.DEFAULTS["view"], "auto")  # the browser in use, as before
         self.assertEqual(config.validate({"view": "all"})["view"], "all")
+        # the panel downloads icons itself, from your own address: never without being asked
+        self.assertIs(config.DEFAULTS["icons"], False)
+        self.assertIs(config.validate({"icons": True})["icons"], True)
 
     def test_rejects_bad_values(self):
         for bad in (
             {"side": "top"},
             {"follow": "sometimes"},
             {"view": "zen"},  # a browser is chosen with its chip, not in the file
+            {"icons": "yes"},
+            {"icons": 1},
             {"width": 50},
             {"width": "wide"},
             {"width": True},

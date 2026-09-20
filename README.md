@@ -24,8 +24,9 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost
   after ~120 ms; it closes ~400 ms after the pointer leaves.
 - **Open:** the header always names the browser (in its colour), so you can tell which browser
   you are looking at even when window borders are hidden. Below it, one collapsible section per
-  container (coloured bar, icon, name, tab count) with that container's tabs; the active tab
-  is highlighted. Click a tab to activate it in the browser.
+  container (coloured bar, icon, name, tab count) with that container's tabs, each with its site icon
+  before the title when icons are on (they are off until you ask: see Site icons below); the active tab is highlighted. Click a tab to activate it in
+  the browser.
 - **Reorder by dragging.** Drag a container section header up or down to put your containers in your own
   order; the order is remembered per browser profile (Firefox cannot reorder containers itself, so the order
   lives in the panel's extension and does not change Firefox's own menus). "No container" always stays first.
@@ -105,13 +106,48 @@ Copy [configs/config.toml](configs/config.toml) to `~/.config/openbox-sidepanel/
 | `width` | `320` | expanded width in px (100-1000) |
 | `follow` | `"last"` | `"last"` or `"hide"` while a non-browser window is active |
 | `view` | `"auto"` | `"auto"` (the browser in use) or `"all"` (every open browser) when the panel starts; the chips switch it while running |
+| `icons` | `false` | site icons before the tab titles. Off by default because the panel downloads them itself, outside the browser's proxy and DNS settings: read "Site icons" below first. The `icons` button in the header switches it while running |
 | `pinned` | `false` | start pinned |
 | `start_with_browser` | `true` | start the panel when a browser with the extension opens and none is running |
 
 Tip: use an outer edge of your monitor layout; the pointer stops there, so hover-to-open is easy.
-The config is read at startup: quit the panel (`✕`) and start it again from the menu. The header has a
-pin toggle, a side switch (`⇄`) and a quit button (`✕`); pin, side and the chosen browsers apply until the
-next restart.
+The config is read at startup: quit the panel (`✕`) and start it again from the menu. The header has an
+icons toggle, a pin toggle, a side switch (`⇄`) and a quit button (`✕`); icons, pin, side and the chosen
+browsers apply until the next restart.
+
+### Site icons
+
+Off by default. Turn them on with `icons = true` in the config, or with the `icons` button in the header (that
+lasts until the panel restarts). The browser already tells the panel each tab's icon address; the panel then
+shows the icon before the title.
+
+**Read this before turning it on.** An icon that is part of the page (a `data:` address) needs no network. Any
+other icon has to be downloaded, and it is the *panel* that downloads it, not the browser:
+
+- it connects from your own address using your system's DNS. The browser's proxy, its VPN or Tor setup, its
+  DNS-over-HTTPS and per-container proxies do not apply, so your provider's resolver sees the name of every
+  site with a listed tab, and each of those sites sees a request for its icon from your real address;
+- it does so for every tab the panel lists, including private-window tabs if you have allowed the extension in
+  private windows (leave icons off if you do);
+- the request says `User-Agent: openbox-sidepanel`, so a site can tell it from the browser's own.
+
+If you use the browser's own privacy settings for that reason, leave icons off. What the panel does to keep
+the rest safe, since a web page chooses the address and the panel is not sandboxed like the browser:
+
+- only `https:` is fetched (`http:`, `chrome:`, `about:` and the rest never are: those tabs have no icon), with
+  no cookies and no referrer, once per address per run, at most a few at a time;
+- it never connects to your own machine or network: loopback, private, link-local and similar addresses are
+  refused, also after redirects and for names that resolve to them, and the connection goes to the address that
+  was checked. The certificate must verify. At most three redirects, at most 256 KB, and the whole download
+  is cut off after ten seconds however slowly the server drips;
+- what arrives is only used if its own header says it is a small PNG, ICO or GIF (SVG and everything else is
+  refused). It is decoded in a separate short-lived process with a memory and a time limit, not in the panel,
+  and only 16x16 pixels come back, so a crafted image can at worst fail;
+- icons live in memory only: nothing about your tabs is written to disk and quitting the panel forgets them, at
+  the price of downloading them again on the next start. An address that can never be an icon is asked for once;
+  one that failed for a network reason is tried again after five minutes.
+
+`icons = false` (or the header button) stops all of it, including downloads queued but not yet started.
 
 ### Multiple monitors
 
@@ -152,7 +188,7 @@ native-messaging directory. `e2e_x11.py` opens a small Xephyr window on your des
 |------|------|
 | `sidepanel`, `VERSION` | main executable and the version it reports |
 | `install.sh` | install / uninstall (see docs/RELEASE.md) |
-| `lib/sidepanel/` | panel: socket server, model, geometry, autohide, X11 helpers, GTK dock |
+| `lib/sidepanel/` | panel: socket server, model, geometry, autohide, X11 helpers, site icons, GTK dock |
 | `lib/native-host/` | native-messaging relay |
 | `extension/` | the WebExtension (MV2), with icons |
 | `packaging/` | `build-extension.sh` (reproducible .xpi); AUR packaging later |

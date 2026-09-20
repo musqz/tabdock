@@ -11,6 +11,7 @@ The panel is only ever resized while unmapped and then shown or hidden. Resizing
 GTK window while its content appears makes GTK fight the size request (it snaps back to
 the content's minimum width).
 """
+import hashlib
 import json
 import os
 import sys
@@ -23,7 +24,7 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("GdkX11", "3.0")
 from gi.repository import Gdk, GdkX11, GLib, Gtk, Pango  # noqa: E402,F401
 
-from . import geometry  # noqa: E402
+from . import favicons, geometry  # noqa: E402
 from .autohide import Autohide  # noqa: E402
 from .model import (  # noqa: E402
     ACCENTS,
@@ -49,7 +50,8 @@ CSS = """
 .sp-row:hover {{ background-color: #2a2e38; }}
 .sp-row.active {{ background-color: #2f3542; border-left-color: {accent}; }}
 .sp-row.active label {{ font-weight: bold; }}
-.sp-tab {{ padding: 4px 10px 4px 19px; }}
+.sp-tabbox {{ padding: 4px 10px 4px 19px; }}
+.sp-tab {{ padding: 0; }}
 .sp-empty {{ padding: 16px; color: #7d8594; }}
 button.sp-btn {{ padding: 0 6px; min-height: 0; min-width: 0; background: none; border: none; box-shadow: none; color: #aab2c0; }}
 button.sp-btn:hover {{ color: #ffffff; }}
@@ -99,6 +101,9 @@ ICONS = {
 
 DRAG_THRESHOLD = 6  # px the pointer must travel with the button down before a click becomes a drag
 PRESS_STALE_S = 30  # a press with no release this long is forgotten, so updates cannot stay blocked
+ICON_RETRY_S = 300  # an icon that could not be fetched (no network, a timeout) is tried again after this long
+ICONS_KEPT = 512  # icons (and remembered failures) held in memory
+ICONS_PENDING_MAX = 64  # icon downloads queued or running at once
 
 
 def _schedule(ms, fn):
@@ -119,6 +124,14 @@ class DockView:
         self._dump_path = os.environ.get("SIDEPANEL_LAYOUT_DUMP")  # a test hook: off unless set at start
         self._dump_pending = False
         self.sources = []  # [(conn, hello, state)] of the browsers listed
+        # icons are known by _icon_key(url); all in memory only: nothing about your tabs is written to disk
+        self._icons = {}  # -> 16 px pixbuf, least recently used first
+        self._failed = {}  # -> when it did not work (tried again after ICON_RETRY_S)
+        self._refused = {}  # -> True: it will never be an icon (not https, not an image, 404 ...): never asked again
+        self._pending = set()  # being downloaded
+        self._waiting = {}  # -> the image widgets of the rows built since, waiting for it
+        self._fetcher = None  # started with the first icon wanted: no threads while icons are off
+        self._redraw = False  # a redraw was asked for while a row was pressed: done after the release
         self._names = {}  # conn -> how its browser is called (numbered when two share a name)
         self._choices = ()  # (conn, label, colour) of the chips built
         self._chip_buttons = []  # (key, button)
@@ -163,10 +176,16 @@ class DockView:
         self.pin_btn = self._button("pin", "Pin: keep the panel open", Gtk.ToggleButton)
         self.pin_btn.get_style_context().add_class("sp-pin")
         self.pin_btn.connect("toggled", self._on_pin_toggled)
+        self.icons_btn = self._button("icons", "", Gtk.ToggleButton)
+        self.icons_btn.get_style_context().add_class("sp-pin")  # the same pill: filled while on
+        self.icons_btn.set_active(self.cfg["icons"])
+        self._refresh_icons_btn()
+        self.icons_btn.connect("toggled", self._on_icons_toggled)
         header.pack_start(self.browser_name, True, True, 0)
         header.pack_end(self.quit_btn, False, False, 0)  # rightmost
         header.pack_end(self.flip_btn, False, False, 0)
         header.pack_end(self.pin_btn, False, False, 0)
+        header.pack_end(self.icons_btn, False, False, 0)
 
         # which browser(s) to list; wraps onto more lines when many browsers are open, and only
         # shown when there is a choice to make
@@ -286,6 +305,24 @@ class DockView:
         self.pin_btn.set_label(label)
         self.pin_btn.set_tooltip_text(tip)
 
+    def _refresh_icons_btn(self):
+        on = self.icons_btn.get_active()
+        self.icons_btn.set_tooltip_text(
+            "Site icons are shown. Click to hide them and stop downloading" if on
+            else "Show each tab's site icon. The panel downloads the icons itself, from your own address "
+                 "and DNS, not through the browser's proxy (see the README)"
+        )
+
+    def _on_icons_toggled(self, button):
+        self.cfg["icons"] = button.get_active()
+        self._refresh_icons_btn()
+        if not self.cfg["icons"] and self._fetcher is not None:
+            for url in self._fetcher.drop_queued():  # what has not started yet is not downloaded
+                self._pending.discard(self._icon_key(url))
+        self._last = None
+        if self.sources:
+            self._rebuild()
+
     def _on_pin_toggled(self, button):
         self._refresh_pin()
         self.set_pinned(button.get_active())
@@ -303,6 +340,7 @@ class DockView:
         self.cfg = dict(cfg)
         self._warned_monitor = False
         self.set_pinned(self.cfg["pinned"])  # syncs the button, autohide and strut in one place
+        self.icons_btn.set_active(self.cfg["icons"])  # (the toggle handler redraws when it changed)
         self._place()  # side, width or monitor may have changed too
 
     # -- windows -------------------------------------------------------------------
@@ -536,6 +574,8 @@ class DockView:
         d, self._deferred = self._deferred, None
         if d is not None:
             self.show(*d)  # what the browser reported while the rows were being dragged
+        if self._redraw:
+            self._rebuild()  # a redraw (icons switched, config reloaded) that had to wait for the release
         return True
 
     def _drop_candidates(self, box):
@@ -644,10 +684,10 @@ class DockView:
         test can drag with a real pointer without guessing coordinates."""
         self._dump_pending = False
         path = self._dump_path
-        if not path:
+        root = self.win.get_child()
+        if not path or self._closed or root is None:  # (the window may be gone by the time an idle callback runs)
             return False
         wx, wy = self.win.get_position()
-        root = self.win.get_child()
 
         def spot(widget, kind, ident, group=None):
             a = widget.get_allocation()
@@ -683,7 +723,12 @@ class DockView:
         self._schedule_dump()
 
     def _rebuild(self):
+        if self._pressing():  # a row is being pressed or dragged: the rows must not be replaced under it
+            self._redraw = True
+            return
+        self._redraw = False
         self._meta, self._row_order = {}, []
+        self._waiting = {}  # the old rows are about to go: only the rows built below wait for an icon
         many = len(self.sources) > 1
         rows = []
         for conn, info, state in self.sources:
@@ -753,7 +798,70 @@ class DockView:
     def _tab_row(self, tab, window_id, group, conn, colour):
         label = self._label(tab_label(tab), "sp-tab")
         label.set_tooltip_text("\n".join(filter(None, (tab.get("title"), tab.get("url")))))
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.get_style_context().add_class("sp-tabbox")
+        if self.cfg["icons"]:
+            image = Gtk.Image()
+            image.set_size_request(favicons.ICON_PX, favicons.ICON_PX)  # the room is kept until the icon arrives
+            self._want_icon(tab.get("favIconUrl"), image)
+            box.pack_start(image, False, False, 0)
+        box.pack_start(label, True, True, 0)
         return self._row(
-            label, "tab", tab["id"], group, conn, colour, lambda: self.on_activate(conn, tab["id"], window_id),
+            box, "tab", tab["id"], group, conn, colour, lambda: self.on_activate(conn, tab["id"], window_id),
             active=bool(tab.get("active")), pinned=bool(tab.get("pinned")),
         )
+
+    @staticmethod
+    def _icon_key(url):
+        """What an icon is remembered by: its URL, or for a long one (a data: URL can be hundreds of KB) its hash."""
+        return url if len(url) <= 256 else "sha256:" + hashlib.sha256(url.encode()).hexdigest()
+
+    @staticmethod
+    def _remember(store, key, value):
+        """`store[key] = value`, keeping the store to ICONS_KEPT entries: the least recently used goes first."""
+        store.pop(key, None)
+        store[key] = value
+        while len(store) > ICONS_KEPT:
+            store.pop(next(iter(store)))
+
+    def _want_icon(self, url, image):
+        """Put the icon for `url` into `image`: at once when it is known, else when it has been downloaded."""
+        if not isinstance(url, str) or not url:
+            return
+        key = self._icon_key(url)
+        pixbuf = self._icons.get(key)
+        if pixbuf is not None:
+            self._remember(self._icons, key, pixbuf)  # used just now
+            image.set_from_pixbuf(pixbuf)
+            return
+        if key in self._refused:
+            return  # it will never be an icon: no request, however often the rows are redrawn
+        failed = self._failed.get(key)
+        if failed is not None and time.monotonic() - failed < ICON_RETRY_S:
+            return  # it did not work a moment ago: no icon rather than a request per redraw
+        if key not in self._pending:
+            if len(self._pending) >= ICONS_PENDING_MAX:
+                return  # a page that keeps changing its icon must not queue downloads without end
+            self._pending.add(key)
+            if self._fetcher is None:
+                self._fetcher = favicons.Fetcher(lambda u, result: GLib.idle_add(self._icon_ready, u, result))
+            self._fetcher.submit(url)
+        self._waiting.setdefault(key, []).append(image)
+
+    def _icon_ready(self, url, result):
+        """A download finished (on the UI thread again): the pixels, None (it did not work this time) or
+        REFUSED (it never will). Fill in the rows that wait for it."""
+        key = self._icon_key(url)
+        self._pending.discard(key)
+        waiting = self._waiting.pop(key, [])
+        if result is favicons.REFUSED:
+            self._remember(self._refused, key, True)
+        elif not isinstance(result, bytes) or self._closed:
+            self._remember(self._failed, key, time.monotonic())
+        else:
+            pixbuf = favicons.to_pixbuf(result)  # only 16x16 raw pixels: nothing untrusted is parsed here
+            self._remember(self._icons, key, pixbuf)
+            self._failed.pop(key, None)
+            for image in waiting:
+                image.set_from_pixbuf(pixbuf)
+        return False

@@ -29,6 +29,14 @@ follow = "last"
 # more browsers are open; a chip picking a single browser keeps that browser listed whatever has focus.
 view = "auto"
 
+# Show each tab's site icon before its title. Off by default because the panel downloads the icons
+# itself (https only, no cookies or referrer, never from local or private addresses, kept in memory,
+# nothing written to disk) from YOUR address and system DNS, not through your browser's proxy, VPN
+# settings or DNS-over-HTTPS, and for every tab it lists, private windows included if you allowed the
+# extension there. See "Site icons" in the README before turning this on.
+# The "icons" button in the header switches it while the panel runs (until the next start).
+icons = false
+
 # Start the panel when a browser with the extension opens and no panel is running (a browser start
 # is enough, no autostart needed). A panel you quit with the X button is not restarted until the next
 # browser start. false = only start it yourself (app menu, autostart line, keybinding).

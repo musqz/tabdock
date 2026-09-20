@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Site icons before the tab titles, and a toggle (the `icons` button in the header, `icons = true` in the
+  config). **Off by default**, because the panel downloads the icons itself, from your own address and system
+  DNS, outside the browser's proxy, VPN, DNS-over-HTTPS and per-container settings, for every listed tab
+  (the README's "Site icons" says exactly what that means). The extension already reported each tab's icon
+  address, so nothing changed there: `./install.sh` and a panel restart are enough.
+  `data:` icons need no network. `https:` icons are fetched with no cookies or referrer, only from public
+  addresses (checked again on every redirect and pinned to the checked address), with a verified certificate,
+  a size limit and a hard ten-second limit for the whole download. Only small PNG, ICO and GIF files (by their
+  own header) are used, decoded in a separate process with a memory and CPU limit, so a crafted image can only
+  fail. Icons live in memory only; nothing is written to disk. Addresses that can never be an icon are asked
+  for once, network failures again after five minutes, and switching icons off also drops queued downloads.
+  Found by the code review: a tiny GIF could freeze the panel for a minute and a PNG profile could take
+  hundreds of MB, which is why decoding happens in that limited process.
+
 - Show more than one browser. With two or more browsers open, chips under the header choose what the panel
   lists: `auto` (the browser in use, as before), a single browser (kept whichever window has focus), or `all`,
   which gives every browser its own foldable section under a solid band in its colour (click it), so the three

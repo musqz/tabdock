@@ -6,6 +6,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import gi  # noqa: E402
 
@@ -13,7 +14,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk  # noqa: E402
 
-from sidepanel import geometry  # noqa: E402
+from sidepanel import favicons, geometry  # noqa: E402
 from sidepanel.config import DEFAULTS  # noqa: E402
 
 STATE = {
@@ -33,6 +34,14 @@ STATE = {
     ],
 }
 INFO = {"browser": "Firefox", "version": "156.0", "browserPid": 1}
+
+
+def label_of(row):
+    """The text label of a row. A tab row holds an icon and a label; a section row holds just the label."""
+    child = row.get_child() if isinstance(row, Gtk.EventBox) else row
+    if isinstance(child, Gtk.Box):
+        child = next(c for c in child.get_children() if isinstance(c, Gtk.Label))
+    return child
 
 
 def button(widget, kind, signal, x=0.0, y=0.0, which=1):
@@ -113,7 +122,7 @@ class DockViewTest(unittest.TestCase):
         return view
 
     def row_texts(self, view):
-        return [(r.get_child() if isinstance(r, Gtk.EventBox) else r).get_text() for r in view.list.get_children()]
+        return [label_of(r).get_text() for r in view.list.get_children()]
 
     def test_starts_as_a_strip_with_the_panel_unmapped(self):
         view = self.make()
@@ -184,7 +193,7 @@ class DockViewTest(unittest.TestCase):
         self.assertIn("mail", texts)
         self.assertIn("Personal & Co", texts[2])  # markup was escaped, not parsed
         active = [r for r in view.list.get_children() if r.get_style_context().has_class("active")]
-        self.assertEqual([r.get_child().get_text() for r in active], ["plain"])
+        self.assertEqual([label_of(r).get_text() for r in active], ["plain"])
 
     def test_accent_follows_the_browser(self):
         view = self.make()
@@ -198,7 +207,7 @@ class DockViewTest(unittest.TestCase):
         view = self.make()
         conn = object()
         view.show([(conn, INFO, STATE)])
-        rows = [r for r in view.list.get_children() if isinstance(r, Gtk.EventBox) and r.get_child().get_text() == "mail"]
+        rows = [r for r in view.list.get_children() if isinstance(r, Gtk.EventBox) and label_of(r).get_text() == "mail"]
         click(rows[0])
         self.assertEqual(self.activated, [(conn, 11, 2)])
 
@@ -436,6 +445,267 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual({r["id"] for r in rows if r["kind"] == "tab"}, {1, 2, 3, 4})
         self.assertTrue(all({"x", "y", "w", "h", "group"} <= r.keys() for r in rows))
 
+    # -- site icons before the tab titles ----------------------------------------------------------------
+    # Off unless asked for: the panel downloads them itself. The downloads are stubbed, so nothing here
+    # touches the network; decoding is real (a short-lived process per icon).
+
+    ICON_URL = "https://example.com/favicon.png"
+
+    def icon_state(self, *urls):
+        tabs = [{"id": i + 1, "index": i, "title": f"t{i + 1}", "cookieStoreId": "firefox-default", "favIconUrl": url}
+                for i, url in enumerate(urls)]
+        return {"focusedWindowId": 2, "containers": [], "windows": [{"id": 2, "tabs": tabs}]}
+
+    def tab_image(self, view, tab_id):
+        box = self.row(view, "tab", tab_id).get_child()
+        return next(c for c in box.get_children() if isinstance(c, Gtk.Image))
+
+    def tab_widgets(self, view, tab_id):
+        return [type(c) for c in self.row(view, "tab", tab_id).get_child().get_children()]
+
+    def has_icon(self, view, *tab_ids):
+        return all(self.tab_image(view, i).get_pixbuf() is not None for i in tab_ids)
+
+    def pump(self, condition, what, timeout=10.0):
+        """Run the main loop until `condition()`: icons arrive from worker threads through it."""
+        import time
+        import warnings
+
+        from gi.repository import GLib
+
+        deadline = time.monotonic() + timeout
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)  # PyGObject's own asyncio glue, not ours
+            while not condition():
+                if time.monotonic() > deadline:
+                    self.fail(f"timed out waiting for: {what}")
+                while GLib.MainContext.default().iteration(False):
+                    pass
+                time.sleep(0.01)
+
+    def data_icon(self, side=2):
+        import base64
+
+        from test_favicons import png
+
+        return "data:image/png;base64," + base64.b64encode(png(side, side)).decode()
+
+    def test_icons_are_off_until_asked_for_and_then_nothing_is_downloaded(self):
+        from test_favicons import png
+
+        view = self.make()
+        self.assertFalse(view.cfg["icons"] or view.icons_btn.get_active())
+        with mock.patch("sidepanel.favicons.download", return_value=png()) as download:
+            view.show([(object(), INFO, self.icon_state(self.ICON_URL))])
+            self.assertEqual(self.tab_widgets(view, 1), [Gtk.Label])
+            self.assertIsNone(view._fetcher)  # not even the worker threads
+            download.assert_not_called()
+
+    def test_a_tab_row_is_an_icon_and_a_title(self):
+        view = self.make(icons=True)
+        view.show([(object(), INFO, self.icon_state(None))])
+        self.assertEqual(self.tab_widgets(view, 1), [Gtk.Image, Gtk.Label])  # the icon comes first
+        image = self.tab_image(view, 1)
+        self.assertEqual(image.get_size_request(), (16, 16))  # its room is kept, so nothing shifts when it arrives
+        self.assertIsNone(image.get_pixbuf())
+
+    def test_an_icon_that_is_in_the_page_as_data_shows_without_any_download(self):
+        view = self.make(icons=True)
+        with mock.patch("sidepanel.favicons.download", side_effect=AssertionError("no network for a data: icon")):
+            view.show([(object(), INFO, self.icon_state(self.data_icon(24)))])
+            self.pump(lambda: self.has_icon(view, 1), "the icon")
+        self.assertEqual(self.tab_image(view, 1).get_pixbuf().get_width(), 16)
+
+    def test_a_downloaded_icon_arrives_in_its_row_once_for_all_tabs_of_a_site(self):
+        from test_favicons import png
+
+        view = self.make(icons=True)
+        state = self.icon_state(self.ICON_URL, self.ICON_URL, self.ICON_URL)
+        with mock.patch("sidepanel.favicons.download", return_value=png()) as download:
+            view.show([(object(), INFO, state)])
+            self.pump(lambda: self.has_icon(view, 1, 2, 3), "three icons")
+            view.show([(object(), INFO, {**state})])  # a redraw
+            self.assertTrue(self.has_icon(view, 1, 2, 3))  # at once: it is remembered
+        self.assertEqual(download.call_count, 1)  # one request for the site
+
+    def test_rows_redrawn_while_an_icon_is_on_its_way_still_get_it(self):
+        import threading
+
+        from test_favicons import png
+
+        view = self.make(icons=True)
+        release, calls = threading.Event(), []
+
+        def slow(url):
+            calls.append(url)
+            release.wait(10)
+            return png()
+
+        conn = object()
+        with mock.patch("sidepanel.favicons.download", side_effect=slow):
+            view.show([(conn, INFO, self.icon_state(self.ICON_URL))])
+            self.pump(lambda: calls, "the download to start")
+            view.show([(conn, INFO, self.icon_state(self.ICON_URL, self.ICON_URL))])  # the state changed: new rows
+            release.set()
+            self.pump(lambda: self.has_icon(view, 1, 2), "the icon in the new rows")
+        self.assertEqual(len(calls), 1)
+
+    def test_a_download_that_did_not_work_is_tried_again_later_but_not_on_every_redraw(self):
+        view = self.make(icons=True)
+        with mock.patch("sidepanel.favicons.download", return_value=None) as download:  # no network, say
+            view.show([(object(), INFO, self.icon_state(self.ICON_URL))])
+            self.pump(lambda: view._failed and not view._pending, "the failure")
+            for _ in range(3):
+                view._rebuild()
+            self.assertEqual(download.call_count, 1)
+            self.assertIsNone(self.tab_image(view, 1).get_pixbuf())
+            for key in view._failed:
+                view._failed[key] -= 1000  # long enough ago
+            view._rebuild()
+            self.pump(lambda: download.call_count == 2 and not view._pending, "a second try")
+
+    def test_something_that_can_never_be_an_icon_is_not_asked_for_again(self):
+        view = self.make(icons=True)
+        for answer in (favicons.REFUSED, b"<svg onload='x'/>", b"<html>sign in</html>"):  # 404, svg, a page
+            with self.subTest(answer=answer), mock.patch("sidepanel.favicons.download", return_value=answer) as download:
+                view._refused.clear()
+                view.show([(object(), INFO, self.icon_state(self.ICON_URL))])
+                self.pump(lambda: view._refused and not view._pending, "the refusal")
+                for key in list(view._failed):
+                    view._failed[key] -= 1000
+                view._rebuild()
+                view._rebuild()
+                self.assertEqual(download.call_count, 1)  # not now, and not five minutes from now
+                self.assertFalse(view._failed)
+                self.assertIsNone(self.tab_image(view, 1).get_pixbuf())
+
+    def test_what_a_page_names_as_its_icon_is_never_fetched_unless_it_is_https_or_data(self):
+        view = self.make(icons=True)
+        urls = ("http://example.com/favicon.ico", "chrome://branding/content/icon32.png", "about:newtab",
+                "file:///etc/passwd", "resource://gre/x.png", "", None)
+        with mock.patch("sidepanel.favicons.download", side_effect=AssertionError("fetched")) as download:
+            view.show([(object(), INFO, self.icon_state(*urls))])
+            self.pump(lambda: len(view._refused) == 5 and not view._pending, "the refusals")  # '' and None: no request at all
+        download.assert_not_called()
+
+    def test_the_icons_button_switches_icons_on_and_off(self):
+        from test_favicons import png
+
+        view = self.make()
+        with mock.patch("sidepanel.favicons.download", return_value=png()) as download:
+            view.show([(object(), INFO, self.icon_state(self.ICON_URL))])
+            download.assert_not_called()
+            view.icons_btn.set_active(True)  # a click
+            self.assertTrue(view.cfg["icons"])
+            self.pump(lambda: self.has_icon(view, 1), "the icon after switching on")
+            view.icons_btn.set_active(False)
+            self.assertEqual(self.tab_widgets(view, 1), [Gtk.Label])
+
+    def test_switching_icons_off_drops_the_downloads_that_have_not_started(self):
+        import threading
+
+        from test_favicons import png
+
+        view = self.make(icons=True)
+        release, started = threading.Event(), []
+
+        def slow(url):
+            started.append(url)
+            release.wait(10)
+            return png()
+
+        urls = [f"https://site{i}.test/favicon.png" for i in range(7)]
+        with mock.patch("sidepanel.favicons.download", side_effect=slow):
+            view.show([(object(), INFO, self.icon_state(*urls))])
+            self.pump(lambda: len(started) == 4, "the four workers to be busy")  # the other three are queued
+            view.icons_btn.set_active(False)
+            release.set()
+            self.pump(lambda: not view._pending, "the running downloads to finish")
+        self.assertEqual(len(started), 4)  # the three that had not started never were
+
+    def test_a_config_reload_applies_icons(self):
+        view = self.make()
+        self.assertFalse(view.icons_btn.get_active())
+        view.reconfigure({**DEFAULTS, "icons": True})
+        self.assertTrue(view.icons_btn.get_active() and view.cfg["icons"])
+        view.reconfigure({**DEFAULTS, "icons": False})
+        self.assertFalse(view.icons_btn.get_active() or view.cfg["icons"])
+
+    def test_the_icons_button_says_what_a_click_does(self):
+        view = self.make(icons=True)
+        self.assertIn("Click to hide", view.icons_btn.get_tooltip_text())
+        view.icons_btn.set_active(False)
+        self.assertIn("downloads", view.icons_btn.get_tooltip_text())
+        self.assertIn("proxy", view.icons_btn.get_tooltip_text())  # what switching on means is said before it happens
+
+    def test_the_least_recently_used_icon_goes_when_too_many_are_kept(self):
+        view = self.make(icons=True)
+        a, b, c = (self.data_icon(side) for side in (2, 3, 4))
+        conn = object()
+        with mock.patch("sidepanel.dock.ICONS_KEPT", 2):
+            view.show([(conn, INFO, self.icon_state(a, b))])
+            self.pump(lambda: len(view._icons) == 2 and not view._pending, "a and b")
+            view.show([(conn, INFO, self.icon_state(a))])  # a is used again: b is now the one not used for longest
+            view.show([(conn, INFO, self.icon_state(a, c))])
+            self.pump(lambda: len(view._icons) == 2 and not view._pending and view._icon_key(c) in view._icons, "c")
+        self.assertIn(view._icon_key(a), view._icons)
+        self.assertNotIn(view._icon_key(b), view._icons)
+
+    def test_a_huge_icon_url_is_remembered_by_its_hash_not_kept_whole(self):
+        view = self.make(icons=True)
+        url = "data:image/png;base64," + "A" * 100_000  # not an icon, but a long URL all the same
+        key = view._icon_key(url)
+        self.assertTrue(key.startswith("sha256:") and len(key) < 100)
+        self.assertEqual(view._icon_key(self.ICON_URL), self.ICON_URL)  # a normal one is its own key
+        view.show([(object(), INFO, self.icon_state(url))])
+        self.pump(lambda: key in view._refused, "the refusal")
+        self.assertNotIn(url, view._refused)
+
+    def test_a_page_that_keeps_changing_its_icon_cannot_queue_downloads_without_end(self):
+        import threading
+
+        view = self.make(icons=True)
+        release, started = threading.Event(), []
+
+        def slow(url):
+            started.append(url)
+            release.wait(10)
+            return None
+
+        urls = [f"https://site{i}.test/favicon.png" for i in range(10)]
+        with mock.patch("sidepanel.dock.ICONS_PENDING_MAX", 3), mock.patch("sidepanel.favicons.download", side_effect=slow):
+            view.show([(object(), INFO, self.icon_state(*urls))])
+            self.pump(lambda: len(started) == 3, "three downloads")
+            self.assertEqual(len(view._pending), 3)  # the rest is not asked for at all
+            release.set()
+            self.pump(lambda: not view._pending, "them to finish")
+        self.assertEqual(len(started), 3)
+
+    def test_a_redraw_asked_for_during_a_drag_waits_for_the_drop(self):
+        view = self.make()
+        view.show([(object(), INFO, self.icon_state(None, None))])
+        tab = self.row(view, "tab", 1)
+        press(tab, 5, 5)
+        view.icons_btn.set_active(True)  # e.g. a config reload in the middle of a drag
+        self.assertIs(self.row(view, "tab", 1), tab)  # the row under the pointer is still there
+        self.assertTrue(view._redraw)
+        release(tab, 5, 5)
+        self.assertFalse(view._redraw)
+        self.assertEqual(self.tab_widgets(view, 1), [Gtk.Image, Gtk.Label])  # done after the release
+
+    def test_nothing_about_the_tabs_is_written_to_disk(self):
+        import tempfile
+
+        from test_favicons import png
+
+        view = self.make(icons=True)
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(
+            os.environ, {"HOME": home, "XDG_CACHE_HOME": home + "/cache", "XDG_DATA_HOME": home + "/data"}
+        ), mock.patch("sidepanel.favicons.download", return_value=png()):
+            view.show([(object(), INFO, self.icon_state(self.ICON_URL))])
+            self.pump(lambda: self.has_icon(view, 1), "the icon")
+            self.assertEqual(os.listdir(home), [])
+
     # -- several browsers at once: chips, one header per browser, and nothing crossing between them ----
 
     ZEN = {"browser": "Zen", "version": "1.0", "browserPid": 2}
@@ -607,6 +877,13 @@ class DockViewTest(unittest.TestCase):
         conn = object()
         view.show([(conn, INFO, STATE)], conn, [(conn, "Firefox 2", "#ff7139"), (object(), "Firefox 1", "#ff7139")], INFO)
         self.assertEqual(view.browser_name.get_text(), "Firefox 2")
+
+    def test_the_layout_hook_survives_a_window_that_is_already_gone(self):
+        with mock.patch.dict(os.environ, {"SIDEPANEL_LAYOUT_DUMP": "/nonexistent/rows.json"}):
+            view = self.make()
+        view.show([(object(), INFO, DRAG_STATE)])
+        view.win.destroy()
+        self.assertFalse(view._dump_layout())  # an idle callback that outlived its window: quietly nothing
 
     # -- which monitor: fake layouts stand in for real hardware -------------------------------
 

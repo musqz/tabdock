@@ -15,16 +15,19 @@ and follow=hide.
     python3 tests/e2e_x11.py [--shots DIR]
 """
 import argparse
+import base64
 import json
 import os
 import re
 import shutil
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
 import time
+import zlib
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DISPLAY = ":92"
@@ -33,6 +36,20 @@ WIDTH = 300
 STRIP = 3
 SCREEN = (1280, 800)
 COLOURS = {"Firefox": "FF7139", "Zen": "9D7CD8"}
+
+
+def green_icon():
+    """A 16x16 solid green PNG as a data: URL, the way a page can carry its own icon: no network involved."""
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+
+    raw = b"".join(b"\x00" + b"\x00\xff\x00\xff" * 16 for _ in range(16))
+    png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 16, 16, 8, 6, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+    return "data:image/png;base64," + base64.b64encode(png).decode()
+
+
+ICON = green_icon()
 
 
 def run(*cmd, **kw):
@@ -108,10 +125,10 @@ class FakeExtension:
                     {
                         "id": 1,
                         "tabs": [
-                            {"id": 1, "index": 0, "title": f"{browser}: start page", "cookieStoreId": "firefox-default", "active": True},
-                            {"id": 2, "index": 1, "title": f"{browser}: a much longer title that has to be ellipsized nicely", "cookieStoreId": "firefox-default"},
-                            {"id": 3, "index": 2, "title": f"{browser}: mail", "cookieStoreId": "firefox-container-1"},
-                            {"id": 4, "index": 3, "title": f"{browser}: tickets", "cookieStoreId": "firefox-container-2"},
+                            {"id": 1, "index": 0, "title": f"{browser}: start page", "cookieStoreId": "firefox-default", "active": True, "favIconUrl": ICON},
+                            {"id": 2, "index": 1, "title": f"{browser}: a much longer title that has to be ellipsized nicely", "cookieStoreId": "firefox-default", "favIconUrl": ICON},
+                            {"id": 3, "index": 2, "title": f"{browser}: mail", "cookieStoreId": "firefox-container-1", "favIconUrl": ICON},
+                            {"id": 4, "index": 3, "title": f"{browser}: tickets", "cookieStoreId": "firefox-container-2", "favIconUrl": ICON},
                         ],
                     }
                 ],
@@ -145,6 +162,7 @@ def main():
         cfg = os.path.join(xdg, "openbox-sidepanel", "config.toml")
 
         def write_cfg(**opts):
+            opts = {"icons": True, **opts}  # icons are off by default; this test wants to see them drawn
             with open(cfg, "w") as f:
                 for key, value in opts.items():
                     f.write(f"{key} = {json.dumps(value)}\n")
@@ -174,7 +192,7 @@ def main():
         ok("fake browsers (firefox, zen) and a plain terminal are running")
 
         with open(cfg, "w") as f:
-            f.write(f'side = "left"\nwidth = {WIDTH}\n')
+            f.write(f'side = "left"\nwidth = {WIDTH}\nicons = true\n')
         layout_dump = os.path.join(tmp, "rows.json")
         panel_env = {**ENV, "XDG_CONFIG_HOME": xdg, "SIDEPANEL_SOCKET": sock_path, "SIDEPANEL_LAYOUT_DUMP": layout_dump}
         panel_log = open(os.path.join(tmp, "panel.log"), "w")
@@ -362,6 +380,19 @@ def main():
         assert count("browser") == 0, "one browser listed: no browser header"
         screenshot(os.path.join(shots, "chips.png"))
         ok("two browsers are open: the panel offers the chips auto, Firefox, Zen and all")
+
+        # -- site icons: drawn before the tab title from the icon the browser reported, off with icons = false
+        def icon_green():
+            row = of_kind("tab")[0]  # the icon sits in the first 16 px after the row's indent
+            return pixel(row["x"] + 30, row["y"] + row["h"] // 2, shots) == "00FF00"
+
+        wait_for(icon_green, "the site icon drawn before the first tab title")
+        screenshot(os.path.join(shots, "icons.png"))
+        write_cfg(side="left", width=WIDTH, icons=False)
+        wait_for(lambda: not icon_green(), "icons switched off by the config")
+        write_cfg(side="left", width=WIDTH)
+        wait_for(icon_green, "icons back after reloading without the option")
+        ok("site icons: drawn before the tab title from the icon the browser reported, and switched by icons = false")
 
         click_row(chip("all"))
         wait_for(lambda: count("browser") == 2 and count("tab") == 8, "both browsers listed")

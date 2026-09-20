@@ -7,6 +7,7 @@ DEFAULTS = {
     "width": 320,
     "follow": "last",
     "view": "auto",
+    "icons": False,  # site icons before the tab titles: off until asked for, the panel downloads them (see the README)
     "pinned": False,
     "start_with_browser": True,  # read by the native-messaging relay, not by the panel itself
 }
@@ -40,7 +41,7 @@ def validate(user):
         raise ValueError(f'width must be an integer between 100 and 1000 (got {cfg["width"]!r})')
     if not isinstance(cfg["monitor"], str) or not cfg["monitor"]:
         raise ValueError('monitor must be "outer", "primary" or an output name such as "HDMI-1"')
-    for key in ("pinned", "start_with_browser"):
+    for key in ("icons", "pinned", "start_with_browser"):
         if not isinstance(cfg[key], bool):
             raise ValueError(f"{key} must be true or false (got {cfg[key]!r})")
     return cfg
