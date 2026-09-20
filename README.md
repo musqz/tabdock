@@ -35,7 +35,8 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost
 - **Several browsers.** While two or more browsers with the extension are open, a row of chips under the
   header chooses what is listed: `auto` (the browser you are using, the default), one chip per browser
   (that browser stays listed whichever window has focus), and `all` (every browser, one foldable section
-  each: click a browser's header to fold or unfold it). Every browser the panel recognises keeps its own
+  each under a solid band in its colour, so a browser never looks like a container: click the band to fold
+  or unfold it). Every browser the panel recognises keeps its own
   colour on its header, its active tab and the drop marker (an unknown one is grey), and the strip wears the
   colour of the browser in use. Clicking a tab
   of a browser you are not using activates it and brings that browser's window forward; a drag stays inside

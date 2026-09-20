@@ -4,7 +4,8 @@
 
 - Show more than one browser. With two or more browsers open, chips under the header choose what the panel
   lists: `auto` (the browser in use, as before), a single browser (kept whichever window has focus), or `all`,
-  which gives every browser its own foldable section (click its header). Each browser keeps its own colour on
+  which gives every browser its own foldable section under a solid band in its colour (click it), so the three
+  levels differ at a glance: browser = coloured band, container = small bar with an icon, tab = plain line. Each browser keeps its own colour on
   its header, active tab and drop marker; clicking a tab of a browser that is not in use activates it and
   raises that browser's window (found by process when it has not been in use since the panel started); drags,
   drops and reordering stay inside one browser; two profiles of one browser are numbered. New config key

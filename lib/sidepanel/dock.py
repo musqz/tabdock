@@ -65,7 +65,8 @@ button.sp-btn.sp-quit:hover {{ color: #ff6b6b; }}
 button.sp-btn.sp-chip {{ border: 1px solid #454b58; border-radius: 9px; padding: 0 8px; }}
 button.sp-btn.sp-chip:hover {{ border-color: #7d8594; color: #ffffff; }}
 button.sp-btn.sp-chip.selected {{ background-color: {accent}; border-color: {accent}; color: #1b1d23; font-weight: bold; }}
-.sp-bhead {{ background-color: #23262e; border-top: 1px solid #2f3440; }}
+.sp-row.sp-bhead {{ border-left: none; margin-top: 6px; }}
+.sp-bandlabel {{ padding: 5px 8px; color: #1b1d23; font-weight: bold; }}
 """
 
 
@@ -83,6 +84,8 @@ BROWSER_CSS = "".join(
     f"button.sp-btn.sp-chip.{acc_class(c)} {{ border-color: {c}; }}"
     f"button.sp-btn.sp-chip.{acc_class(c)}:hover {{ border-color: shade({c}, 1.35); }}"
     f"button.sp-btn.sp-chip.selected.{acc_class(c)} {{ background-color: {c}; border-color: {c}; }}"
+    f".sp-bhead.{acc_class(c)} {{ background-color: {c}; }}"
+    f".sp-bhead.{acc_class(c)}:hover {{ background-color: shade({c}, 1.15); }}"
     for c in (*ACCENTS.values(), DEFAULT_ACCENT)
 )
 
@@ -708,13 +711,15 @@ class DockView:
         return self._names.get(conn) or info.get("browser") or "browser"
 
     def _browser_row(self, conn, colour, name, window, key, folded):
+        """A browser is a solid band in its colour, so it cannot be mistaken for a container (a small
+        coloured bar with an icon) or a tab."""
         count = len(window["tabs"]) if window else 0
         markup = (
-            f'<span foreground="{colour}">▌</span> <b><span foreground="{colour}">{GLib.markup_escape_text(name)}</span></b> '
-            f'<span alpha="60%">({count})</span>  <span alpha="50%">{"▸" if folded else "▾"}</span>'
+            f'{GLib.markup_escape_text(name)} <span alpha="70%">({count})</span>'
+            f'  <span alpha="70%">{"▸" if folded else "▾"}</span>'
         )
         row = self._row(
-            self._label(markup, "sp-section", markup=True), "browser", None, None, conn, colour,
+            self._label(markup, "sp-bandlabel", markup=True), "browser", None, None, conn, colour,
             lambda: self._toggle(key), draggable=False,
         )
         row.get_style_context().add_class("sp-bhead")
