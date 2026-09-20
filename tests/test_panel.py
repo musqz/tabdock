@@ -177,6 +177,25 @@ class PanelTest(unittest.TestCase):
         self.panel.reconfigure({"follow": "last"})
         self.assertEqual(self.view.calls, [("reconfigure",), ("hidden", False)])
 
+    def test_debug_console_can_reorder_tabs_and_containers(self):
+        self.panel.on_stdin_line("move 7 0")
+        self.panel.on_stdin_line("order firefox-container-2,firefox-container-1")
+        self.assertEqual(
+            self.ff.sent,
+            [
+                {"type": "move_tab", "tabId": 7, "index": 0},
+                {"type": "set_container_order", "order": ["firefox-container-2", "firefox-container-1"]},
+            ],
+        )
+        for junk in ("move x 1", "move 7", "order", "order a b", ""):
+            self.panel.on_stdin_line(junk)
+        self.assertEqual(len(self.ff.sent), 2)  # malformed lines are ignored
+
+    def test_command_goes_to_the_given_browser(self):
+        self.panel.command(self.zen, {"type": "move_tab", "tabId": 1, "index": 2})
+        self.assertEqual(self.zen.sent, [{"type": "move_tab", "tabId": 1, "index": 2}])
+        self.assertEqual(self.ff.sent, [])
+
     def test_debug_console_activate(self):
         self.panel.on_stdin_line("activate 7")
         self.assertEqual(self.ff.sent[-1], {"type": "activate_tab", "tabId": 7, "windowId": 1})

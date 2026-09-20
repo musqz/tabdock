@@ -107,10 +107,10 @@ class FakeExtension:
                     {
                         "id": 1,
                         "tabs": [
-                            {"id": 1, "title": f"{browser}: start page", "cookieStoreId": "firefox-default", "active": True},
-                            {"id": 2, "title": f"{browser}: a much longer title that has to be ellipsized nicely", "cookieStoreId": "firefox-default"},
-                            {"id": 3, "title": f"{browser}: mail", "cookieStoreId": "firefox-container-1"},
-                            {"id": 4, "title": f"{browser}: tickets", "cookieStoreId": "firefox-container-2"},
+                            {"id": 1, "index": 0, "title": f"{browser}: start page", "cookieStoreId": "firefox-default", "active": True},
+                            {"id": 2, "index": 1, "title": f"{browser}: a much longer title that has to be ellipsized nicely", "cookieStoreId": "firefox-default"},
+                            {"id": 3, "index": 2, "title": f"{browser}: mail", "cookieStoreId": "firefox-container-1"},
+                            {"id": 4, "index": 3, "title": f"{browser}: tickets", "cookieStoreId": "firefox-container-2"},
                         ],
                     }
                 ],
@@ -174,7 +174,8 @@ def main():
 
         with open(cfg, "w") as f:
             f.write(f'side = "left"\nwidth = {WIDTH}\n')
-        panel_env = {**ENV, "XDG_CONFIG_HOME": xdg, "SIDEPANEL_SOCKET": sock_path}
+        layout_dump = os.path.join(tmp, "rows.json")
+        panel_env = {**ENV, "XDG_CONFIG_HOME": xdg, "SIDEPANEL_SOCKET": sock_path, "SIDEPANEL_LAYOUT_DUMP": layout_dump}
         panel_log = open(os.path.join(tmp, "panel.log"), "w")
         panel = subprocess.Popen([os.path.join(ROOT, "sidepanel")], env=panel_env, stdout=panel_log, stderr=subprocess.STDOUT)
         procs.append(panel)
@@ -252,6 +253,81 @@ def main():
         assert click_a_tab(), "no activate_tab while terminal active"
         wait_for(lambda: int(run("xdotool", "getactivewindow").stdout) == ff_win, "browser raised by the panel")
         ok("clicking a tab while another app is active brings the browser forward")
+        collapse()
+
+        # -- reordering with a real pointer: drag container sections and tabs -------------------------
+        def layout():
+            with open(layout_dump) as f:
+                return {(r["kind"], r["id"]): r for r in json.load(f)}
+
+        def settled_layout():
+            """The row positions once the expanded panel has been laid out (header taller than nothing)."""
+            try:
+                rows = layout()
+                return rows if rows[("section", "firefox-default")]["y"] > 10 else None
+            except (OSError, ValueError, KeyError):
+                return None
+
+        def messages(kind):
+            time.sleep(0.4)
+            return [m for m in ff.received() if m.get("type") == kind]
+
+        def press_and_move(src, x1, y1):
+            x0, y0 = src["x"] + 60, int(src["y"] + src["h"] / 2)
+            run("xdotool", "mousemove", str(x0), str(y0))
+            time.sleep(0.1)
+            run("xdotool", "mousedown", "1")
+            time.sleep(0.1)
+            run("xdotool", "mousemove", str(x0), str(y0 + 12))  # past the drag threshold
+            time.sleep(0.15)
+            run("xdotool", "mousemove", str(x1), str(y1))
+            time.sleep(0.2)
+
+        ff.received()  # drop anything left over
+        expand()
+        rows = wait_for(settled_layout, "row positions of the expanded panel")
+        work, personal = rows[("section", "firefox-container-2")], rows[("section", "firefox-container-1")]
+        assert work["y"] > personal["y"], "the fake browser lists Personal before Work"
+        # Work onto the top half of Personal, with the pointer OUTSIDE the panel
+        press_and_move(work, WIDTH + 200, int(personal["y"] + 3))
+        time.sleep(0.7)  # longer than the 400 ms close delay: a drag must keep the panel open
+        assert panel_mapped(), "the panel closed while a drag was in progress"
+        screenshot(os.path.join(shots, "dragging-section.png"))  # for a look at the drop marker
+        run("xdotool", "mouseup", "1")
+        got = messages("set_container_order")
+        assert got and got[-1]["order"] == ["firefox-container-2", "firefox-container-1"], got
+        wait_for(lambda: not panel_mapped(), "the panel closes after the drop outside it")
+        expand()
+        rows = wait_for(lambda: (l := settled_layout()) and l[("section", "firefox-container-2")]["y"]
+                        < l[("section", "firefox-container-1")]["y"] and l, "Work redrawn above Personal at once")
+        ok("dragging a container section: the new order is sent, the panel stays open during the drag and closes after it")
+
+        first, second = rows[("tab", 1)], rows[("tab", 2)]
+        press_and_move(second, second["x"] + 60, int(first["y"] + 2))  # tab 2 onto the top half of tab 1
+        run("xdotool", "mouseup", "1")
+        got = messages("move_tab")
+        assert got and got[-1] == {"type": "move_tab", "tabId": 2, "index": 0}, got
+        ok("dragging a tab above another in its container sends move_tab with the final index")
+
+        rows = wait_for(settled_layout, "row positions again")
+        elsewhere = rows[("tab", 4)]  # a tab of the Work container, far from tab 1's own group
+        press_and_move(rows[("tab", 1)], elsewhere["x"] + 60, int(elsewhere["y"] + elsewhere["h"] / 2))
+        run("xdotool", "mouseup", "1")
+        assert messages("move_tab") == [], "a tab dropped outside its own container must not move"
+        assert messages("activate_tab") == [], "a drag must not also count as a click"
+        ok("a tab dragged outside its container is cancelled, and a drag is never also a click")
+
+        rows = wait_for(settled_layout, "row positions once more")
+        target = rows[("tab", 3)]
+        run("xdotool", "mousemove", str(target["x"] + 60), str(int(target["y"] + target["h"] / 2)))
+        # The row we just dragged over shows a tooltip that can sit right on top of this one. A hand
+        # moves continuously, and the first motion hides the tooltip; a teleporting test pointer
+        # would click the tooltip window instead, so give the move a moment like a person would.
+        time.sleep(0.3)
+        run("xdotool", "click", "1")
+        got = messages("activate_tab")
+        assert got and got[-1]["tabId"] == 3, got
+        ok("a plain click still activates a tab after all the dragging")
         collapse()
 
         # -- pin -> strut on the outer edge; unpin removes it -----------------------------------

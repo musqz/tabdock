@@ -140,8 +140,11 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
   lint-clean extension with icons and AMO metadata, reproducible `.xpi`, `docs/RELEASE.md`. Signing
   the extension (AMO unlisted) is a step only the user can do; installing the signed `.xpi` makes it survive
   browser restarts.
-- **M3 two-way editing:** new tab in container, close, move, pin, container create/rename/recolor/
-  delete from the panel, search box, favicons cache.
+- **M3 two-way editing:** first slice done (0.3.0): **reordering**, i.e. drag container sections (order kept
+  in the extension's `storage.local`, since Firefox cannot reorder containers) and drag tabs within their
+  container (`tabs.move`). Still open: new tab in container, close, pin, container create/rename/recolor/
+  delete from the panel, "reopen in container" (Firefox cannot change a tab's container, so it reopens the
+  tab and loses its history), search box, favicons cache.
 - **M4 workspaces** via `tabs.hide()`; optional native tab-group display.
 - **M5 more browsers (done, pulled forward):** verified with `tests/e2e_firefox.py --firefox <browser>` on
   Firefox, Zen, FireDragon (`firedragon-bin`), Waterfox (`waterfox-bin`) and LibreWolf (`librewolf`), all

@@ -35,10 +35,53 @@ STATE = {
 INFO = {"browser": "Firefox", "version": "156.0", "browserPid": 1}
 
 
+def button(widget, kind, signal, x=0.0, y=0.0, which=1):
+    event = Gdk.Event.new(kind)
+    event.button = which
+    event.x = event.x_root = x
+    event.y = event.y_root = y
+    widget.emit(signal, event)
+
+
+def press(widget, x=0.0, y=0.0):
+    button(widget, Gdk.EventType.BUTTON_PRESS, "button-press-event", x, y)
+
+
+def release(widget, x=0.0, y=0.0, which=1):
+    button(widget, Gdk.EventType.BUTTON_RELEASE, "button-release-event", x, y, which)
+
+
 def click(widget):
-    event = Gdk.Event.new(Gdk.EventType.BUTTON_PRESS)
-    event.button = 1
-    widget.emit("button-press-event", event)
+    """A real click: press and release without moving, which is what a row treats as a click."""
+    press(widget)
+    release(widget)
+
+
+def motion(widget, x, y):
+    event = Gdk.Event.new(Gdk.EventType.MOTION_NOTIFY)
+    event.x = event.x_root = x
+    event.y = event.y_root = y
+    widget.emit("motion-notify-event", event)
+
+
+DRAG_STATE = {  # one window: p1 mail p2 p3 (the mail tab belongs to the Personal container)
+    "focusedWindowId": 2,
+    "containers": [
+        {"cookieStoreId": "firefox-container-1", "name": "Personal"},
+        {"cookieStoreId": "firefox-container-2", "name": "Work"},
+    ],
+    "windows": [
+        {
+            "id": 2,
+            "tabs": [
+                {"id": 1, "index": 0, "title": "p1", "cookieStoreId": "firefox-default", "active": True},
+                {"id": 2, "index": 1, "title": "mail", "cookieStoreId": "firefox-container-1"},
+                {"id": 3, "index": 2, "title": "p2", "cookieStoreId": "firefox-default"},
+                {"id": 4, "index": 3, "title": "p3", "cookieStoreId": "firefox-default"},
+            ],
+        }
+    ],
+}
 
 
 @unittest.skipUnless(Gtk.init_check()[0], "no X display")
@@ -55,7 +98,13 @@ class DockViewTest(unittest.TestCase):
 
         self.activated = []
         self.quit_calls = []
-        view = DockView({**DEFAULTS, **cfg}, lambda *a: self.activated.append(a), lambda: self.quit_calls.append(1))
+        self.commands = []
+        view = DockView(
+            {**DEFAULTS, **cfg},
+            lambda *a: self.activated.append(a),
+            lambda: self.quit_calls.append(1),
+            on_command=lambda conn, message: self.commands.append(message),
+        )
         self.addCleanup(view.win.destroy)
         self.addCleanup(view.strip.destroy)
         return view
@@ -199,6 +248,190 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(self.shown, set())
         view.set_hidden(False)
         self.assertEqual(self.shown, {view.strip, view.win})  # pinned: panel comes back too
+
+    # -- reordering: click vs drag, and what a drop asks the browser to do ------------------------
+    # Mapping pixels to a drop target needs real window allocations (tests/e2e_x11.py drags with a
+    # real pointer); here a stand-in picks the target so everything around it can be checked.
+
+    def row(self, view, kind, ident):
+        return next(b for b, m in view._meta.items() if m["kind"] == kind and m["id"] == ident)
+
+    def drag(self, view, moved, target, after, distance=40):
+        view._point_at = lambda p, box, ev: p.update(target=target, after=after)
+        press(moved, 5, 5)
+        motion(moved, 5, 5 + distance)
+        release(moved, 5, 5 + distance)
+
+    def test_a_click_activates_but_a_drag_does_not(self):
+        view = self.make()
+        conn = object()
+        view.show(conn, INFO, DRAG_STATE)
+        tab = self.row(view, "tab", 3)
+        press(tab, 5, 5)
+        motion(tab, 8, 7)  # under the threshold: still a click
+        release(tab, 8, 7)
+        self.assertEqual(self.activated, [(conn, 3, 2)])
+        self.drag(view, tab, self.row(view, "tab", 4), after=False)
+        self.assertEqual(len(self.activated), 1)  # the drag did not activate anything
+
+    def test_dragging_a_tab_sends_the_final_index_within_its_own_container(self):
+        view = self.make()
+        view.show(object(), INFO, DRAG_STATE)
+        self.drag(view, self.row(view, "tab", 1), self.row(view, "tab", 4), after=False)  # p1 before p3
+        self.drag(view, self.row(view, "tab", 4), self.row(view, "tab", 1), after=False)  # p3 before p1
+        self.drag(view, self.row(view, "tab", 1), self.row(view, "tab", 4), after=True)  # p1 after the last p
+        self.assertEqual(
+            self.commands,
+            [
+                {"type": "move_tab", "tabId": 1, "index": 2},  # strip becomes mail p2 p1 p3
+                {"type": "move_tab", "tabId": 4, "index": 0},
+                {"type": "move_tab", "tabId": 1, "index": 3},  # after the last p: mail p2 p3 p1
+            ],
+        )
+
+    def test_tabs_can_only_be_dropped_among_their_own_containers_tabs(self):
+        view = self.make()
+        view.show(object(), INFO, DRAG_STATE)
+        plain = self.row(view, "tab", 1)
+        candidates = [view._meta[b]["id"] for b in view._drop_candidates(plain)]
+        self.assertEqual(candidates, [1, 3, 4])  # not the Personal container's mail tab (2)
+
+    def test_dropping_a_tab_where_it_already_is_sends_nothing(self):
+        view = self.make()
+        view.show(object(), INFO, DRAG_STATE)
+        self.drag(view, self.row(view, "tab", 3), self.row(view, "tab", 3), after=False)  # onto itself
+        self.drag(view, self.row(view, "tab", 3), self.row(view, "tab", 4), after=False)  # before its neighbour
+        self.drag(view, self.row(view, "tab", 4), self.row(view, "tab", 4), after=True)  # already last
+        self.assertEqual(self.commands, [])
+
+    def test_dragging_a_section_sends_the_new_order_and_shows_it_at_once(self):
+        view = self.make()
+        view.show(object(), INFO, DRAG_STATE)
+        def sections():  # the labels start with the container's colour bar and icon, so match inside
+            return [("Personal" if "Personal" in t else "Work") for t in self.row_texts(view) if "Personal" in t or "Work" in t]
+
+        self.assertEqual(sections(), ["Personal", "Work"])
+        self.drag(view, self.row(view, "section", "firefox-container-2"), self.row(view, "section", "firefox-container-1"),
+                  after=False)  # Work above Personal
+        self.assertEqual(self.commands, [{"type": "set_container_order",
+                                          "order": ["firefox-container-2", "firefox-container-1"]}])
+        self.assertEqual(sections(), ["Work", "Personal"])  # redrawn without waiting for the browser
+        self.assertEqual(view.state["containerOrder"], ["firefox-container-2", "firefox-container-1"])
+
+    def test_no_container_stays_first_and_cannot_be_dragged(self):
+        view = self.make()
+        view.show(object(), INFO, DRAG_STATE)
+        header = self.row(view, "section", "firefox-default")
+        self.assertFalse(view._meta[header]["draggable"])
+        press(header, 5, 5)
+        motion(header, 5, 60)
+        self.assertFalse(view._press["dragging"])  # it never turns into a drag
+        release(header, 5, 60)
+        candidates = [view._meta[b]["id"] for b in view._drop_candidates(self.row(view, "section", "firefox-container-1"))]
+        self.assertNotIn("firefox-default", candidates)  # nothing can be dropped above it either
+        self.assertEqual(self.commands, [])
+
+    def test_the_panel_stays_open_while_dragging_and_updates_wait_for_the_drop(self):
+        view = self.make()
+        conn = object()
+        view.show(conn, INFO, DRAG_STATE)
+        tab = self.row(view, "tab", 3)
+        press(tab, 5, 5)
+        motion(tab, 5, 60)
+        self.assertTrue(view.autohide.held)  # the pointer may leave the panel: it must not close under it
+        newer = {**DRAG_STATE, "windows": [{"id": 2, "tabs": DRAG_STATE["windows"][0]["tabs"][:2]}]}
+        view.show(conn, INFO, newer)  # the browser reports a change mid-drag...
+        self.assertIs(self.row(view, "tab", 3), tab)  # ...the rows under the pointer are not rebuilt
+        release(tab, 5, 60)
+        self.assertFalse(view.autohide.held)
+        self.assertEqual({m["id"] for m in view._meta.values() if m["kind"] == "tab"}, {1, 2})  # applied now
+
+    def test_a_stale_drag_lets_go_of_the_hold_when_updates_resume(self):
+        view = self.make()
+        conn = object()
+        view.show(conn, INFO, DRAG_STATE)
+        tab = self.row(view, "tab", 1)
+        press(tab, 5, 5)
+        motion(tab, 5, 60)  # a drag is under way and holds the panel open...
+        self.assertTrue(view.autohide.held)
+        view._press["t"] -= 60  # ...but its release never came
+        view.show(conn, INFO, DRAG_STATE)
+        self.assertIsNone(view._press)
+        self.assertFalse(view.autohide.held)  # the panel is not stuck open
+
+    def test_releasing_another_button_does_not_lose_the_press_in_progress(self):
+        view = self.make()
+        view.show(object(), INFO, DRAG_STATE)
+        moved, target = self.row(view, "tab", 1), self.row(view, "tab", 4)
+        view._point_at = lambda p, box, ev: p.update(target=target, after=False)
+        press(moved, 5, 5)
+        motion(moved, 5, 60)
+        release(moved, 5, 60, which=3)  # a right-click release mid-drag
+        self.assertIsNotNone(view._press)
+        self.assertTrue(view._press["dragging"])
+        self.assertTrue(view.autohide.held)
+        release(moved, 5, 60)  # the real end of the drag
+        self.assertEqual(self.commands, [{"type": "move_tab", "tabId": 1, "index": 2}])
+        self.assertFalse(view.autohide.held)
+
+    def test_only_real_containers_can_be_dragged(self):
+        state = {**DRAG_STATE, "windows": [{"id": 2, "tabs": DRAG_STATE["windows"][0]["tabs"]
+                                            + [{"id": 9, "index": 4, "title": "x", "cookieStoreId": "firefox-container-9"}]}]}
+        view = self.make()
+        view.show(object(), INFO, state)
+        draggable = {m["id"]: m["draggable"] for m in view._meta.values() if m["kind"] == "section"}
+        self.assertEqual(draggable, {"firefox-default": False, "firefox-container-1": True,
+                                     "firefox-container-2": True, "firefox-container-9": False})
+
+    def test_a_drop_after_the_state_changed_under_the_drag_does_nothing(self):
+        view = self.make()
+        view.show(object(), INFO, DRAG_STATE)
+        moved, target = self.row(view, "tab", 1), self.row(view, "tab", 4)
+        view._point_at = lambda p, box, ev: p.update(target=target, after=False)
+        press(moved, 5, 5)
+        motion(moved, 5, 60)
+        view.state = {}  # e.g. the browser went away meanwhile
+        release(moved, 5, 60)  # must not raise inside the signal handler
+        self.assertEqual(self.commands, [])
+        self.assertFalse(view.autohide.held)
+
+    def test_tabs_are_not_dragged_across_the_pinned_boundary(self):
+        tabs = [
+            {"id": 1, "index": 0, "title": "pinned", "cookieStoreId": "firefox-default", "pinned": True},
+            {"id": 2, "index": 1, "title": "n1", "cookieStoreId": "firefox-default"},
+            {"id": 3, "index": 2, "title": "n2", "cookieStoreId": "firefox-default"},
+        ]
+        view = self.make()
+        view.show(object(), INFO, {**DRAG_STATE, "windows": [{"id": 2, "tabs": tabs}]})
+        ids = lambda tab: [view._meta[b]["id"] for b in view._drop_candidates(self.row(view, "tab", tab))]  # noqa: E731
+        self.assertEqual(ids(2), [2, 3])  # a normal tab cannot be dropped among the pinned ones
+        self.assertEqual(ids(1), [1])  # nor a pinned one among the normal ones
+        self.drag(view, self.row(view, "tab", 3), self.row(view, "tab", 2), after=False)
+        self.assertEqual(self.commands, [{"type": "move_tab", "tabId": 3, "index": 1}])  # never index 0
+
+    def test_a_stale_press_cannot_block_updates_forever(self):
+        view = self.make()
+        conn = object()
+        view.show(conn, INFO, DRAG_STATE)
+        press(self.row(view, "tab", 1), 5, 5)  # the release never arrives
+        view._press["t"] -= 60
+        view.show(conn, INFO, {**DRAG_STATE, "windows": [{"id": 2, "tabs": []}]})
+        self.assertEqual([m for m in view._meta.values() if m["kind"] == "tab"], [])
+
+    def test_layout_dump_hook_reports_every_row(self):
+        import json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"SIDEPANEL_LAYOUT_DUMP": tmp + "/rows.json"}):
+            view = self.make()  # the hook is read once, when the panel starts
+            view.show(object(), INFO, DRAG_STATE)
+            view._dump_layout()
+            with open(tmp + "/rows.json") as f:
+                rows = json.load(f)
+        self.assertEqual([(r["kind"], r["id"]) for r in rows if r["kind"] == "section"],
+                         [("section", "firefox-default"), ("section", "firefox-container-1"), ("section", "firefox-container-2")])
+        self.assertEqual({r["id"] for r in rows if r["kind"] == "tab"}, {1, 2, 3, 4})
+        self.assertTrue(all({"x", "y", "w", "h", "group"} <= r.keys() for r in rows))
 
     # -- which monitor: fake layouts stand in for real hardware -------------------------------
 

@@ -14,6 +14,18 @@ let reconnectTimer = null;
 let pushTimer = null;
 let lastFocusedWindowId = null;
 
+// Firefox cannot reorder containers, so the user's order of the panel's container sections is kept
+// here (cookieStoreIds, per browser profile) and sent along with every snapshot.
+let containerOrder = [];
+let orderLoaded = false;
+
+async function loadOrder() {
+  if (orderLoaded) return;
+  const stored = await browser.storage.local.get("containerOrder");
+  containerOrder = Array.isArray(stored.containerOrder) ? stored.containerOrder : [];
+  orderLoaded = true;
+}
+
 function send(msg) {
   if (port) port.postMessage(msg);
 }
@@ -26,9 +38,11 @@ async function snapshot() {
   } catch (e) {
     // containers disabled (privacy.userContext.enabled = false)
   }
+  await loadOrder();
   return {
     type: "state",
     focusedWindowId: lastFocusedWindowId,
+    containerOrder,
     containers: containers.map((c) => ({
       cookieStoreId: c.cookieStoreId,
       name: c.name,
@@ -86,6 +100,18 @@ async function onCommand(msg) {
         break;
       case "panel_disconnected":
         panelUp = false;
+        break;
+      case "set_container_order":
+        containerOrder = (msg.order || []).filter((id) => typeof id === "string");
+        orderLoaded = true;
+        await browser.storage.local.set({ containerOrder });
+        push();
+        break;
+      case "move_tab":
+        // index is the tab's final position in its window; tabs.onMoved then triggers a snapshot
+        if (Number.isInteger(msg.tabId) && Number.isInteger(msg.index)) {
+          await browser.tabs.move(msg.tabId, { index: msg.index });
+        }
         break;
       case "activate_tab":
         await browser.tabs.update(msg.tabId, { active: true });

@@ -45,9 +45,16 @@ The add-on id `openbox-sidepanel@musqz.local` is fixed in the manifest and must 
 manifest (a test checks this). AMO rejects a version number it has already signed, so bump `VERSION`
 and `extension/manifest.json` together for every new signature (a test checks they agree).
 
-What the permissions are for: `nativeMessaging` (talk to the local helper), `tabs` (list and activate
-tabs), `contextualIdentities` and `cookies` (list containers; Firefox requires `cookies` for that API).
-The manifest declares that no data is collected, and nothing leaves your computer.
+What the permissions are for: `nativeMessaging` (talk to the local helper), `tabs` (list, activate and move
+tabs), `contextualIdentities` and `cookies` (list containers; Firefox requires `cookies` for that API), and
+`storage` (remember the order you gave your container sections, per browser profile). The manifest declares
+that no data is collected, and nothing leaves your computer.
+
+**A new version needs a new signature.** Version 0.3.0 added the `storage` permission and the reorder
+commands, so it must be signed again (the same command as above, and Mozilla rejects a version number it has
+already signed) and installed in each browser over the old one. Firefox may ask you to approve the new
+permission when it updates. Until then the old extension keeps working, but dragging in the panel does
+nothing in the browser.
 
 *Optional, later:* the **listed** channel publishes it on addons.mozilla.org: a manual review, then
 automatic updates for everyone. It is desktop-only (uncheck Android) and the description must explain that

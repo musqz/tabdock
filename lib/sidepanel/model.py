@@ -36,11 +36,49 @@ def group_tabs(state):
     groups = []
     if NO_CONTAINER in by_store:
         groups.append(({"cookieStoreId": NO_CONTAINER, "name": "No container"}, by_store.pop(NO_CONTAINER)))
-    for container in state.get("containers") or []:
+    for container in ordered_containers(state):
         groups.append((container, by_store.pop(container["cookieStoreId"], [])))
     for store, tabs in by_store.items():
         groups.append(({"cookieStoreId": store, "name": store}, tabs))
     return groups
+
+
+def ordered_containers(state):
+    """The containers in the user's own order.
+
+    Firefox cannot reorder containers, so the order lives in the extension (`containerOrder`, a
+    list of cookieStoreIds). Ids named there come first in that order (ids that no longer exist
+    are ignored); containers not named keep the browser's order after them.
+    """
+    containers = state.get("containers") or []
+    by_id = {c["cookieStoreId"]: c for c in containers}
+    first = [by_id[i] for i in dict.fromkeys(state.get("containerOrder") or []) if i in by_id]
+    named = {c["cookieStoreId"] for c in first}
+    return first + [c for c in containers if c["cookieStoreId"] not in named]
+
+
+def reordered(ids, moved, before=None):
+    """`ids` with `moved` placed just before `before`, or last when `before` is None."""
+    if before == moved:
+        return list(ids)
+    rest = [i for i in ids if i != moved]
+    at = rest.index(before) if before in rest else len(rest)
+    return rest[:at] + [moved] + rest[at:]
+
+
+def tab_move_index(group, moved_id, before_id=None):
+    """The `tabs.move` index for dropping a tab just before another, or last in its container group.
+
+    `group` is the container's tabs, each with its absolute window `index`. The index is the tab's
+    final position: the tab leaves its old place first, so moving forward lands one earlier.
+    Returns None when the drop would not change anything.
+    """
+    by_id = {t["id"]: t for t in group}
+    moved = by_id[moved_id]
+    target = by_id[before_id]["index"] if before_id is not None else max(t["index"] for t in group) + 1
+    if moved["index"] < target:
+        target -= 1
+    return None if target == moved["index"] else target
 
 
 ACCENTS = {
@@ -148,7 +186,7 @@ def format_state(info, state):
     head = f'== {browser_label(info)}' + (f' window {win["id"]}' if win else " (no windows)") + " =="
     lines = [head]
     for container, tabs in group_tabs(state):
-        lines.append(f'[{container["name"]}] ({len(tabs)})')
+        lines.append(f'[{container["name"]}] ({len(tabs)}) {container["cookieStoreId"]}')  # the id: for `order`
         for tab in tabs:
             lines.append(f' {"*" if tab.get("active") else " "} {tab_label(tab)} [{tab["id"]}]')
     return "\n".join(lines)

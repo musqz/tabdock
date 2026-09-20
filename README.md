@@ -26,6 +26,12 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost
   you are looking at even when window borders are hidden. Below it, one collapsible section per
   container (coloured bar, icon, name, tab count) with that container's tabs; the active tab
   is highlighted. Click a tab to activate it in the browser.
+- **Reorder by dragging.** Drag a container section header up or down to put your containers in your own
+  order; the order is remembered per browser profile (Firefox cannot reorder containers itself, so the order
+  lives in the panel's extension and does not change Firefox's own menus). "No container" always stays first.
+  Drag a tab up or down within its container to move it in the real tab strip. A tab only moves within its own
+  container: dropping it well outside that group cancels the drag, and a drag is never also a click. The panel
+  stays open for the whole drag, even if the pointer leaves it, and an orange line shows where the row will land.
 - **Follows the active window:** focus another browser and the panel switches to it. With
   `follow = "last"` (default) the panel keeps showing the last browser while you use other apps,
   and clicking a tab brings that browser forward; `follow = "hide"` removes the panel instead.

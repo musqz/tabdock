@@ -202,6 +202,36 @@ class AutohideTest(unittest.TestCase):
         self.assertEqual(self.applied[-1], True)  # pointer still inside: stays open
 
 
+class AutohideHoldTest(unittest.TestCase):
+    def setUp(self):
+        self.clock = FakeClock()
+        self.applied = []
+        self.hide = Autohide(self.applied.append, self.clock.schedule, self.clock.cancel, open_ms=100, close_ms=400)
+        self.hide.enter()
+        self.clock.advance(100)  # open, pointer inside
+
+    def test_a_drag_keeps_the_panel_open_wherever_the_pointer_goes(self):
+        self.hide.set_held(True)
+        self.hide.leave()  # the pointer left the panel mid-drag
+        self.clock.advance(5000)
+        self.assertEqual(self.applied, [True])  # never closed
+
+    def test_it_closes_after_the_drop_unless_the_pointer_is_back(self):
+        self.hide.set_held(True)
+        self.hide.leave()
+        self.hide.set_held(False)  # dropped outside the panel
+        self.clock.advance(399)
+        self.assertEqual(self.applied, [True])
+        self.clock.advance(1)
+        self.assertEqual(self.applied, [True, False])
+
+    def test_dropping_inside_keeps_it_open(self):
+        self.hide.set_held(True)
+        self.hide.set_held(False)  # the pointer never left
+        self.clock.advance(5000)
+        self.assertEqual(self.applied, [True])
+
+
 class MatchTest(unittest.TestCase):
     def test_ancestors_of_self_include_parent(self):
         chain = ancestors(os.getpid())

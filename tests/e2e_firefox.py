@@ -55,6 +55,34 @@ class Output:
             return len(self.text)
 
 
+def last_snapshot(text):
+    """The last snapshot in the panel's console output (from its final '== ' header)."""
+    return text[text.rfind("== "):]
+
+
+def tab_order(snapshot):
+    """Tab ids in the order the console prints them (tab lines end with ' [id]')."""
+    return [int(i) for i in re.findall(r"\[(\d+)\]$", snapshot, re.M)]
+
+
+def sections(snapshot):
+    """[(name, cookieStoreId)] in display order; section lines read '[name] (count) cookieStoreId'."""
+    return re.findall(r"^\[(.+?)\] \(\d+\) (\S+)$", snapshot, re.M)
+
+
+def section_order(snapshot):
+    return [name for name, _ in sections(snapshot)]
+
+
+def eventually(fn, what, timeout=TIMEOUT):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if fn():
+            return
+        time.sleep(0.1)
+    raise AssertionError(f"timed out waiting for: {what}")
+
+
 class Marionette:
     def __init__(self, port):
         deadline = time.monotonic() + TIMEOUT
@@ -176,13 +204,44 @@ def main():
         out.wait_for(rf"\* New Tab \[{blank_id}\]", since=mark)
         print("OK panel->browser: activate_tab switched the active tab")
 
+        # -- reordering, in the real browser: tabs.move and the stored container order --------------
+        for title in ("tab-c", "tab-d"):
+            handle = m.call("WebDriver:NewWindow", {"type": "tab", "focus": True})["handle"]
+            m.call("WebDriver:SwitchToWindow", {"handle": handle})
+            m.call("WebDriver:Navigate", {"url": f"data:text/html,<title>{title}</title>"})
+        eventually(lambda: "tab-d [" in out.text, "the extra tabs")
+        time.sleep(0.5)
+        before = tab_order(last_snapshot(out.text))
+        assert len(before) >= 4, before
+        last = before[-1]  # whichever tab this browser puts last (Zen opens new tabs at the front)
+
+        panel.stdin.write(f"move {last} 0\n")
+        panel.stdin.flush()
+        eventually(lambda: tab_order(last_snapshot(out.text))[0] == last, "the last tab moved to the front")
+        assert tab_order(last_snapshot(out.text)) == [last] + before[:-1], tab_order(last_snapshot(out.text))
+        print("OK move_tab: tabs.move put the tab first in the real tab strip")
+
+        # The containers this browser really has (FireDragon and Waterfox ship other defaults than Firefox).
+        original = sections(last_snapshot(out.text))
+        containers = [s for s in original if s[1] != "firefox-default"]
+        assert len(containers) >= 2, f"need two containers to reorder, got {original}"
+        first_id, last_id = containers[0][1], containers[-1][1]
+        wanted_ids = [last_id, first_id] + [i for _, i in containers if i not in (first_id, last_id)]
+        by_id = dict((i, n) for n, i in original)
+        wanted = [n for n, i in original if i == "firefox-default"] + [by_id[i] for i in wanted_ids]
+        panel.stdin.write(f"order {last_id},{first_id}\n")  # the last container first, then the first
+        panel.stdin.flush()
+        eventually(lambda: section_order(last_snapshot(out.text)) == wanted, f"the container order {wanted}")
+        print(f"OK set_container_order: {by_id[last_id]} now precedes {by_id[first_id]}, stored by the extension")
+
         panel.terminate()
         panel.wait(timeout=TIMEOUT)
         panel, out = start_panel(env)
         procs.append(panel)
         out.wait_for(r"== \S+ .* window \d+ ==")
         out.wait_for(r"marionette-tab \[\d+\]")
-        print("OK panel restart: relay reconnected and extension resynced")
+        eventually(lambda: section_order(last_snapshot(out.text)) == wanted, "the order after a panel restart")
+        print("OK panel restart: relay reconnected, extension resynced, and the container order survived")
         print("ALL OK")
         return 0
     finally:

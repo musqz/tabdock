@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Reorder by dragging (version 0.3.0). Drag a container section to put your containers in your own order, kept per
+  browser profile by the extension (`storage`, since Firefox cannot reorder containers) and shown at once; drag a tab
+  within its container to move it in the real tab strip (`tabs.move`, with the exact final-index arithmetic covered by
+  a simulation of what the API does). "No container" stays first; a tab dropped outside its own container cancels;
+  a drag is never also a click (clicks now fire on release); the panel stays open for the whole drag and an orange
+  line marks the drop position; browser updates that arrive mid-drag wait until the drop. Verified with unit tests,
+  the real-browser test on Firefox, Zen, FireDragon, Waterfox and LibreWolf (`tabs.move` and the stored order, in
+  each browser's own default containers) and a real pointer drag under Openbox (`tests/e2e_x11.py`). The extension
+  changed, so this needs a new signing: see docs/RELEASE.md.
+
 - `monitor = "outer"` is the new default: the panel sits on the monitor that owns the screen's outer edge for
   `side` (leftmost for left, rightmost for right), so a pinned panel can reserve space and tiling respects it in
   any monitor layout, including a reversed one. `"primary"` and output names still work; a name that is not

@@ -38,7 +38,8 @@ class ManifestTest(unittest.TestCase):
 
     def test_permissions_stay_minimal(self):
         self.assertEqual(
-            sorted(self.manifest["permissions"]), ["contextualIdentities", "cookies", "nativeMessaging", "tabs"]
+            sorted(self.manifest["permissions"]),
+            ["contextualIdentities", "cookies", "nativeMessaging", "storage", "tabs"],  # storage: the container order
         )
 
     def test_amo_requirements(self):

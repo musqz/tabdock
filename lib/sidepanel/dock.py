@@ -10,7 +10,10 @@ The panel is only ever resized while unmapped and then shown or hidden. Resizing
 GTK window while its content appears makes GTK fight the size request (it snaps back to
 the content's minimum width).
 """
+import json
+import os
 import sys
+import time
 
 import gi
 
@@ -21,7 +24,17 @@ from gi.repository import Gdk, GdkX11, GLib, Gtk, Pango  # noqa: E402,F401
 
 from . import geometry  # noqa: E402
 from .autohide import Autohide  # noqa: E402
-from .model import DEFAULT_ACCENT, accent, browser_label, focused_window, group_tabs, tab_label  # noqa: E402
+from .model import (  # noqa: E402
+    DEFAULT_ACCENT,
+    NO_CONTAINER,
+    accent,
+    browser_label,
+    focused_window,
+    group_tabs,
+    reordered,
+    tab_label,
+    tab_move_index,
+)
 
 CSS = """
 .sp-strip {{ background-color: {accent}; }}
@@ -43,6 +56,9 @@ button.sp-btn.sp-pin:hover {{ border-color: #7d8594; }}
 button.sp-btn.sp-pin:checked {{ background-color: {accent}; border-color: {accent}; color: #1b1d23; font-weight: bold; }}
 button.sp-btn.sp-quit {{ margin-left: 6px; }}
 button.sp-btn.sp-quit:hover {{ color: #ff6b6b; }}
+.sp-row.dragging {{ opacity: 0.45; }}
+.sp-row.drop-before {{ box-shadow: inset 0 2px 0 0 {accent}; }}
+.sp-row.drop-after {{ box-shadow: inset 0 -2px 0 0 {accent}; }}
 """
 
 # Firefox container icon names -> a glyph (best effort; unknown names fall back to a dot)
@@ -53,15 +69,26 @@ ICONS = {
 }
 
 
+DRAG_THRESHOLD = 6  # px the pointer must travel with the button down before a click becomes a drag
+PRESS_STALE_S = 30  # a press with no release this long is forgotten, so updates cannot stay blocked
+
+
 def _schedule(ms, fn):
     return GLib.timeout_add(ms, lambda: fn() or False)
 
 
 class DockView:
-    def __init__(self, cfg, on_activate, on_quit, xconn=None):
+    def __init__(self, cfg, on_activate, on_quit, xconn=None, on_command=None):
         self.cfg = dict(cfg)
         self.on_activate = on_activate
+        self.on_command = on_command  # on_command(conn, message): what a drop asks the browser to do
         self.x = xconn
+        self._meta = {}  # row widget -> what it stands for (kind, id, group, click handler, draggable)
+        self._row_order = []  # row widgets in display order
+        self._press = None  # the button-1 press in progress: {box, x, y, t, dragging, target, after}
+        self._deferred = None  # a state update that arrived mid-drag, applied after the drop
+        self._dump_path = os.environ.get("SIDEPANEL_LAYOUT_DUMP")  # a test hook: off unless set at start
+        self._dump_pending = False
         self.conn = None
         self.info = {}
         self.state = {}
@@ -128,6 +155,8 @@ class DockView:
         for signal in ("monitors-changed", "size-changed"):  # docking, xrandr: follow the new layout
             self._screen_handlers.append((screen, screen.connect(signal, self._on_monitors_changed)))
         self.win.connect("destroy", self._teardown)
+        if self._dump_path:  # test hook, see _dump_layout: costs nothing in normal use
+            self.win.connect("size-allocate", lambda *_a: self._schedule_dump())
 
     # -- view API used by app.Panel ------------------------------------------------
 
@@ -137,6 +166,12 @@ class DockView:
         return {w.get_window().get_xid() for w in (self.strip, self.win) if w.get_window() is not None}
 
     def show(self, conn, info, state):
+        if self._press is not None and not self._pressing():
+            self._end_press()  # a press whose release never came: let go of the hold and the drag marks
+        if self._pressing():
+            self._deferred = (conn, info, state)  # rows are being pressed or dragged: redraw after the drop
+            return
+        self._deferred = None
         self.conn = conn
         self.info = info
         self.state = state
@@ -150,10 +185,13 @@ class DockView:
             self._rebuild()
 
     def clear(self):
+        self._end_press()
+        self._deferred = None
         self.conn = None
         self.info = {}
         self.state = {}
         self._last = None
+        self._meta, self._row_order = {}, []
         self.browser_name.set_text("")
         self._set_accent(DEFAULT_ACCENT)
         self._replace_rows([self._label("Waiting for a browser with the Sidepanel extension", "sp-empty", wrap=True)])
@@ -345,16 +383,189 @@ class DockView:
         label.get_style_context().add_class(css_class)
         return label
 
-    def _clickable(self, child, handler, active=False):
-        # hover/active styling lives on the EventBox: a windowless label gets no prelight
+    def _row(self, child, kind, ident, group, on_click, active=False, draggable=True, pinned=False):
+        """A row. Hover/active styling lives on the EventBox: a windowless label gets no prelight.
+
+        A click and a drag share one press, so they never both happen: the click fires on release,
+        and moving DRAG_THRESHOLD px with the button down turns the press into a drag instead.
+        """
         box = Gtk.EventBox()
-        box.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
-        box.connect("button-press-event", lambda _b, ev: handler(ev) if ev.button == 1 else None)
+        box.add_events(
+            Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.BUTTON1_MOTION_MASK
+        )
+        box.connect("button-press-event", self._on_press)
+        box.connect("motion-notify-event", self._on_motion)
+        box.connect("button-release-event", self._on_release)
         box.get_style_context().add_class("sp-row")
         if active:
             box.get_style_context().add_class("active")
         box.add(child)
+        self._meta[box] = {
+            "kind": kind, "id": ident, "group": group, "click": on_click, "draggable": draggable, "pinned": pinned,
+        }
+        self._row_order.append(box)
         return box
+
+    # -- pressing, clicking and dragging rows ---------------------------------------
+
+    def _pressing(self):
+        p = self._press
+        return p is not None and time.monotonic() - p["t"] < PRESS_STALE_S
+
+    def _end_press(self):
+        p, self._press = self._press, None
+        if p is not None and p["dragging"]:
+            self._clear_marks(p)
+            self.autohide.set_held(False)
+
+    def _on_press(self, box, event):
+        if event.button == 1 and box in self._meta:
+            self._press = {"box": box, "x": event.x_root, "y": event.y_root, "t": time.monotonic(),
+                           "dragging": False, "target": None, "after": False}
+        return False
+
+    def _on_motion(self, box, event):
+        p = self._press
+        if p is None or p["box"] is not box or not self._meta.get(box, {}).get("draggable"):
+            return False
+        if not p["dragging"]:
+            if max(abs(event.x_root - p["x"]), abs(event.y_root - p["y"])) < DRAG_THRESHOLD:
+                return False
+            p["dragging"] = True
+            self.autohide.set_held(True)  # the pointer may leave the panel mid-drag: stay open
+            box.get_style_context().add_class("dragging")
+        self._point_at(p, box, event)
+        return True
+
+    def _on_release(self, box, event):
+        p = self._press
+        if event.button != 1 or p is None or p["box"] is not box:
+            return False  # another button, or not our press: a button-1 press in progress carries on
+        self._press = None
+        if p["dragging"]:
+            self._drop(p)
+        elif box in self._meta:
+            self._meta[box]["click"]()
+        d, self._deferred = self._deferred, None
+        if d is not None:
+            self.show(*d)  # what the browser reported while the rows were being dragged
+        return True
+
+    def _drop_candidates(self, box):
+        """The rows the dragged one can be dropped between: same kind; for tabs the same container and the
+        same pinned-ness, because Firefox keeps pinned tabs in front and clamps a move across that line."""
+        meta = self._meta[box]
+        return [
+            b for b in self._row_order
+            if self._meta[b]["draggable"]
+            and self._meta[b]["kind"] == meta["kind"]
+            and (
+                meta["kind"] == "section"
+                or (self._meta[b]["group"] == meta["group"] and self._meta[b]["pinned"] == meta["pinned"])
+            )
+        ]
+
+    def _point_at(self, p, box, event):
+        """Mark where a drop would land: before the first candidate whose middle is below the pointer."""
+        pos = box.translate_coordinates(self.list, int(event.x), int(event.y))
+        candidates = self._drop_candidates(box)
+        if pos is None or not candidates:
+            return
+        if self._meta[box]["kind"] == "tab":
+            # A tab only moves within its own container: pointing well outside that group's rows
+            # (one row of slack) cancels the drop instead of snapping the tab to the group's end.
+            rects = [c.get_allocation() for c in candidates]
+            slack = max(a.height for a in rects)
+            if pos[1] < min(a.y for a in rects) - slack or pos[1] > max(a.y + a.height for a in rects) + slack:
+                if p["target"] is not None:
+                    self._unmark(p["target"])
+                p["target"] = None
+                return
+        target, after = candidates[-1], True
+        for c in candidates:
+            a = c.get_allocation()
+            if pos[1] < a.y + a.height / 2:
+                target, after = c, False
+                break
+        old = p["target"]
+        if old is not None and (old is not target or p["after"] != after):
+            self._unmark(old)
+        p["target"], p["after"] = target, after
+        ctx = target.get_style_context()
+        ctx.remove_class("drop-before" if after else "drop-after")
+        ctx.add_class("drop-after" if after else "drop-before")
+
+    def _unmark(self, row):
+        ctx = row.get_style_context()
+        ctx.remove_class("drop-before")
+        ctx.remove_class("drop-after")
+
+    def _clear_marks(self, p):
+        p["box"].get_style_context().remove_class("dragging")
+        if p["target"] is not None:
+            self._unmark(p["target"])
+
+    def _command(self, message):
+        if self.on_command is not None and self.conn is not None:
+            self.on_command(self.conn, message)
+
+    def _drop(self, p):
+        box, target = p["box"], p["target"]
+        self._clear_marks(p)
+        self.autohide.set_held(False)
+        if target is None or box not in self._meta or target not in self._meta:
+            return
+        candidates = self._drop_candidates(box)
+        at = candidates.index(target) + (1 if p["after"] else 0)
+        before = self._meta[candidates[at]]["id"] if at < len(candidates) else None  # lands in front of this
+        meta = self._meta[box]
+        if meta["kind"] == "section":
+            ids = [self._meta[b]["id"] for b in candidates]
+            order = reordered(ids, meta["id"], before)
+            if order != ids:
+                self._command({"type": "set_container_order", "order": order})
+                self.state = {**self.state, "containerOrder": order}  # show it at once; the browser confirms
+                self._last = None
+                self._rebuild()
+        else:
+            # the tabs it can land among: same container and same pinned-ness (see _drop_candidates)
+            group = next((tabs for c, tabs in group_tabs(self.state) if c["cookieStoreId"] == meta["group"]), [])
+            group = [t for t in group if bool(t.get("pinned")) == meta["pinned"]]
+            if meta["id"] not in {t["id"] for t in group}:
+                return  # the state changed under the drag (browser switched, tab closed): nothing to do
+            index = tab_move_index(group, meta["id"], before)
+            if index is not None:
+                self._command({"type": "move_tab", "tabId": meta["id"], "index": index})
+
+    # -- test hook ---------------------------------------------------------------------
+
+    def _schedule_dump(self):
+        if self._dump_path and not self._dump_pending:
+            self._dump_pending = True
+            GLib.idle_add(self._dump_layout)
+
+    def _dump_layout(self):
+        """SIDEPANEL_LAYOUT_DUMP=<file> writes where every row is, in screen pixels, so an end-to-end
+        test can drag with a real pointer without guessing coordinates."""
+        self._dump_pending = False
+        path = self._dump_path
+        if not path:
+            return False
+        wx, wy = self.win.get_position()
+        root = self.win.get_child()
+        rows = []
+        for box in self._row_order:
+            meta = self._meta.get(box)
+            if meta is None:
+                continue
+            a = box.get_allocation()
+            pos = box.translate_coordinates(root, 0, 0) or (a.x, a.y)  # unmapped: the list-relative fallback
+            rows.append({"kind": meta["kind"], "id": meta["id"], "group": meta["group"],
+                         "x": wx + pos[0], "y": wy + pos[1], "w": a.width, "h": a.height})
+        with open(path + ".tmp", "w") as f:
+            json.dump(rows, f)
+        os.replace(path + ".tmp", path)
+        return False
 
     def _set_accent(self, colour):
         if colour == self._accent:
@@ -372,8 +583,10 @@ class DockView:
             self.list.pack_start(row, False, False, 0)
         self.list.show_all()
         GLib.idle_add(lambda: adj.set_value(value) or False)  # keep the scroll position across refreshes
+        self._schedule_dump()
 
     def _rebuild(self):
+        self._meta, self._row_order = {}, []
         window = focused_window(self.state)
         if window is None:
             self._replace_rows([self._label("No browser windows", "sp-empty", wrap=True)])
@@ -385,7 +598,7 @@ class DockView:
             folded = key in self.collapsed
             rows.append(self._section(container, tabs, key, folded))
             if not folded:
-                rows.extend(self._tab_row(tab, window["id"]) for tab in tabs)
+                rows.extend(self._tab_row(tab, window["id"], container["cookieStoreId"]) for tab in tabs)
         self._replace_rows(rows)
 
     def _section(self, container, tabs, key, folded):
@@ -399,16 +612,24 @@ class DockView:
             + (f'  <span alpha="50%">{arrow}</span>' if tabs else "")
         )
         label = self._label(markup, "sp-section", markup=True)
-        return self._clickable(label, lambda _ev: self._toggle(key)) if tabs else label
+        cid = container["cookieStoreId"]
+        # "No container" stays first, and a store the browser does not list as a container (private
+        # windows, say) cannot be ordered: the next snapshot would put it straight back
+        known = {c["cookieStoreId"] for c in self.state.get("containers") or []}
+        return self._row(
+            label, "section", cid, None, (lambda: self._toggle(key)) if tabs else (lambda: None),
+            draggable=cid != NO_CONTAINER and cid in known,
+        )
 
     def _toggle(self, key):
         self.collapsed ^= {key}
         self._last = None
         self._rebuild()
 
-    def _tab_row(self, tab, window_id):
+    def _tab_row(self, tab, window_id, group):
         label = self._label(tab_label(tab), "sp-tab")
         label.set_tooltip_text("\n".join(filter(None, (tab.get("title"), tab.get("url")))))
-        return self._clickable(
-            label, lambda _ev: self.on_activate(self.conn, tab["id"], window_id), active=bool(tab.get("active"))
+        return self._row(
+            label, "tab", tab["id"], group, lambda: self.on_activate(self.conn, tab["id"], window_id),
+            active=bool(tab.get("active")), pinned=bool(tab.get("pinned")),
         )

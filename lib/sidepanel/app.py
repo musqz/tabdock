@@ -87,13 +87,24 @@ class Panel:
         if cfg["follow"] == "last":
             self.view.set_hidden(False)
 
+    def command(self, conn, message):
+        """Anything else the panel asks the browser to do (reordering, ...)."""
+        conn.send(message)
+
     def on_stdin_line(self, line):
-        """--debug console: 'activate <tabId>' drives the reverse path without a GUI."""
+        """--debug console, to drive the reverse path without a GUI:
+        'activate <tabId>', 'move <tabId> <index>', 'order <cookieStoreId>,<cookieStoreId>,...'."""
         parts = line.split()
-        if len(parts) == 2 and parts[0] == "activate" and parts[1].isdigit() and self.current in self.states:
+        if not parts or self.current not in self.states:
+            return
+        if len(parts) == 2 and parts[0] == "activate" and parts[1].isdigit():
             window_id = window_of_tab(self.states[self.current], int(parts[1]))
             if window_id is not None:
                 self.activate_tab(self.current, int(parts[1]), window_id)
+        elif len(parts) == 3 and parts[0] == "move" and parts[1].isdigit() and parts[2].isdigit():
+            self.command(self.current, {"type": "move_tab", "tabId": int(parts[1]), "index": int(parts[2])})
+        elif len(parts) == 2 and parts[0] == "order":
+            self.command(self.current, {"type": "set_container_order", "order": parts[1].split(",")})
 
     def _render(self):
         if self.current in self.states:
@@ -168,7 +179,7 @@ def main(argv=None):
             return 1
         from .dock import DockView
 
-        panel.view = DockView(cfg, panel.activate_tab, loop.quit, x)
+        panel.view = DockView(cfg, panel.activate_tab, loop.quit, x, on_command=panel.command)
 
     if x is not None:
         x.watch_active_window(panel.follow, loop.quit)

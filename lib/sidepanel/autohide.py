@@ -17,6 +17,7 @@ class Autohide:
         self.expanded = False
         self.pinned = False
         self.hovering = False
+        self.held = False  # a drag is in progress: stay open wherever the pointer goes
         self._timer = None
 
     def enter(self):
@@ -31,8 +32,12 @@ class Autohide:
         self.pinned = pinned
         self._update()
 
+    def set_held(self, held):
+        self.held = held
+        self._update()
+
     def _want(self):
-        return self.pinned or self.hovering
+        return self.pinned or self.hovering or self.held
 
     def _update(self):
         if self._timer is not None:
