@@ -588,6 +588,34 @@ class DockViewTest(unittest.TestCase):
             self.pump(lambda: len(view._refused) == 5 and not view._pending, "the refusals")  # '' and None: no request at all
         download.assert_not_called()
 
+    def test_hovering_an_empty_icon_slot_says_why_there_is_no_icon(self):
+        view = self.make(icons=True)
+        why = lambda tab_id: self.tab_image(view, tab_id).get_tooltip_text()  # noqa: E731
+        urls = (self.ICON_URL, "chrome://branding/content/icon32.png", None)
+        with mock.patch("sidepanel.favicons.download", return_value=favicons.Refused("the site answered 404")) as download:
+            view.show([(object(), INFO, self.icon_state(*urls))])
+            self.pump(lambda: not view._pending and len(view._refused) == 2, "the answers")
+            self.assertEqual(why(1), "No icon: the site answered 404")
+            self.assertIn("not an https", why(2))  # never fetched at all, and it says so
+            self.assertIn("reported no icon address", why(3))
+            download.assert_called_once()
+            view._rebuild()  # a redraw keeps the explanations
+            self.assertEqual(why(1), "No icon: the site answered 404")
+
+    def test_an_icon_that_could_not_be_downloaded_says_it_will_be_tried_again(self):
+        view = self.make(icons=True)
+        with mock.patch("sidepanel.favicons.download", return_value=None):
+            view.show([(object(), INFO, self.icon_state(self.ICON_URL))])
+            self.pump(lambda: view._failed and not view._pending, "the failure")
+        self.assertIn("could not be downloaded", self.tab_image(view, 1).get_tooltip_text())
+        self.assertIn("tried again later", self.tab_image(view, 1).get_tooltip_text())
+
+    def test_a_tab_with_an_icon_has_no_explanation(self):
+        view = self.make(icons=True)
+        view.show([(object(), INFO, self.icon_state(self.data_icon()))])
+        self.pump(lambda: self.has_icon(view, 1), "the icon")
+        self.assertIsNone(self.tab_image(view, 1).get_tooltip_text())
+
     def test_the_icons_button_switches_icons_on_and_off(self):
         from test_favicons import png
 

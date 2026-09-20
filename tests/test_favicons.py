@@ -21,8 +21,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from sidepanel import favicons  # noqa: E402
 
-REFUSED = favicons.REFUSED
-
 
 def chunk(kind, body):
     return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
@@ -37,6 +35,10 @@ def png(w=1, h=1, declared=None, extra=()):
             + b"".join(chunk(kind, body) for kind, body in extra)
             + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
 
+
+SVG = (b'<?xml version="1.0"?>\n<!-- an icon -->\n<svg xmlns="http://www.w3.org/2000/svg" width="248" height="248" '
+       b'viewBox="0 0 248 248"><defs><linearGradient id="g"><stop offset="0" stop-color="#d97757"/></linearGradient></defs>'
+       b'<circle cx="124" cy="124" r="100" fill="url(#g)"/></svg>')
 
 GIF = base64.b64decode("R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==")  # 1x1
 
@@ -74,8 +76,54 @@ class PolicyTest(unittest.TestCase):
                 self.assertFalse(favicons.is_public(address))
 
     def test_a_real_image_is_recognised_by_its_own_header(self):
-        for data, kind in ((png(), "png"), (GIF, "gif"), (ico_with(png()), "ico"), (ico_with(dib()), "ico")):
+        for data, kind in ((png(), "png"), (GIF, "gif"), (ico_with(png()), "ico"), (ico_with(dib()), "ico"), (SVG, "svg")):
             self.assertEqual(favicons.checked(data), (kind, data))
+
+    def test_a_plain_svg_is_accepted_whatever_the_way_it_starts(self):
+        for start in (b"", b"\xef\xbb\xbf", b"  \n", b'<?xml version="1.0" encoding="UTF-8"?>\n',
+                      b'<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n'):
+            with self.subTest(start=start):
+                data = start + b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d="M0 0h8v8z"/></svg>'
+                self.assertEqual(favicons.checked(data), ("svg", data))
+        inside = b'<svg xmlns="http://www.w3.org/2000/svg"><defs><path id="p" d="M0 0h8v8z"/></defs><use href="#p"/></svg>'
+        self.assertEqual(favicons.checked(inside), ("svg", inside))  # a reference to a part of itself is fine
+
+    def test_an_svg_that_reaches_outside_itself_or_runs_anything_is_refused(self):
+        wrap = b'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">%s</svg>'
+        for name, body in (
+            ("entity", b'<!DOCTYPE svg [<!ENTITY a "aaaa">]><g/>'), ("script", b"<script>alert(1)</script>"),
+            ("event handler", b'<g onload="x()"/>'), ("foreign", b"<foreignObject><p>x</p></foreignObject>"),
+            ("image", b'<image href="data:image/png;base64,AAAA"/>'), ("link", b'<a href="#x"><g/></a>'),
+            ("external use", b'<use xlink:href="https://evil.test/a.svg#p"/>'), ("file", b'<use href="file:///etc/passwd"/>'),
+            ("relative file", b'<use href="other.svg#p"/>'), ("css url", b'<g style="fill:url(https://evil.test/x)"/>'),
+            ("css url with a space", b'<g fill="url( https://evil.test/x)"/>'), ("iframe", b"<iframe src='x'/>"),
+        ):
+            with self.subTest(name):
+                self.assertIsNone(favicons.checked(wrap % body))
+        bomb = b'<!DOCTYPE svg [<!ENTITY a "aaaa"><!ENTITY b "&a;&a;&a;&a;">]><svg xmlns="http://www.w3.org/2000/svg">&b;</svg>'
+        self.assertIsNone(favicons.checked(bomb))  # an entity expansion bomb
+
+    def test_only_a_real_svg_start_makes_it_an_svg(self):
+        for data in (b"<html><svg></svg></html>", b"junk<svg></svg>", b"<svgfoo/>", b"<?xml version='1.0'?><html/>",
+                     b"<!DOCTYPE svg [<!ENTITY a 'b'>]><svg/>"):
+            with self.subTest(data=data):
+                self.assertIsNone(favicons.checked(data))
+
+    def test_an_ico_whose_directory_disagrees_with_the_bitmaps_in_it_is_made_truthful(self):
+        # the directory says 48 x 48, the bitmap says 16 x 16: browsers cope, the strict decoder refuses (npo.nl)
+        kind, data = favicons.checked(ico_with(dib(16, 16), width=48, height=48))
+        self.assertEqual(kind, "ico")
+        self.assertEqual((data[6], data[7]), (16, 16))
+        self.assertEqual(favicons.checked(ico_with(png(16, 16), 16, 16))[1], ico_with(png(16, 16), 16, 16))  # a PNG inside: as is
+
+    def test_a_refusal_says_why(self):
+        why = lambda url: favicons.get(url).why  # noqa: E731
+        self.assertIn("not an https", why("chrome://branding/content/icon32.png"))
+        self.assertIn("no icon address", why(None))
+        self.assertIn("not a PNG, ICO, GIF or SVG", why("data:text/html,<b>x</b>"))
+        self.assertIn("not self-contained", why("data:image/svg+xml," + "%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cscript/%3E%3C/svg%3E"))
+        with mock.patch.object(favicons, "download", return_value=favicons.Refused("the site answered 404")):
+            self.assertEqual(why("https://example.com/x.png"), "the site answered 404")
 
     def test_anything_else_is_refused(self):
         svg = b'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><script>1</script></svg>'
@@ -130,19 +178,19 @@ class PolicyTest(unittest.TestCase):
                     "http://example.com/favicon.ico", "chrome://branding/content/icon32.png",
                     "resource://x/y.png", "about:newtab", "file:///etc/passwd", "ftp://example.com/x.png", "", None, 5):
             with self.subTest(url=url):
-                self.assertIs(favicons.get(url), REFUSED)  # never an icon: no need to ask again
+                self.assertIsInstance(favicons.get(url), favicons.Refused)  # never an icon: no need to ask again
 
     def test_a_downloaded_page_that_is_not_an_image_is_refused(self):
         with mock.patch.object(favicons, "download", return_value=b"<html>sign in</html>"):
-            self.assertIs(favicons.get("https://example.com/favicon.ico"), REFUSED)
+            self.assertIsInstance(favicons.get("https://example.com/favicon.ico"), favicons.Refused)
         with mock.patch.object(favicons, "download", return_value=png()):
             self.assertEqual(favicons.get("https://example.com/favicon.ico"), png())
 
     def test_a_download_that_did_not_work_is_told_apart_from_one_that_never_will(self):
         with mock.patch.object(favicons, "download", return_value=None):
             self.assertIsNone(favicons.get("https://example.com/favicon.ico"))  # try again later
-        with mock.patch.object(favicons, "download", return_value=REFUSED):
-            self.assertIs(favicons.get("https://example.com/favicon.ico"), REFUSED)  # never again
+        with mock.patch.object(favicons, "download", return_value=favicons.Refused("a 404")):
+            self.assertIsInstance(favicons.get("https://example.com/favicon.ico"), favicons.Refused)  # never again
 
     def test_the_urls_and_addresses_that_must_never_be_fetched(self):
         # nothing here may even try to connect
@@ -153,13 +201,13 @@ class PolicyTest(unittest.TestCase):
                         "https://192.168.1.1/x.png", "https://169.254.169.254/latest/meta-data", "https://10.0.0.1/x.png",
                         "https://localhost/x.png"):
                 with self.subTest(url=url):
-                    self.assertIs(favicons.download(url), REFUSED)
+                    self.assertIsInstance(favicons.download(url), favicons.Refused)
 
     def test_a_name_with_any_private_address_is_refused_even_if_others_are_public(self):
         answers = [(0, 0, 0, "", ("93.184.216.34", 443)), (0, 0, 0, "", ("10.0.0.5", 443))]  # a rebinding-style answer
         with mock.patch.object(favicons, "_Pinned", side_effect=AssertionError("connected")):
-            self.assertIs(favicons.download("https://example.com/x.png", resolve=lambda *a, **k: answers), REFUSED)
-            self.assertIs(favicons.download("https://example.com/x.png", resolve=lambda *a, **k: []), REFUSED)
+            self.assertIsInstance(favicons.download("https://example.com/x.png", resolve=lambda *a, **k: answers), favicons.Refused)
+            self.assertIsInstance(favicons.download("https://example.com/x.png", resolve=lambda *a, **k: []), favicons.Refused)
             # no answer at all (no network, no such name) is not the site's fault: try again later
             self.assertIsNone(favicons.download("https://example.com/x.png", resolve=mock.Mock(side_effect=OSError)))
 
@@ -278,20 +326,26 @@ class DownloadTest(unittest.TestCase):
 
     def test_redirects_are_followed_but_only_a_few(self):
         self.assertEqual(self.fetch("/go"), png())
-        self.assertIs(self.fetch("/loop"), REFUSED)
+        self.assertIsInstance(self.fetch("/loop"), favicons.Refused)
         self.assertLessEqual(len([r for r in self.server.requests if r["path"] == "/loop"]), favicons.MAX_REDIRECTS + 1)
 
     def test_every_redirect_hop_is_checked_again(self):
         # the server sends us to a name that lives at a private address: it must not be connected to
         public = lambda address: address != "10.0.0.5"  # noqa: E731
-        self.assertIs(self.fetch("/go-away", public=public), REFUSED)
+        self.assertIsInstance(self.fetch("/go-away", public=public), favicons.Refused)
         self.assertEqual([r["path"] for r in self.server.requests], ["/go-away"])
 
     def test_too_big_or_endless_or_missing_never_will_be_an_icon_but_a_server_error_might_be_later(self):
-        self.assertIs(self.fetch("/big"), REFUSED)  # declared too big
-        self.assertIs(self.fetch("/endless"), REFUSED)  # never says, never stops
-        self.assertIs(self.fetch("/missing"), REFUSED)  # 404
+        self.assertIsInstance(self.fetch("/big"), favicons.Refused)  # declared too big
+        self.assertIsInstance(self.fetch("/endless"), favicons.Refused)  # never says, never stops
+        self.assertIsInstance(self.fetch("/missing"), favicons.Refused)  # 404
         self.assertIsNone(self.fetch("/broken"))  # 500: not the icon's fault
+
+    def test_the_reason_a_download_is_refused_is_told(self):
+        self.assertIn("404", self.fetch("/missing").why)
+        self.assertIn("256 KB", self.fetch("/big").why)
+        self.assertIn("redirects", self.fetch("/loop").why)
+        self.assertIn("your own machine", self.fetch("/go-away", public=lambda a: a != "10.0.0.5").why)
 
     def test_the_certificate_must_match_the_name_and_be_trusted(self):
         self.assertIsNone(self.fetch("/icon.png", host="other.test", where={"other.test": ["127.0.0.1"]}))  # wrong name
@@ -350,6 +404,41 @@ class DecodeTest(unittest.TestCase):
                 self.assertEqual(len(pixels), favicons.ICON_BYTES)
         self.assertEqual(favicons.decode(png(32, 32))[:4], b"\xff\x00\x00\xff")  # red, fully opaque
 
+    def test_an_svg_is_drawn_at_icon_size_whatever_size_it_claims(self):
+        for width in (248, 16, 100000):  # an icon's own size means nothing: it is drawn at 16 px
+            data = SVG.replace(b'width="248" height="248"', f'width="{width}" height="{width}"'.encode())
+            with self.subTest(width=width):
+                kind, checked = favicons.checked(data)
+                pixels = favicons.decode(checked)
+                self.assertIsNotNone(pixels)
+                self.assertEqual(len(pixels), favicons.ICON_BYTES)
+                middle = pixels[(8 * 16 + 8) * 4: (8 * 16 + 8) * 4 + 4]  # the circle's colour, opaque
+                self.assertEqual(middle[3], 255)
+                self.assertGreater(middle[0], 150)  # the gradient stop #d97757: reddish
+
+    def test_the_svg_loader_gets_the_room_its_thread_pool_needs(self):
+        # an address-space limit made the SVG loader fail to start its worker threads (seen with claude.ai's icon);
+        # a data limit lets it run while a bomb still hits the wall (see the tests below)
+        for attempt in range(6):
+            self.assertIsNotNone(favicons.decode(SVG), attempt)
+
+    def test_an_ico_with_a_lying_directory_can_be_drawn_after_the_repair(self):
+        broken = ico_with(dib(16, 16), width=48, height=48)
+        self.assertIsNone(favicons.decode(broken))  # as it comes, the strict decoder refuses it...
+        kind, repaired = favicons.checked(broken)
+        self.assertEqual(len(favicons.decode(repaired)), favicons.ICON_BYTES)  # ...after the repair it draws
+
+    def test_an_svg_built_to_make_the_renderer_run_away_cannot_hold_the_panel(self):
+        # every level draws the one below it ten times: 10 ** 12 rectangles from a few hundred bytes
+        levels = [b'<rect id="l0" width="1" height="1"/>']
+        for i in range(1, 12):
+            levels.append(b'<g id="l%d">' % i + b'<use href="#l%d"/>' % (i - 1) * 10 + b"</g>")
+        bomb = b'<svg xmlns="http://www.w3.org/2000/svg"><defs>' + b"".join(levels) + b'</defs><use href="#l11"/></svg>'
+        self.assertEqual(favicons.checked(bomb), ("svg", bomb))  # nothing forbidden in it: the limits are the defence
+        started = time.monotonic()
+        favicons.decode(bomb)  # whether it draws or gives up, it ends
+        self.assertLess(time.monotonic() - started, favicons.DECODE_TIMEOUT_S + 3)
+
     def test_the_pixels_become_a_pixbuf_on_the_ui_thread_without_parsing_anything(self):
         pixbuf = favicons.to_pixbuf(favicons.decode(png(20, 20)))
         self.assertEqual((pixbuf.get_width(), pixbuf.get_height(), pixbuf.get_has_alpha()), (16, 16, True))
@@ -399,17 +488,17 @@ class FetcherTest(unittest.TestCase):
                                                                               "https://b.test/x": png(8, 8)}[url]):
             results = self.collect([data, "http://plain.test/x.ico", "https://a.test/x", "https://b.test/x"])
         self.assertEqual(len(results[data]), favicons.ICON_BYTES)
-        self.assertIs(results["http://plain.test/x.ico"], REFUSED)
+        self.assertIsInstance(results["http://plain.test/x.ico"], favicons.Refused)
         self.assertIsNone(results["https://a.test/x"])
         self.assertEqual(len(results["https://b.test/x"]), favicons.ICON_BYTES)
 
     def test_something_that_cannot_be_decoded_is_refused_for_good(self):
         with mock.patch.object(favicons, "download", return_value=gif_with_huge_frame()):
-            self.assertIs(self.collect(["https://a.test/x"])["https://a.test/x"], REFUSED)
+            self.assertIsInstance(self.collect(["https://a.test/x"])["https://a.test/x"], favicons.Refused)
 
     def test_an_unexpected_error_is_just_no_icon(self):
         with mock.patch.object(favicons, "download", side_effect=RuntimeError("boom")):
-            self.assertIs(self.collect(["https://a.test/x"])["https://a.test/x"], REFUSED)
+            self.assertIsInstance(self.collect(["https://a.test/x"])["https://a.test/x"], favicons.Refused)
 
     def test_urls_not_started_yet_can_be_dropped(self):
         fetcher = favicons.Fetcher(lambda url, result: None, workers=0)  # nobody works the queue

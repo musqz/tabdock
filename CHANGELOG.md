@@ -9,12 +9,19 @@
   address, so nothing changed there: `./install.sh` and a panel restart are enough.
   `data:` icons need no network. `https:` icons are fetched with no cookies or referrer, only from public
   addresses (checked again on every redirect and pinned to the checked address), with a verified certificate,
-  a size limit and a hard ten-second limit for the whole download. Only small PNG, ICO and GIF files (by their
-  own header) are used, decoded in a separate process with a memory and CPU limit, so a crafted image can only
+  a size limit and a hard ten-second limit for the whole download. Only small PNG, ICO and GIF files and plain
+  SVGs (by their own content) are used, decoded in a separate process with a memory and CPU limit, so a crafted image can only
   fail. Icons live in memory only; nothing is written to disk. Addresses that can never be an icon are asked
   for once, network failures again after five minutes, and switching icons off also drops queued downloads.
   Found by the code review: a tiny GIF could freeze the panel for a minute and a PNG profile could take
   hundreds of MB, which is why decoding happens in that limited process.
+  Real sites shaped the next step: Firefox prefers a site's SVG icon (claude.ai, npo.nl), so plain SVGs are
+  accepted too (self-contained only: no external references, entities, scripts or embedded images; drawn at
+  16 px whatever size they claim); npo.nl's `.ico` has a directory that disagrees with the bitmaps inside,
+  which browsers tolerate and the strict decoder refuses, so the directory is made truthful first; and the
+  decoder's memory limit was on address space, which made the loaders' thread pools fail (an SVG could not even
+  start), so it is a limit on memory in use now, and the bombs still die in a moment. A tab without an icon says
+  why when you hover the empty slot.
 
 - Show more than one browser. With two or more browsers open, chips under the header choose what the panel
   lists: `auto` (the browser in use, as before), a single browser (kept whichever window has focus), or `all`,

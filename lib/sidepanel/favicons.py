@@ -7,10 +7,11 @@ network or link-local: a page must not be able to make the panel poke your route
 pinned to an address that was checked, with the certificate verified, at most a few redirects, a size
 limit and a hard time limit for the whole download.
 
-What comes back is only decoded if it is a small PNG, ICO or GIF by its own header (not by what the server
-says); SVG and everything else is refused. Even then a file can be built to make a decoder allocate
-gigabytes or run for a minute, so the decoding happens in a separate short-lived process with a memory
-and a CPU limit, on a worker thread, and only 16x16 raw pixels ever come back to the panel.
+What comes back is only decoded if it is a small PNG, ICO or GIF, or a plain SVG, by its own content (not by
+what the server says); everything else is refused. An SVG must be self-contained: no external references,
+entities, scripts or embedded images. Even then a file can be built to make a decoder allocate gigabytes or
+run for a minute, so the decoding happens in a separate short-lived process with a memory and a CPU limit,
+on a worker thread, and only 16x16 raw pixels ever come back to the panel.
 
 Every function here blocks: run them off the UI thread (Fetcher does).
 """
@@ -20,6 +21,7 @@ import http.client
 import ipaddress
 import os
 import queue
+import re
 import select
 import socket
 import ssl
@@ -38,9 +40,19 @@ MAX_REDIRECTS = 3
 ICON_PX = 16  # what a tab row shows
 ICON_BYTES = ICON_PX * ICON_PX * 4  # RGBA
 
-# "This address will never give an icon, do not ask again" (a policy refusal, a 404, a file that is not an
-# icon), as opposed to None: "it did not work this time" (no network, a timeout, a server error).
-REFUSED = object()
+class Refused:
+    """"This address will never give an icon, do not ask again" (a policy refusal, a 404, a file that is not
+    an icon), with the reason, which the panel shows when you hover the empty icon. As opposed to None:
+    "it did not work this time" (no network, a timeout, a server error)."""
+
+    def __init__(self, why):
+        self.why = why
+
+    def __repr__(self):
+        return f"Refused({self.why!r})"
+
+
+REFUSED = Refused("refused")  # (when there is nothing more to say)
 
 
 # -- what may be fetched ------------------------------------------------------------------------------
@@ -71,14 +83,30 @@ def is_public(address):
 _PNG_KEEP = {b"IHDR", b"PLTE", b"tRNS", b"IDAT", b"IEND"}  # the chunks that draw the picture
 
 
+# An SVG starts with an optional XML declaration, comments and a DOCTYPE without an internal subset, then <svg.
+_SVG_START = re.compile(
+    rb"\A(?:\xef\xbb\xbf)?\s*(?:<\?xml[^>]*\?>\s*)?(?:<!--.*?-->\s*)*(?:<!DOCTYPE[^>\[]*>\s*)?(?:<!--.*?-->\s*)*<svg[\s>]",
+    re.S | re.I,
+)
+# What an icon never needs and a hostile file would use: entities (expansion bombs), scripts and event
+# handlers, embedded objects and images, and any reference that leaves the file (only #fragments stay inside).
+_SVG_FORBIDDEN = re.compile(
+    rb"<!ENTITY|<!DOCTYPE[^>]*\[|<script|<foreignObject|<image|<iframe|<embed|<object|<a[\s>]"
+    rb"|\bon\w+\s*=|href\s*=\s*[\"'](?!#)|url\(\s*[\"']?(?!#)",
+    re.I,
+)
+
+
 def sniff(data):
-    """"png", "ico" or "gif" by the file's own first bytes, else None."""
+    """"png", "ico", "gif" or "svg" by the file's own content, else None."""
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
         return "png"
     if data.startswith((b"GIF87a", b"GIF89a")):
         return "gif"
     if data[:4] == b"\x00\x00\x01\x00" and len(data) >= 6 and int.from_bytes(data[4:6], "little") > 0:
         return "ico"
+    if _SVG_START.match(data[:4096]):
+        return "svg"
     return None
 
 
@@ -127,10 +155,28 @@ def _ico_small(data):
     return True
 
 
+def _ico_repaired(data):
+    """Some icons in the wild have a directory that disagrees with the bitmaps in it (48 x 48 in the list, 16 x 16
+    inside): browsers cope, the strict decoder refuses. Make the directory say what the bitmaps say."""
+    count = int.from_bytes(data[4:6], "little")
+    if count > 64 or len(data) < 6 + 16 * count:
+        return data  # (not well formed: refused by the size check)
+    fixed = bytearray(data)
+    for i in range(count):
+        entry = 6 + 16 * i
+        size, offset = int.from_bytes(data[entry + 8: entry + 12], "little"), int.from_bytes(data[entry + 12: entry + 16], "little")
+        image = data[offset: offset + size]
+        if len(image) >= 12 and not image.startswith(b"\x89PNG"):  # a bitmap: its header knows the size
+            width, height = int.from_bytes(image[4:8], "little"), int.from_bytes(image[8:12], "little") // 2
+            if 0 < width <= 256 and 0 < height <= 256:
+                fixed[entry], fixed[entry + 1] = width % 256, height % 256
+    return bytes(fixed)
+
+
 def checked(data):
-    """(kind, data) when `data` is a small PNG, ICO or GIF, else None. The PNG comes back with only its
-    picture chunks. This catches the obvious cases cheaply; the decoder process below is the real limit
-    (a GIF can hide a huge frame behind a small header, for one)."""
+    """(kind, data) when `data` is a small PNG, ICO or GIF or a plain SVG, else None. A PNG comes back with only
+    its picture chunks and an ICO with a truthful directory. This catches the obvious cases cheaply; the decoder
+    process below is the real limit (a GIF can hide a huge frame behind a small header, for one)."""
     if not data or len(data) > MAX_BYTES:
         return None
     kind = sniff(data)
@@ -140,7 +186,24 @@ def checked(data):
     if kind == "gif":
         ok = len(data) >= 10 and max(int.from_bytes(data[6:8], "little"), int.from_bytes(data[8:10], "little")) <= MAX_SIDE
         return ("gif", data) if ok else None
-    return ("ico", data) if kind and _ico_small(data) else None
+    if kind == "svg":
+        return None if _SVG_FORBIDDEN.search(data) else ("svg", data)
+    if kind == "ico":
+        data = _ico_repaired(data)
+        return ("ico", data) if _ico_small(data) else None
+    return None
+
+
+def why_not(data):
+    """Why `checked` refused `data`, in words for the tooltip."""
+    if data and len(data) > MAX_BYTES:
+        return f"bigger than {MAX_BYTES // 1024} KB"
+    kind = sniff(data or b"")
+    if kind is None:
+        return "not a PNG, ICO, GIF or SVG image"
+    if kind == "svg":
+        return "an SVG that is not self-contained (external references, scripts, entities or images)"
+    return "a damaged or oversized image"
 
 
 def from_data_url(url):
@@ -252,7 +315,7 @@ def _public_addresses(host, port, resolve, public):
 
 
 def download(url, resolve=socket.getaddrinfo, context=None, public=is_public):
-    """The bytes at an https URL, None if it did not work this time, or REFUSED. `resolve`, `context` and
+    """The bytes at an https URL, None if it did not work this time, or Refused. `resolve`, `context` and
     `public` are only there for tests."""
     context = context or _tls_context()
     budget = _Budget(DEADLINE_S)
@@ -262,33 +325,36 @@ def download(url, resolve=socket.getaddrinfo, context=None, public=is_public):
             try:
                 port = parts.port or 443
             except ValueError:
-                return REFUSED
+                return Refused("not a usable address")
             if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
-                return REFUSED
+                return Refused("not a plain https address (a redirect may have led away from https)")
             addresses = _public_addresses(parts.hostname, port, resolve, public)
             if addresses is None:
                 return None
             if not addresses:
-                return REFUSED
+                return Refused("that name points at your own machine or network, which is never contacted")
             conn = _Pinned(parts.hostname, port, addresses, context, budget)
             try:
                 path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
                 conn.request("GET", path, headers={  # nothing else: no cookies, no referrer
-                    "User-Agent": "openbox-sidepanel", "Accept": "image/png,image/x-icon,image/gif,image/*;q=0.5",
+                    "User-Agent": "openbox-sidepanel",
+                    "Accept": "image/png,image/svg+xml,image/x-icon,image/gif,image/*;q=0.5",
                     "Accept-Encoding": "identity",
                 })
                 response = conn.getresponse()
                 if response.status in (301, 302, 303, 307, 308):
                     location = response.getheader("Location")
                     if not location:
-                        return REFUSED
+                        return Refused("a redirect without a target")
                     url = urljoin(url, location)
                     continue
                 if response.status >= 500:
                     return None
                 length = response.getheader("Content-Length")
-                if response.status != 200 or (length and length.isdigit() and int(length) > MAX_BYTES):
-                    return REFUSED
+                if response.status != 200:
+                    return Refused(f"the site answered {response.status}")
+                if length and length.isdigit() and int(length) > MAX_BYTES:
+                    return Refused(f"bigger than {MAX_BYTES // 1024} KB")
                 data = b""
                 while len(data) <= MAX_BYTES:
                     chunk = response.read1(8192)  # one read, so the deadline is looked at between reads
@@ -297,38 +363,40 @@ def download(url, resolve=socket.getaddrinfo, context=None, public=is_public):
                     data += chunk
                     if budget.left() <= 0:
                         return None
-                return REFUSED  # bigger than an icon can be
+                return Refused(f"bigger than {MAX_BYTES // 1024} KB")
             except (OSError, http.client.HTTPException, ValueError):  # (ssl.SSLError is an OSError)
                 return None
             finally:
                 conn.close()
-        return REFUSED  # too many redirects
+        return Refused("too many redirects")
     finally:
         budget.close()
 
 
 def get(url):
-    """The checked bytes (a small PNG, ICO or GIF) for an icon URL, None if it did not work this time, or
-    REFUSED. `data:` needs no network; `https:` is downloaded; anything else is never fetched."""
+    """The checked bytes (a small PNG, ICO, GIF or plain SVG) for an icon URL, None if it did not work this
+    time, or Refused. `data:` needs no network; `https:` is downloaded; anything else is never fetched."""
     if not isinstance(url, str) or not url:
-        return REFUSED
+        return Refused("the browser reported no icon address")
     if url.startswith("data:"):
         data = from_data_url(url[5:])
     elif url.startswith("https:"):
         data = download(url)
-        if data is None or data is REFUSED:
+        if data is None or isinstance(data, Refused):
             return data
     else:
-        return REFUSED  # http:, chrome:, resource:, about: ... are not fetched
+        return Refused("not an https: or data: address (those are never fetched)")
     ok = checked(data)
-    return ok[1] if ok else REFUSED
+    return ok[1] if ok else Refused(why_not(data))
 
 
 # -- decoding, in a process of its own ----------------------------------------------------------------
 
 # Runs as `python -I -c <this> <kind> <side>`: the image on stdin, side*side*4 bytes of RGBA on stdout.
-# The limits are set after the imports, relative to what the process already uses, so a legitimate icon
-# has room and a decompression bomb hits the wall (a failed allocation) long before it matters.
+# The limits are inherited by the loader processes the pixbuf library starts underneath. The memory limit is
+# on data (memory actually in use), not on address space: the loaders start pools of threads whose stacks and
+# arenas reserve far more address space than they use, so an address-space limit made them fail at random
+# (an SVG could not even start its thread pool). A decompression bomb still hits this wall within a moment.
 _DECODER = r"""
 import os, resource, sys
 import gi
@@ -336,12 +404,13 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import GdkPixbuf
 kind, side = sys.argv[1], int(sys.argv[2])
 data = sys.stdin.buffer.read()
-used = int(open("/proc/self/statm").read().split()[0]) * os.sysconf("SC_PAGE_SIZE")
-resource.setrlimit(resource.RLIMIT_AS, (used + 96 * 2**20,) * 2)
+resource.setrlimit(resource.RLIMIT_DATA, (256 * 2**20,) * 2)
 resource.setrlimit(resource.RLIMIT_CPU, (4, 4))
 resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 resource.setrlimit(resource.RLIMIT_FSIZE, (32 * 2**20,) * 2)
 loader = GdkPixbuf.PixbufLoader.new_with_type(kind)
+if kind == "svg":  # a drawing has no size of its own: draw it at the size that is wanted
+    loader.connect("size-prepared", lambda l, w, h: l.set_size(side, side))
 loader.write(data)
 loader.close()
 pixbuf = loader.get_pixbuf().scale_simple(side, side, GdkPixbuf.InterpType.BILINEAR)
@@ -382,7 +451,7 @@ def to_pixbuf(pixels):
 
 class Fetcher:
     """A few background threads that fetch and decode queued icon URLs and hand each result to
-    `deliver(url, result)` (called on a worker thread): the pixels, None (try again later) or REFUSED.
+    `deliver(url, result)` (called on a worker thread): the pixels, None (try again later) or Refused.
     Daemon threads, so a slow server never holds up the panel quitting."""
 
     def __init__(self, deliver, workers=4):
@@ -409,7 +478,7 @@ class Fetcher:
             try:
                 result = get(url)
                 if isinstance(result, bytes):
-                    result = decode(result) or REFUSED
+                    result = decode(result) or Refused("the image could not be drawn (damaged, too demanding or too slow)")
             except Exception:  # whatever a hostile server did, this is just "no icon"
-                result = REFUSED
+                result = Refused("an unexpected error")
             self._deliver(url, result)

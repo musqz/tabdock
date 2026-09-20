@@ -104,6 +104,8 @@ PRESS_STALE_S = 30  # a press with no release this long is forgotten, so updates
 ICON_RETRY_S = 300  # an icon that could not be fetched (no network, a timeout) is tried again after this long
 ICONS_KEPT = 512  # icons (and remembered failures) held in memory
 ICONS_PENDING_MAX = 64  # icon downloads queued or running at once
+NO_ICON = "No icon: "  # the start of what the empty icon slot says when hovered, followed by why
+NOT_DOWNLOADED = "it could not be downloaded (no network, or a problem at the site); it is tried again later"
 
 
 def _schedule(ms, fn):
@@ -127,7 +129,7 @@ class DockView:
         # icons are known by _icon_key(url); all in memory only: nothing about your tabs is written to disk
         self._icons = {}  # -> 16 px pixbuf, least recently used first
         self._failed = {}  # -> when it did not work (tried again after ICON_RETRY_S)
-        self._refused = {}  # -> True: it will never be an icon (not https, not an image, 404 ...): never asked again
+        self._refused = {}  # -> why: it will never be an icon (not https, not an image, 404 ...): never asked again
         self._pending = set()  # being downloaded
         self._waiting = {}  # -> the image widgets of the rows built since, waiting for it
         self._fetcher = None  # started with the first icon wanted: no threads while icons are off
@@ -827,6 +829,7 @@ class DockView:
     def _want_icon(self, url, image):
         """Put the icon for `url` into `image`: at once when it is known, else when it has been downloaded."""
         if not isinstance(url, str) or not url:
+            image.set_tooltip_text(NO_ICON + "the browser reported no icon address")
             return
         key = self._icon_key(url)
         pixbuf = self._icons.get(key)
@@ -834,11 +837,13 @@ class DockView:
             self._remember(self._icons, key, pixbuf)  # used just now
             image.set_from_pixbuf(pixbuf)
             return
-        if key in self._refused:
-            return  # it will never be an icon: no request, however often the rows are redrawn
+        if key in self._refused:  # it will never be an icon: no request, however often the rows are redrawn
+            image.set_tooltip_text(NO_ICON + self._refused[key])
+            return
         failed = self._failed.get(key)
-        if failed is not None and time.monotonic() - failed < ICON_RETRY_S:
-            return  # it did not work a moment ago: no icon rather than a request per redraw
+        if failed is not None and time.monotonic() - failed < ICON_RETRY_S:  # it did not work a moment ago
+            image.set_tooltip_text(NO_ICON + NOT_DOWNLOADED)  # no icon rather than a request per redraw
+            return
         if key not in self._pending:
             if len(self._pending) >= ICONS_PENDING_MAX:
                 return  # a page that keeps changing its icon must not queue downloads without end
@@ -854,10 +859,14 @@ class DockView:
         key = self._icon_key(url)
         self._pending.discard(key)
         waiting = self._waiting.pop(key, [])
-        if result is favicons.REFUSED:
-            self._remember(self._refused, key, True)
+        if isinstance(result, favicons.Refused):
+            self._remember(self._refused, key, result.why)
+            for image in waiting:
+                image.set_tooltip_text(NO_ICON + result.why)  # hover the empty slot to see why
         elif not isinstance(result, bytes) or self._closed:
             self._remember(self._failed, key, time.monotonic())
+            for image in waiting:
+                image.set_tooltip_text(NO_ICON + NOT_DOWNLOADED)
         else:
             pixbuf = favicons.to_pixbuf(result)  # only 16x16 raw pixels: nothing untrusted is parsed here
             self._remember(self._icons, key, pixbuf)

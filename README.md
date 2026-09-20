@@ -140,14 +140,19 @@ the rest safe, since a web page chooses the address and the panel is not sandbox
   refused, also after redirects and for names that resolve to them, and the connection goes to the address that
   was checked. The certificate must verify. At most three redirects, at most 256 KB, and the whole download
   is cut off after ten seconds however slowly the server drips;
-- what arrives is only used if its own header says it is a small PNG, ICO or GIF (SVG and everything else is
-  refused). It is decoded in a separate short-lived process with a memory and a time limit, not in the panel,
+- what arrives is only used if its own content says it is a small PNG, ICO or GIF, or a plain SVG (one that is
+  self-contained: no external references, entities, scripts or embedded images). WebP, JPEG and everything else
+  is refused. It is decoded in a separate short-lived process with a memory and a time limit, not in the panel,
   and only 16x16 pixels come back, so a crafted image can at worst fail;
 - icons live in memory only: nothing about your tabs is written to disk and quitting the panel forgets them, at
   the price of downloading them again on the next start. An address that can never be an icon is asked for once;
   one that failed for a network reason is tried again after five minutes.
 
 `icons = false` (or the header button) stops all of it, including downloads queued but not yet started.
+
+A tab without an icon says why: hover the empty space where the icon would be ("the site answered 404", "not a
+PNG, ICO, GIF or SVG image", "it could not be downloaded", ...). Sites whose only icon is a WebP or JPEG, or
+an SVG that pulls in outside files, will simply have none.
 
 ### Multiple monitors
 
