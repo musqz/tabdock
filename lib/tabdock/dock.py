@@ -35,6 +35,8 @@ from .model import (  # noqa: E402
     browser_label,
     colour_name,
     edits_workspaces,
+    removal_text,
+    supports,
     focused_window,
     group_tabs,
     heir,
@@ -86,6 +88,10 @@ button.sp-btn.sp-chip.selected {{ background-color: {accent}; border-color: {acc
 button.sp-btn.sp-ws {{ border-radius: 4px; padding: 1px 8px; }}
 button.sp-btn.sp-ws:hover {{ background-color: #2a2e38; color: #ffffff; }}
 button.sp-btn.sp-ws.selected {{ background-color: #2f3542; color: #fff; font-weight: bold; box-shadow: inset 0 -2px 0 0 {accent}; }}
+.sp-pinmark {{ font-size: 0.8em; }}
+button.sp-btn.sp-close {{ opacity: 0; padding: 0 4px; }}
+.sp-row:hover button.sp-btn.sp-close {{ opacity: 1; }}
+button.sp-btn.sp-close:hover {{ color: #ff6b6b; }}
 """
 
 
@@ -126,8 +132,9 @@ WS_CSS = "".join(
 ICONS = {
     "fingerprint": "☺", "briefcase": "💼", "dollar": "$", "cart": "🛒", "circle": "●",
     "gift": "🎁", "vacation": "🌴", "food": "🍴", "fruit": "🍎", "pet": "🐾",
-    "tree": "🌲", "chill": "❄",
+    "tree": "🌲", "chill": "❄", "fence": "🚧",
 }
+CONTAINER_ICONS = tuple(ICONS)  # the icons Firefox offers a container, in its order
 
 
 DRAG_THRESHOLD = 6  # px the pointer must travel with the button down before a click becomes a drag
@@ -177,7 +184,9 @@ class DockView:
         self._choices = ()  # (conn, label, colour) of the chips built
         self._chip_buttons = []  # (key, button)
         self._ws_buttons = []  # (conn, workspace id or None for "+", button) of the rows built last
-        self._holds = set()  # why the panel must stay open whatever the pointer does: "drag", "menu", "name"
+        self._close_buttons = []  # (tab id, its ✕ button) of the rows built last
+        self._middle = None  # the row a middle button went down on: releasing it there closes that tab
+        self._holds = set()  # why the panel must stay open whatever the pointer does: "drag", "menu", "dialog"
         self._menu = None  # the context menu up (kept referenced while it is shown)
         self._dialog = None  # the window asking for a workspace name, while it is up
         self.collapsed = set()  # (browser pid, cookieStoreId) of folded container sections; (pid, None) a folded browser
@@ -556,7 +565,7 @@ class DockView:
         return label
 
     def _row(self, child, kind, ident, group, conn, colour, on_click, active=False, draggable=True, pinned=False,
-             menu=None):
+             menu=None, closable=False):
         """A row of the browser `conn`, in its colour. Hover/active styling lives on the EventBox: a
         windowless label gets no prelight.
 
@@ -567,7 +576,10 @@ class DockView:
         box = Gtk.EventBox()
         box.add_events(
             Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.BUTTON1_MOTION_MASK
+            | Gdk.EventMask.ENTER_NOTIFY_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK
         )
+        box.connect("enter-notify-event", self._on_row_enter)
+        box.connect("leave-notify-event", self._on_row_leave)
         box.connect("button-press-event", self._on_press)
         box.connect("motion-notify-event", self._on_motion)
         box.connect("button-release-event", self._on_release)
@@ -578,10 +590,25 @@ class DockView:
         box.add(child)
         self._meta[box] = {
             "kind": kind, "id": ident, "group": group, "conn": conn, "click": on_click,
-            "draggable": draggable, "pinned": pinned, "menu": menu,
+            "draggable": draggable, "pinned": pinned, "menu": menu, "closable": closable,
         }
         self._row_order.append(box)
         return box
+
+    # -- hovering rows ---------------------------------------------------------------
+
+    # An EventBox never marks itself hovered (a GtkButton does, for itself), so a row's :hover style, and the ✕ a
+    # hovered tab shows, need it set here. Moving onto the row's own ✕ is still being on the row.
+    @staticmethod
+    def _on_row_enter(box, _event):
+        box.set_state_flags(Gtk.StateFlags.PRELIGHT, False)
+        return False
+
+    @staticmethod
+    def _on_row_leave(box, event):
+        if event.detail != Gdk.NotifyType.INFERIOR:
+            box.unset_state_flags(Gtk.StateFlags.PRELIGHT)
+        return False
 
     # -- pressing, clicking and dragging rows ---------------------------------------
 
@@ -605,6 +632,9 @@ class DockView:
         if event.button == 1 and box in self._meta:
             self._press = {"box": box, "x": event.x_root, "y": event.y_root, "t": time.monotonic(),
                            "dragging": False, "target": None, "after": False}
+        elif event.button == 2 and self._meta.get(box, {}).get("closable"):
+            self._middle = box  # closed on release, as in the browser's tab strip
+            return True
         elif event.button == 3 and self._meta.get(box, {}).get("menu"):
             self._popup(self._meta[box]["menu"], event)
             return True
@@ -624,6 +654,11 @@ class DockView:
         return True
 
     def _on_release(self, box, event):
+        if event.button == 2:
+            middle, self._middle = self._middle, None
+            if middle is box and box in self._meta:  # released on the row it went down on
+                self._close_tab(self._meta[box]["conn"], self._meta[box]["id"])
+            return middle is not None
         p = self._press
         if event.button != 1 or p is None or p["box"] is not box:
             return False  # another button, or not our press: a button-1 press in progress carries on
@@ -761,6 +796,7 @@ class DockView:
         if self.chips.get_visible():
             rows += [spot(button, "chip", button.get_label()) for _key, button in self._chip_buttons]
         rows += [spot(button, "workspace", ws_id, button.get_label()) for _conn, ws_id, button in self._ws_buttons]
+        rows += [spot(button, "close", tab_id) for tab_id, button in self._close_buttons]
         with open(path + ".tmp", "w") as f:
             json.dump(rows, f)
         os.replace(path + ".tmp", path)
@@ -791,6 +827,7 @@ class DockView:
         self._redraw = False
         self._meta, self._row_order = {}, []
         self._ws_buttons = []
+        self._close_buttons = []
         self._waiting = {}  # the old rows are about to go: only the rows built below wait for an icon
         many = len(self.sources) > 1
         rows = []
@@ -810,15 +847,17 @@ class DockView:
                 rows.append(self._label("No browser windows", "sp-empty", wrap=True))
                 continue
             spaces = workspaces(state) if offers_workspaces(info, state) else []
+            can = {feature for feature in ("close_tab", "pin_tab", "containers") if supports(info, feature)}
             if spaces:
                 rows.append(self._workspace_row(conn, colour, spaces, window, ordered_containers(state)))
             for container, tabs in groups:
                 key = (browser, container["cookieStoreId"])
                 folded = key in self.collapsed
-                rows.append(self._section(container, tabs, key, folded, conn, colour, state, window["id"]))
+                rows.append(self._section(container, tabs, key, folded, conn, colour, state, window["id"], can))
                 if not folded:
                     rows.extend(
-                        self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour, spaces) for tab in tabs
+                        self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour, spaces, can)
+                        for tab in tabs
                     )
         self._replace_rows(rows or [self._label("No browser windows", "sp-empty", wrap=True)])
 
@@ -839,7 +878,7 @@ class DockView:
         row.get_style_context().add_class("sp-bhead")
         return row
 
-    def _section(self, container, tabs, key, folded, conn, browser_colour, state, window_id):
+    def _section(self, container, tabs, key, folded, conn, browser_colour, state, window_id, can=()):
         colour = container.get("colorCode") or DEFAULT_ACCENT
         icon = ICONS.get(container.get("icon"), "●")
         name = GLib.markup_escape_text(container["name"])
@@ -871,18 +910,56 @@ class DockView:
         return self._row(
             box, "section", cid, None, conn, browser_colour, (lambda: self._toggle(key)) if tabs else (lambda: None),
             draggable=cid != NO_CONTAINER and cid in known,
+            menu=(self._container_menu(conn, container, state)
+                  if "containers" in can and (cid == NO_CONTAINER or cid in known) else None),
         )
+
+    def _container_menu(self, conn, container, state):
+        """A right click on a container section: rename it, its colour and icon, a new container, and removing it
+        (after asking: its tabs close and Firefox deletes its cookies). "No container" offers only the new one."""
+        new = ("New container…", lambda: self._ask_name(
+            "New container", "", lambda name: self._command(conn, {"type": "create_container", "name": name})))
+        cid = container["cookieStoreId"]
+        if cid == NO_CONTAINER:
+            return [new]
+
+        def update(**change):
+            self._command(conn, {"type": "update_container", "cookieStoreId": cid, **change})
+
+        tabs = sum(t.get("cookieStoreId") == cid for w in state.get("windows") or [] for t in w["tabs"])
+        return [
+            ("Rename…", lambda: self._ask_name("Rename container", container["name"], lambda name: update(name=name))),
+            ("Colour", [
+                (Markup(f'<span foreground="{code}">●</span> {colour_name(name)}'), lambda name=name: update(color=name),
+                 container.get("color") == name)
+                for name, code in WS_COLORS.items()
+            ]),
+            ("Icon", [
+                (f"{ICONS[icon]} {icon.capitalize()}", lambda icon=icon: update(icon=icon), container.get("icon") == icon)
+                for icon in CONTAINER_ICONS
+            ]),
+            (None, None),
+            new,
+            (None, None),
+            ("Remove container…", lambda: self._confirm(
+                "Remove container", removal_text(container["name"], tabs), "Remove",
+                lambda: self._command(conn, {"type": "remove_container", "cookieStoreId": cid}))),
+        ]
 
     def _toggle(self, key):
         self.collapsed ^= {key}
         self._last = None
         self._rebuild()
 
-    def _tab_row(self, tab, window_id, group, conn, colour, spaces=()):
+    def _tab_row(self, tab, window_id, group, conn, colour, spaces=(), can=()):
+        """A tab: its site icon (optional), the title, an unread badge, a pin if pinned, and a ✕ that shows while
+        the row is hovered. Middle-click closes it too; right-click pins, moves (to another workspace) or closes.
+        `can`: what the extension handles, of "close_tab" and "pin_tab"; the rest is not offered."""
         label = self._label(tab_label(tab), "sp-tab")
         label.set_tooltip_text("\n".join(filter(None, (tab.get("title"), tab.get("url")))))
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         box.get_style_context().add_class("sp-tabbox")
+        pinned = bool(tab.get("pinned"))
         if self.cfg["icons"]:
             image = Gtk.Image()
             image.set_size_request(favicons.ICON_PX, favicons.ICON_PX)  # the room is kept until the icon arrives
@@ -894,17 +971,36 @@ class DockView:
             badge_label = self._label(badge, "sp-badge")
             badge_label.set_tooltip_text(f"{badge} unread, from the tab's title")
             box.pack_start(badge_label, False, False, 0)
-        menu = None
-        if len(spaces) > 1 and not tab.get("pinned"):  # (a pinned tab shows in every workspace)
-            menu = [
+        if pinned:  # after the title, so every title starts in the same place
+            mark = self._label("📌", "sp-pinmark")
+            mark.set_tooltip_text("Pinned: shows in every workspace" if len(spaces) > 1 else "Pinned")
+            box.pack_start(mark, False, False, 0)
+        if "close_tab" in can:
+            close = self._button("✕", "Close tab (or middle-click it)", Gtk.Button)
+            close.get_style_context().add_class("sp-close")
+            close.connect("clicked", lambda _b: self._close_tab(conn, tab["id"]))
+            box.pack_end(close, False, False, 0)
+            self._close_buttons.append((tab["id"], close))
+        groups = []  # the menu's parts, with a line between them
+        if "pin_tab" in can:
+            groups.append([("Unpin tab" if pinned else "Pin tab",
+                            lambda: self._command(conn, {"type": "pin_tab", "tabId": tab["id"], "pinned": not pinned}))])
+        if len(spaces) > 1 and not pinned:  # (a pinned tab shows in every workspace)
+            groups.append([
                 (f"Move to {workspace_label(ws)}", lambda ws_id=ws["id"]: self._command(
                     conn, {"type": "move_tab_to_workspace", "tabId": tab["id"], "workspaceId": ws_id}))
                 for ws in spaces if ws["id"] != tab.get("workspaceId")
-            ]
+            ])
+        if "close_tab" in can:
+            groups.append([("Close tab", lambda: self._close_tab(conn, tab["id"]))])
+        menu = [item for i, group in enumerate(groups) for item in ([(None, None)] if i else []) + group] or None
         return self._row(
             box, "tab", tab["id"], group, conn, colour, lambda: self.on_activate(conn, tab["id"], window_id),
-            active=bool(tab.get("active")), pinned=bool(tab.get("pinned")), menu=menu,
+            active=bool(tab.get("active")), pinned=pinned, menu=menu, closable="close_tab" in can,
         )
+
+    def _close_tab(self, conn, tab_id):
+        self._command(conn, {"type": "close_tab", "tabId": tab_id})
 
     # -- workspaces ------------------------------------------------------------------------
 
@@ -1015,9 +1111,13 @@ class DockView:
 
     def _menu_of(self, items):
         """A menu of (label, action) or (label, action, chosen) items. An action is a callable, a list of items
-        (a submenu), or None (shown greyed out); `chosen` marks the current choice among a submenu's items."""
+        (a submenu), or None (shown greyed out); `chosen` marks the current choice among a submenu's items. A
+        None label is a separator."""
         menu = Gtk.Menu()
         for label, action, *chosen in items:
+            if label is None:
+                menu.append(Gtk.SeparatorMenuItem())
+                continue
             if chosen:
                 item = Gtk.CheckMenuItem(label=label)
                 item.set_draw_as_radio(True)
@@ -1035,10 +1135,10 @@ class DockView:
             menu.append(item)
         return menu
 
-    def _ask_name(self, title, text, done, max_length=NAME_MAX):
-        """A small window to type a workspace name (or icon) in, then done(name). The dock windows never take
-        the keyboard focus (a click must not steal it from the browser); this one does. The panel stays open
-        while it is up."""
+    def _small_window(self, title, content, accept_label, answer, focus=None):
+        """A small window of its own: `content` above Cancel and `accept_label`. It takes the keyboard, which the dock
+        windows never do (a click must not steal it from the browser), and the panel stays open while it is up.
+        answer(accepted) is called once, as it goes; Escape or closing it is Cancel. Returns (finish, accept button)."""
         if self._dialog is not None:
             self._dialog.destroy()
         dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL, title=title)
@@ -1047,40 +1147,60 @@ class DockView:
         dialog.set_resizable(False)
         dialog.set_skip_taskbar_hint(True)
         dialog.set_position(Gtk.WindowPosition.MOUSE)
-        entry = Gtk.Entry(text=text)
-        entry.set_max_length(max_length)
-        entry.set_width_chars(24)
-        ok, cancel = Gtk.Button(label="OK"), Gtk.Button(label="Cancel")
+        ok, cancel = Gtk.Button(label=accept_label), Gtk.Button(label="Cancel")
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         buttons.pack_end(ok, False, False, 0)
         buttons.pack_end(cancel, False, False, 0)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         box.set_border_width(10)
-        box.pack_start(entry, False, False, 0)
+        box.pack_start(content, False, False, 0)
         box.pack_start(buttons, False, False, 0)
         dialog.add(box)
 
         def finish(accept):
             if self._dialog is not dialog:
                 return  # already answered
-            name = entry.get_text().strip()
             self._dialog = None
-            self._hold("name", False)
+            self._hold("dialog", False)
+            answer(accept)
             dialog.destroy()
-            if accept and name:
-                done(name)
 
-        entry.connect("activate", lambda _e: finish(True))
         ok.connect("clicked", lambda _b: finish(True))
         cancel.connect("clicked", lambda _b: finish(False))
         dialog.connect("key-press-event", lambda _w, e: e.keyval == Gdk.KEY_Escape and (finish(False) or True))
         dialog.connect("delete-event", lambda *_a: finish(False) or True)
         self._dialog = dialog
-        self._dialog_entry = entry
-        self._hold("name", True)
+        self._dialog_ok = ok
+        self._hold("dialog", True)
         box.show_all()
         dialog.show()
-        entry.grab_focus()  # the whole name selected: typing replaces it
+        (focus or cancel).grab_focus()
+        return finish, ok
+
+    def _ask_name(self, title, text, done, max_length=NAME_MAX):
+        """A small window to type a name (or a workspace icon) in, then done(name); an empty one is no answer."""
+        entry = Gtk.Entry(text=text)
+        entry.set_max_length(max_length)
+        entry.set_width_chars(24)
+
+        def answer(accepted):
+            name = entry.get_text().strip()
+            if accepted and name:
+                done(name)
+
+        finish, _ok = self._small_window(title, entry, "OK", answer, focus=entry)  # the whole text selected: typing replaces it
+        entry.connect("activate", lambda _e: finish(True))
+        self._dialog_entry = entry
+
+    def _confirm(self, title, text, action_label, done):
+        """Asks before what cannot be undone: done() only on `action_label`. Cancel has the keyboard, so a stray
+        Enter does not do it."""
+        label = Gtk.Label(label=text, xalign=0)
+        label.set_line_wrap(True)
+        label.set_max_width_chars(44)
+        _finish, ok = self._small_window(title, label, action_label, lambda accepted: accepted and done())
+        ok.get_style_context().add_class("destructive-action")
+        self._dialog_text = label
 
     @staticmethod
     def _icon_key(url):

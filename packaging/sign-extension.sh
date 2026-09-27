@@ -68,11 +68,24 @@ newest_signed() {  # the newest signed file for this version (web-ext names it <
     done
     printf '%s' "$best"
 }
+# The name the GitHub release attaches the signed file by, which packaging/PKGBUILD downloads it by.
+release_file="$artifacts/tabdock-$version.xpi"
+
+for_release() {  # a copy of the signed file under that name, and what to do with it
+    [[ $1 -ef $release_file ]] || cp -- "$1" "$release_file"
+    echo
+    echo "for the release: $release_file"
+    echo "  attach it to the GitHub release v$version (docs/RELEASE.md), for example:"
+    echo "    gh release upload v$version $(printf '%q' "$release_file")"
+    echo "  packaging/PKGBUILD downloads it from there; a package built here finds it in packaging/ too"
+}
+
 existing="$(newest_signed)"
 if [[ -n $existing ]]; then
     echo "version $version is already signed: $existing"
     echo "Mozilla rejects a version number it has already signed: to sign again, raise VERSION and"
     echo "extension/manifest.json first (they must match)."
+    for_release "$existing"
     exit 0
 fi
 
@@ -168,3 +181,4 @@ fi
 echo
 echo "signed and verified: $signed"
 echo "Install it in each browser: about:addons -> gear -> Install Add-on From File..."
+for_release "$signed"

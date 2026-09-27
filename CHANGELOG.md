@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+- Packaging: `packaging/sign-extension.sh` now also leaves the signed extension as
+  `web-ext-artifacts/tabdock-<version>.xpi`, the name the GitHub release attaches it by and `packaging/PKGBUILD`
+  downloads it by, and prints the `gh release upload` command for it (also when the version was signed before).
+  The v0.3.1 release was published without that file, so `makepkg` failed to download
+  `.../releases/download/v0.3.1/tabdock-0.3.1.xpi`; its tag also sits one merge before the 0.3.1 sources. The
+  README and docs/RELEASE.md say so and point to `./install.sh` until the next release.
+
+- Edit containers from the panel: right-click a container section to rename it, pick its colour or icon (Firefox's
+  own), make a new container (named in a small window; it gets a colour no container has yet), or remove it.
+  Removing asks first, with Cancel as the default so a stray Enter removes nothing, and says what goes: its tabs
+  close, in every window and workspace, and Firefox deletes its cookies, logging you out of the sites you used in
+  it. Its tabs close the way the panel closes one, so never with a window that holds other workspaces' hidden
+  tabs, and a workspace that opened its new tabs in it stops doing so first (or its replacement tab would open
+  right in the container being removed; the real-browser test fails that way when the order is swapped). "No
+  container" offers only a new container. Tested in real Firefox 156 (`tests/e2e_firefox.py`: made, renamed,
+  recoloured, re-iconed, and removed with its tab closed and its cookie gone; a workspace's container removed
+  while its only tab was in it) and under a real Openbox (`tests/e2e_x11.py`: renamed through the menu and the
+  name window; Enter in the removal window cancels, and only Remove removes).
+
+- Close and pin tabs from the panel. A hovered tab shows a `✕`, a middle click closes a tab (let go elsewhere
+  and nothing closes, as in the browser), and a tab's right-click menu pins or unpins it and closes it, around
+  the workspace moves. Pinned tabs wear a 📌, after the title so the titles still line up. Closing a
+  workspace's only visible tab from the panel keeps the window: the workspace gets a new tab first, where Firefox
+  would otherwise close the window and every other workspace's hidden tabs with it (with its default
+  `browser.tabs.closeWindowWithLastTab`; the real-browser test shows exactly that happening without this). Rows
+  now really look hovered: their hover style was never shown, because a GTK EventBox does not mark itself
+  hovered. The extension changed, with no new permission, so this is part of the next signed extension. Tested
+  in real Firefox 156 (`tests/e2e_firefox.py`: pin, unpin and close through the panel, and the window surviving
+  that last-tab close with the pref at Firefox's default) and under a real Openbox (`tests/e2e_x11.py`: the
+  hovered row's background and its `✕` drawn, other rows' `✕` not, a click on it and a middle click closing,
+  the browser keeping the focus). The panel offers closing, pinning and editing containers only when the
+  browser's extension says it handles them (`features` in its hello), so with an older extension there is no `✕`
+  or menu item that would do nothing.
+
 - Workspaces, more like Zen's: each can have an **icon** and a **colour** (right-click its chip: *Icon* offers a
   few and *Other…* takes any emoji; *Colour* the colours containers have), shown on its chip; a **container for
   its new tabs** (*New tabs in*): while it shows, a new tab (Ctrl+T, the tab strip's `+`) opens in that container.

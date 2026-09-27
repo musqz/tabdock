@@ -9,6 +9,8 @@
 const HOST = "openbox_sidepanel";
 const RECONNECT_MS = 3000; // only needed if the relay process itself died
 const DEBOUNCE_MS = 50;
+// What this extension does beyond what every version did, told to the panel in "hello": it offers only those.
+const FEATURES = ["close_tab", "pin_tab", "containers"];
 
 let port = null;
 let panelUp = false; // relay has a panel connected (set by resync, cleared by panel_disconnected)
@@ -320,6 +322,57 @@ async function moveToWorkspace(tabId, id) {
   await reconcile(tab.windowId);
 }
 
+// Close a tab the panel was asked to close. While workspaces are in use, never the window with it: when the
+// tab is the only one the window shows, the rest are other workspaces' hidden tabs, and Firefox would close the
+// window and all of those with it (browser.tabs.closeWindowWithLastTab). The workspace gets a new tab first.
+async function closeTab(tabId) {
+  const tab = await getTab(tabId);
+  if (tab === null) return;
+  if (workspaces !== null && !tab.hidden) {
+    const tabs = await browser.tabs.query({ windowId: tab.windowId });
+    if (tabs.some((t) => t.hidden) && tabs.every((t) => t.id === tab.id || t.hidden)) {
+      const shown = await windowWs(tab.windowId);
+      await assign((await newTab(tab.windowId, shown)).id, shown);
+    }
+  }
+  await browser.tabs.remove(tabId);
+}
+
+// -- containers -----------------------------------------------------------------------------------
+
+const CONTAINER_ICONS = [
+  "fingerprint", "briefcase", "dollar", "cart", "circle", "gift", "vacation", "food", "fruit", "pet", "tree", "chill",
+  "fence",
+];
+
+// A new container: a colour no container has yet (while there is one), and the plain circle icon.
+async function createContainer(msg) {
+  const name = cleanName(msg.name);
+  if (!name) return;
+  const taken = new Set((await browser.contextualIdentities.query({})).map((c) => c.color));
+  const color = COLORS.includes(msg.color) ? msg.color : COLORS.find((c) => !taken.has(c)) || COLORS[0];
+  await browser.contextualIdentities.create({ name, color, icon: CONTAINER_ICONS.includes(msg.icon) ? msg.icon : "circle" });
+}
+
+// Its name, colour or icon, whichever the message names (and is valid).
+async function updateContainer(msg) {
+  const details = {};
+  if (cleanName(msg.name)) details.name = cleanName(msg.name);
+  if (COLORS.includes(msg.color)) details.color = msg.color;
+  if (CONTAINER_ICONS.includes(msg.icon)) details.icon = msg.icon;
+  if (Object.keys(details).length) await browser.contextualIdentities.update(msg.cookieStoreId, details);
+}
+
+// As Firefox's own settings do it: the container's tabs close first, then the container goes. The tabs close as
+// the panel closes one (closeTab), so never with a window that holds other workspaces' hidden tabs; a workspace
+// that opened its new tabs in this container stops first, or its replacement tab would open right in it.
+async function removeContainer(store) {
+  await browser.contextualIdentities.get(store); // (throws for what is not a container: nothing is closed)
+  await forgetContainer(store);
+  for (const tab of await browser.tabs.query({ cookieStoreId: store })) await closeTab(tab.id);
+  await browser.contextualIdentities.remove(store);
+}
+
 // The keyboard shortcuts (manifest "commands", changeable in about:addons): the next or previous workspace,
 // round the list, or the Nth.
 async function onShortcut(name) {
@@ -483,7 +536,7 @@ async function resync() {
     lastFocusedWindowId = (await browser.windows.getLastFocused()).id;
   }
   panelUp = true;
-  send({ type: "hello", browser: info.name, version: info.version });
+  send({ type: "hello", browser: info.name, version: info.version, features: FEATURES });
   send(await snapshot());
 }
 
@@ -511,6 +564,22 @@ async function onCommand(msg) {
       case "activate_tab":
         await browser.tabs.update(msg.tabId, { active: true });
         await browser.windows.update(msg.windowId, { focused: true });
+        break;
+      case "close_tab":
+        if (Number.isInteger(msg.tabId)) await closeTab(msg.tabId);
+        break;
+      case "pin_tab":
+        // tabs.onUpdated reports it; an unpinned tab joins the workspace its window shows
+        if (Number.isInteger(msg.tabId)) await browser.tabs.update(msg.tabId, { pinned: msg.pinned === true });
+        break;
+      case "create_container":
+        await createContainer(msg);
+        break;
+      case "update_container":
+        if (typeof msg.cookieStoreId === "string") await updateContainer(msg);
+        break;
+      case "remove_container":
+        if (typeof msg.cookieStoreId === "string") await removeContainer(msg.cookieStoreId);
         break;
       case "new_tab":
         // in the container asked for, even "No container" in a workspace that has one of its own

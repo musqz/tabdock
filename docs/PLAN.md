@@ -153,9 +153,12 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
 - **M3 two-way editing:** first slice done (0.3.0): **reordering**, i.e. drag container sections (order kept
   in the extension's `storage.local`, since Firefox cannot reorder containers) and drag tabs within their
   container (`tabs.move`). Second slice done: **new tab in container**, a `+` button per section
-  (`tabs.create({cookieStoreId})`). Still open: close, pin, container create/rename/recolor/
-  delete from the panel, "reopen in container" (Firefox cannot change a tab's container, so it reopens the
-  tab and loses its history), search box.
+  (`tabs.create({cookieStoreId})`). Third slice done (unreleased): **close and pin** (a `✕` on the hovered tab,
+  middle-click, and the tab's right-click menu; `tabs.remove`, `tabs.update({pinned})`), where closing a
+  workspace's only visible tab never closes the window. Fourth slice done (unreleased): **edit containers**, a
+  container section's right-click menu to create, rename, recolour, re-icon and remove one (removal asks first:
+  its tabs close and Firefox deletes its cookies). Still open: "reopen in container" (Firefox cannot change a
+  tab's container, so it reopens the tab and loses its history), search box.
 - **M4 workspaces (done, unreleased):** exclusive, via `tabs.hide()`, verified with the real-browser test
   (`tests/e2e_firefox.py`: create, switch, move, rename, pin/unpin, last tab, remove, extension and browser
   restart, each checked against Firefox's own tab strip) and under Openbox (`tests/e2e_x11.py`: the chips, the

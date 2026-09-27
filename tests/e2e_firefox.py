@@ -6,7 +6,9 @@ untouched. It exercises what ships: install.sh puts the program into the scratch
 panel runs from that installed copy; packaging/build-extension.sh builds the .xpi, which is
 installed as a temporary add-on through Marionette. Then, against a real `tabdock --debug`:
   browser -> panel : tabs appear, new tabs show up, panel restart triggers a resync
-  panel -> browser : `activate <id>` switches the active tab, tabs move, containers reorder
+  panel -> browser : `activate <id>` switches the active tab, tabs move, containers reorder, a tab is
+                     pinned, unpinned and closed, a container is made, renamed, recoloured, given another
+                     icon and removed (its tab closed, its cookies gone)
   workspaces       : create, switch, move a tab, rename, close a workspace's last tab, remove, and an
                      extension restart, each checked against the browser's own tab strip too
                      (skipped in Zen, which has workspaces of its own); an icon and a colour, a container
@@ -337,6 +339,55 @@ def main():
         eventually(lambda: section_order(last_snapshot(out.text)) == wanted, f"the container order {wanted}")
         print(f"OK set_container_order: {by_id[last_id]} now precedes {by_id[first_id]}, stored by the extension")
 
+        home_handle = m.call("WebDriver:GetWindowHandle")["value"]
+        handle = m.call("WebDriver:NewWindow", {"type": "tab", "focus": False})["handle"]
+        m.call("WebDriver:SwitchToWindow", {"handle": handle})
+        m.call("WebDriver:Navigate", {"url": "data:text/html,<title>pin-me</title>"})
+        m.call("WebDriver:SwitchToWindow", {"handle": home_handle})  # (the tab to close must not be Marionette's)
+        eventually(lambda: "pin-me" in listed(last_snapshot(out.text)), "pin-me listed")
+        pin_me = listed(last_snapshot(out.text))["pin-me"][0]
+        say(panel, f"pin {pin_me}")
+        eventually(lambda: m.strip()["pin-me"][1], "pin-me pinned in the browser")
+        say(panel, f"unpin {pin_me}")
+        eventually(lambda: not m.strip()["pin-me"][1], "pin-me unpinned")
+        say(panel, f"close {pin_me}")
+        eventually(lambda: "pin-me" not in m.strip() and "pin-me" not in listed(last_snapshot(out.text)), "pin-me gone")
+        print("OK pin_tab, close_tab: the panel pins, unpins and closes a tab in the browser")
+
+        say(panel, "cnew e2e box")
+        eventually(lambda: "e2e box" in dict(sections(last_snapshot(out.text))), "the new container listed")
+        box = dict(sections(last_snapshot(out.text)))["e2e box"]
+        user_context = int(box.rsplit("-", 1)[1])
+        identity = lambda: m.chrome(  # noqa: E731
+            f"const i = ContextualIdentityService.getPublicIdentityFromId({user_context}); return i && [i.name, i.color, i.icon]")
+        assert identity()[2] == "circle", identity()
+        say(panel, f"crename {box} e2e renamed")
+        say(panel, f"ccolor {box} purple")
+        say(panel, f"cicon {box} fruit")
+        eventually(lambda: identity() == ["e2e renamed", "purple", "fruit"], "renamed, recoloured and re-iconed")
+        eventually(lambda: "e2e renamed" in dict(sections(last_snapshot(out.text))), "the new name listed")
+        print("OK create_container, update_container: made, renamed, recoloured and given another icon in the browser")
+
+        say(panel, f"newtab {box}")
+        eventually(lambda: section_tabs(last_snapshot(out.text)).get(box) == ["New Tab"], "a tab in the container")
+        cookies = lambda: m.chrome(  # noqa: E731
+            f"return Services.cookies.cookies.filter(c => c.originAttributes.userContextId == {user_context}).length")
+        m.chrome(f"""Services.cookies.add("example.com", "/", "e2e", "1", true, false, false, Date.now() + 3600e3,
+                     {{ userContextId: {user_context} }}, Ci.nsICookie.SAMESITE_NONE, Ci.nsICookie.SCHEME_HTTPS, false)""")
+        assert cookies() == 1, "the test cookie was not stored"
+        say(panel, f"crm {box}")
+        eventually(lambda: box not in [i for _n, i in sections(last_snapshot(out.text))], "the container gone from the panel")
+        eventually(lambda: identity() is None, "the container gone from the browser")
+        assert m.chrome(f"return gBrowser.tabs.filter(t => t.userContextId == {user_context}).length") == 0, "its tab stayed"
+        assert cookies() == 0, "its cookies stayed"
+        print("OK remove_container: its tab closed, the container and its cookies gone")
+        before = m.chrome("return gBrowser.tabs.length")
+        say(panel, "crm firefox-default")  # "No container" is no container: nothing may close
+        time.sleep(1.5)
+        assert m.chrome("return gBrowser.tabs.length") == before, "removing 'No container' closed tabs"
+        print("OK remove_container refuses what is not a container, and closes nothing")
+        m.call("WebDriver:SwitchToWindow", {"handle": home_handle})  # the tab in use before, as the checks below expect
+
         panel.terminate()
         panel.wait(timeout=TIMEOUT)
         panel, out = start_panel(env)
@@ -440,6 +491,32 @@ def check_workspaces(m, panel, out, restart):
     eventually(lambda: m.visible() == ["New Tab"], "only Scratch's new tab visible in the browser")
     eventually(lambda: section_tabs(snap()).get(store) == ["New Tab"], "that new tab in Scratch's container")
     print("OK closing a workspace's last tab keeps the workspace, with a new tab (in its container, if it has one)")
+
+    # Firefox's default: closing a window's last visible tab closes the window, the hidden tabs with it
+    m.chrome('Services.prefs.setBoolPref("browser.tabs.closeWindowWithLastTab", true)')
+    hidden = sorted(title for title, is_hidden, _p, _s in m.tab_rows() if is_hidden)
+    only = next(iter(listed(snap()).values()))[0]
+    say(panel, f"close {only}")
+    eventually(lambda: len(listed(snap())) == 1 and next(iter(listed(snap()).values()))[0] != only,
+               "Scratch's tab closed by the panel, and a new one in its place")
+    assert sorted(title for title, is_hidden, _p, _s in m.tab_rows() if is_hidden) == hidden, "the window kept its tabs"
+    assert shown_workspace(snap()) == ("Scratch", scratch), shown_workspace(snap())
+    print("OK closing a workspace's only tab from the panel keeps the window, whatever closeWindowWithLastTab says")
+
+    temp = m.chrome('return ContextualIdentityService.create("e2e-scratch", "circle", "red").userContextId')
+    doomed = f"firefox-container-{temp}"
+    say(panel, f"wscontainer {scratch} {doomed}")
+    eventually(lambda: workspace_extras(snap()).get(scratch, {}).get("cookieStoreId") == doomed, "Scratch's new container")
+    say(panel, f"close {next(iter(listed(snap()).values()))[0]}")  # the new tab in its place opens in e2e-scratch
+    eventually(lambda: section_tabs(snap()).get(doomed) == ["New Tab"], "Scratch's only tab, in e2e-scratch")
+    say(panel, f"crm {doomed}")  # still at Firefox's default closeWindowWithLastTab
+    eventually(lambda: doomed not in [i for _n, i in sections(snap())], "e2e-scratch removed")
+    eventually(lambda: section_tabs(snap())["firefox-default"] == ["New Tab"] and len(listed(snap())) == 1,
+               "Scratch's new tab, in no container")
+    assert sorted(title for title, is_hidden, _p, _s in m.tab_rows() if is_hidden) == hidden, "the window kept its tabs"
+    assert "cookieStoreId" not in workspace_extras(snap())[scratch], workspace_extras(snap())
+    m.chrome('Services.prefs.setBoolPref("browser.tabs.closeWindowWithLastTab", false)')
+    print("OK removing the container of a workspace's only tab keeps the window, the new tab in no container")
 
     say(panel, f"wsrm {scratch}")
     eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "its neighbour shown after the removal")

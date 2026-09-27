@@ -8,7 +8,8 @@ xdotool, xprop, xwininfo and ImageMagick (`magick`).
 
 Checks: dock type + strip geometry, no strut while autohiding, hover expand/collapse, click on
 a tab reaches the browser without stealing focus, the strip colour follows the active browser,
-raising the browser when clicking while another app is active, dragging to reorder, the chips
+raising the browser when clicking while another app is active, dragging to reorder, closing a tab
+(its ✕, a middle click), a container's menu (rename, removal asked first), the chips
 and the all-browsers list (folding, raising the right browser), workspaces (switch, the right-click
 menu, naming a new one in a window that takes the keyboard, a colour from the chip's submenu), pin ->
 strut, side switch, and follow=hide.
@@ -100,6 +101,14 @@ def screenshot(path):
     run("magick", "import", "-display", DISPLAY, "-window", "root", path)
 
 
+def colours(x, y, w, h, shots):
+    """The distinct colours (hex) in a rectangle of the screen."""
+    png = os.path.join(shots, "probe.png")
+    screenshot(png)
+    out = run("magick", png, "-crop", f"{w}x{h}+{x}+{y}", "+repage", "-unique-colors", "-depth", "8", "txt:-").stdout
+    return {c.upper() for c in re.findall(r"#([0-9A-Fa-f]{6})", out)}
+
+
 def pixel(x, y, shots):
     png = os.path.join(shots, "probe.png")
     screenshot(png)
@@ -113,7 +122,8 @@ class FakeExtension:
         self.sock.connect(path)
         self.sock.setblocking(False)
         self.buf = b""
-        self.send({"type": "hello", "browser": browser, "version": "1", "browserPid": pid})
+        self.send({"type": "hello", "browser": browser, "version": "1", "browserPid": pid,
+                   "features": ["close_tab", "pin_tab", "containers"]})
         self.state = (
             {
                 "type": "state",
@@ -349,6 +359,69 @@ def main():
         got = messages("activate_tab")
         assert got and got[-1]["tabId"] == 3, got
         ok("a plain click still activates a tab after all the dragging")
+
+        # closing a tab: the ✕ a hovered tab shows, and a middle click, as in the browser's tab strip
+        rows = wait_for(settled_layout, "row positions with the close buttons")
+        tab, cross = rows[("tab", 3)], rows[("close", 2)]
+        run("xdotool", "mousemove", str(tab["x"] + 60), str(int(tab["y"] + tab["h"] / 2)))
+        time.sleep(0.4)
+        screenshot(os.path.join(shots, "row-hover.png"))
+        assert pixel(tab["x"] + 8, tab["y"] + 2, shots) == "2A2E38", "the tab under the pointer is not highlighted"
+        other, mine = rows[("close", 2)], rows[("close", 3)]
+        assert colours(other["x"], other["y"], other["w"], other["h"], shots) == {"1B1D23"}, "another tab's ✕ shows"
+        assert len(colours(mine["x"], mine["y"], mine["w"], mine["h"], shots)) > 1, "no ✕ on the hovered tab"
+        run("xdotool", "mousemove", str(cross["x"] + cross["w"] // 2), str(cross["y"] + cross["h"] // 2))
+        time.sleep(0.3)
+        screenshot(os.path.join(shots, "close-hover.png"))
+        run("xdotool", "click", "1")
+        time.sleep(0.4)
+        got = ff.received()
+        assert [m for m in got if m["type"] == "close_tab"] == [{"type": "close_tab", "tabId": 2}], got
+        assert not [m for m in got if m["type"] == "activate_tab"], "the ✕ also activated the tab"
+        tab = rows[("tab", 3)]
+        run("xdotool", "mousemove", str(tab["x"] + 60), str(int(tab["y"] + tab["h"] / 2)))
+        time.sleep(0.3)
+        run("xdotool", "click", "2")
+        got = messages("close_tab")
+        assert got == [{"type": "close_tab", "tabId": 3}], got
+        assert int(run("xdotool", "getactivewindow").stdout) == ff_win, "closing took the focus from the browser"
+        ok("close: the ✕ of a hovered tab and a middle click send close_tab, and the browser keeps the focus")
+
+        # a container's own menu: rename it in the name window, and removing asks first, Cancel being the default
+        def container_menu(*keys):
+            # where it is now: the sections dragged into another order earlier go back to the fake browser's order
+            # on any redraw, since it never stores an order
+            section = wait_for(settled_layout, "row positions")[("section", "firefox-container-1")]
+            run("xdotool", "mousemove", str(section["x"] + 60), str(int(section["y"] + section["h"] / 2)))
+            time.sleep(0.3)
+            run("xdotool", "click", "3")
+            time.sleep(0.6)
+            assert panel_mapped(), "the panel closed under the container's menu"
+            run("xdotool", "key", *keys)
+
+        def active_title():
+            return run("xdotool", "getactivewindow", "getwindowname").stdout.strip()
+
+        ff.received()
+        container_menu("Down", "Return")  # Rename…
+        wait_for(lambda: active_title() == "Rename container", "the rename window, with the keyboard")
+        run("xdotool", "type", "--delay", "30", "Private")
+        run("xdotool", "key", "Return")
+        got = messages("update_container")
+        assert got == [{"type": "update_container", "cookieStoreId": "firefox-container-1", "name": "Private"}], got
+        wait_for(lambda: int(run("xdotool", "getactivewindow").stdout) == ff_win, "the keyboard back in the browser")
+        container_menu("Up", "Return")  # Remove container…, the last item
+        wait_for(lambda: active_title() == "Remove container", "the window asking before the removal")
+        screenshot(os.path.join(shots, "remove-container.png"))
+        run("xdotool", "key", "Return")  # Cancel has the focus: a stray Enter removes nothing
+        wait_for(lambda: int(run("xdotool", "getactivewindow").stdout) == ff_win, "the keyboard back in the browser")
+        assert messages("remove_container") == [], "Enter removed the container"
+        container_menu("Up", "Return")
+        wait_for(lambda: active_title() == "Remove container", "the window asking before the removal, again")
+        run("xdotool", "key", "Tab", "Return")  # to Remove, then press it
+        got = messages("remove_container")
+        assert got == [{"type": "remove_container", "cookieStoreId": "firefox-container-1"}], got
+        ok("containers: a right click renames one in a window of its own; removing asks first, and Enter means Cancel")
         collapse()
 
         # -- several browsers: chips choose what is listed, "all" gives each browser a foldable section -----
@@ -482,7 +555,7 @@ def main():
         time.sleep(0.6)  # longer than the close delay: the menu keeps the panel open
         assert panel_mapped(), "the panel closed under its own menu"
         screenshot(os.path.join(shots, "workspace-menu.png"))
-        run("xdotool", "key", "Down", "Return")  # the menu has the keyboard: its first (only) item
+        run("xdotool", "key", "Down", "Down", "Return")  # the menu has the keyboard: past "Pin tab" to the move
         moved = received(ff, "move_tab_to_workspace")
         assert moved == [{"type": "move_tab_to_workspace", "tabId": 2, "workspaceId": "default"}], moved
         assert int(run("xdotool", "getactivewindow").stdout) == ff_win, "the menu took the focus from the browser"
