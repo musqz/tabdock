@@ -23,7 +23,8 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/tabdock-nmhost  
   (colour, icon, name, tab count) with its tabs, site icons optional (see Site icons). Click a tab to
   activate it.
 - **Close and pin:** a hovered tab shows a `✕`; middle-click closes a tab too, as in the browser's tab strip.
-  Right-click a tab to pin or unpin it, or close it. Pinned tabs wear a 📌. With workspaces in use, closing a
+  Right-click a tab to pin or unpin it, reopen it in another container (Firefox cannot move a tab between
+  containers, so the page loads anew there and its back/forward history stays behind), or close it. Pinned tabs wear a 📌. With workspaces in use, closing a
   workspace's only tab from the panel leaves the window open (see Workspaces).
 - **Edit containers:** right-click a container section to rename it, change its colour or icon, make a new
   container, or remove it. Removing asks first, with Cancel as the default: its tabs close (in every window and

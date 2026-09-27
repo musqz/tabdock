@@ -29,6 +29,7 @@ from .autohide import Autohide  # noqa: E402
 from .model import (  # noqa: E402
     ACCENTS,
     DEFAULT_ACCENT,
+    FEATURES,
     NO_CONTAINER,
     WS_COLORS,
     accent,
@@ -36,6 +37,7 @@ from .model import (  # noqa: E402
     colour_name,
     edits_workspaces,
     removal_text,
+    reopenable,
     supports,
     focused_window,
     group_tabs,
@@ -847,7 +849,7 @@ class DockView:
                 rows.append(self._label("No browser windows", "sp-empty", wrap=True))
                 continue
             spaces = workspaces(state) if offers_workspaces(info, state) else []
-            can = {feature for feature in ("close_tab", "pin_tab", "containers") if supports(info, feature)}
+            can = {feature for feature in FEATURES if supports(info, feature)}
             if spaces:
                 rows.append(self._workspace_row(conn, colour, spaces, window, ordered_containers(state)))
             for container, tabs in groups:
@@ -856,7 +858,8 @@ class DockView:
                 rows.append(self._section(container, tabs, key, folded, conn, colour, state, window["id"], can))
                 if not folded:
                     rows.extend(
-                        self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour, spaces, can)
+                        self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour, spaces, can,
+                                      ordered_containers(state))
                         for tab in tabs
                     )
         self._replace_rows(rows or [self._label("No browser windows", "sp-empty", wrap=True)])
@@ -951,10 +954,10 @@ class DockView:
         self._last = None
         self._rebuild()
 
-    def _tab_row(self, tab, window_id, group, conn, colour, spaces=(), can=()):
+    def _tab_row(self, tab, window_id, group, conn, colour, spaces=(), can=(), containers=()):
         """A tab: its site icon (optional), the title, an unread badge, a pin if pinned, and a ✕ that shows while
         the row is hovered. Middle-click closes it too; right-click pins, moves (to another workspace) or closes.
-        `can`: what the extension handles, of "close_tab" and "pin_tab"; the rest is not offered."""
+        `can`: what the extension handles ("close_tab", "pin_tab", "reopen_in_container"); the rest is not offered."""
         label = self._label(tab_label(tab), "sp-tab")
         label.set_tooltip_text("\n".join(filter(None, (tab.get("title"), tab.get("url")))))
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -985,6 +988,18 @@ class DockView:
         if "pin_tab" in can:
             groups.append([("Unpin tab" if pinned else "Pin tab",
                             lambda: self._command(conn, {"type": "pin_tab", "tabId": tab["id"], "pinned": not pinned}))])
+        store = tab.get("cookieStoreId") or NO_CONTAINER
+        if "reopen_in_container" in can and store != "firefox-private" and reopenable(tab):
+            others = [c for c in ({"cookieStoreId": NO_CONTAINER, "name": "No container"}, *containers)
+                      if c["cookieStoreId"] != store]
+            if others:
+                groups.append([("Reopen in container", [
+                    (Markup(f'<span foreground="{c.get("colorCode") or DEFAULT_ACCENT}">▌</span> '
+                            f'{GLib.markup_escape_text(c["name"])}'),
+                     lambda cid=c["cookieStoreId"]: self._command(
+                         conn, {"type": "reopen_in_container", "tabId": tab["id"], "cookieStoreId": cid}))
+                    for c in others
+                ])])
         if len(spaces) > 1 and not pinned:  # (a pinned tab shows in every workspace)
             groups.append([
                 (f"Move to {workspace_label(ws)}", lambda ws_id=ws["id"]: self._command(

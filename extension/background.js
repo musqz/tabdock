@@ -10,7 +10,7 @@ const HOST = "openbox_sidepanel";
 const RECONNECT_MS = 3000; // only needed if the relay process itself died
 const DEBOUNCE_MS = 50;
 // What this extension does beyond what every version did, told to the panel in "hello": it offers only those.
-const FEATURES = ["close_tab", "pin_tab", "containers"];
+const FEATURES = ["close_tab", "pin_tab", "containers", "reopen_in_container"];
 
 let port = null;
 let panelUp = false; // relay has a panel connected (set by resync, cleared by panel_disconnected)
@@ -338,6 +338,22 @@ async function closeTab(tabId) {
   await browser.tabs.remove(tabId);
 }
 
+// A tab cannot change its container, so it is opened anew in the other one, in its place (pinned if it was, in
+// the same workspace), and the original closed: the page reloads there and its back/forward history stays behind.
+// A page an extension may not open (about:config, file:, ...) is left where it is.
+const BLANK_URLS = ["about:newtab", "about:home", "about:blank"];
+
+async function reopenInContainer(tabId, store) {
+  const tab = await getTab(tabId);
+  if (tab === null || tab.incognito || tab.cookieStoreId === store) return;
+  if (store !== "firefox-default") await browser.contextualIdentities.get(store); // (throws for what is none)
+  const where = { windowId: tab.windowId, index: tab.index + 1, active: tab.active, pinned: tab.pinned, cookieStoreId: store };
+  const fresh = await browser.tabs.create(BLANK_URLS.includes(tab.url) ? where : { ...where, url: tab.url });
+  explicit.add(fresh.id); // the container asked for, whatever the workspace's own
+  if (workspaces !== null) await assign(fresh.id, await tabWsOf(tab));
+  await browser.tabs.remove(tab.id);
+}
+
 // -- containers -----------------------------------------------------------------------------------
 
 const CONTAINER_ICONS = [
@@ -567,6 +583,11 @@ async function onCommand(msg) {
         break;
       case "close_tab":
         if (Number.isInteger(msg.tabId)) await closeTab(msg.tabId);
+        break;
+      case "reopen_in_container":
+        if (Number.isInteger(msg.tabId) && typeof msg.cookieStoreId === "string") {
+          await reopenInContainer(msg.tabId, msg.cookieStoreId);
+        }
         break;
       case "pin_tab":
         // tabs.onUpdated reports it; an unpinned tab joins the workspace its window shows

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Reopen a tab in another container: *Reopen in container* in a tab's right-click menu. Firefox cannot move a tab
+  between containers, so the page opens anew in the one picked, right after it (pinned if it was, in the same
+  workspace), and the original closes; the page reloads and its back/forward history stays behind. Offered for
+  web pages and the new-tab page, which an extension may open, not for `about:config` and the like. Tested in
+  real Firefox 156 with a page served for the test (`tests/e2e_firefox.py`).
+
 - Packaging: `packaging/sign-extension.sh` now also leaves the signed extension as
   `web-ext-artifacts/tabdock-<version>.xpi`, the name the GitHub release attaches it by and `packaging/PKGBUILD`
   downloads it by, and prints the `gh release upload` command for it (also when the version was signed before).

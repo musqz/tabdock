@@ -369,6 +369,11 @@ class PanelTest(unittest.TestCase):
             {"type": "pin_tab", "tabId": 7, "pinned": False},
         ])  # (the malformed lines are ignored)
 
+    def test_debug_console_reopens_a_tab_in_a_container(self):
+        for line in ("reopen 7 firefox-container-2", "reopen x firefox-container-2", "reopen 7"):
+            self.panel.on_stdin_line(line)
+        self.assertEqual(self.ff.sent, [{"type": "reopen_in_container", "tabId": 7, "cookieStoreId": "firefox-container-2"}])
+
     def test_debug_console_edits_containers(self):
         for line in ("cnew Travel plans", "crename firefox-container-1 Private life", "ccolor firefox-container-1 red",
                      "cicon firefox-container-1 fruit", "crm firefox-container-1"):

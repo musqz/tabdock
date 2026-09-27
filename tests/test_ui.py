@@ -33,7 +33,8 @@ STATE = {
         }
     ],
 }
-INFO = {"browser": "Firefox", "version": "156.0", "browserPid": 1, "features": ["close_tab", "pin_tab", "containers"]}
+INFO = {"browser": "Firefox", "version": "156.0", "browserPid": 1,
+        "features": ["close_tab", "pin_tab", "containers", "reopen_in_container"]}
 OLD_INFO = {"browser": "Firefox", "version": "156.0", "browserPid": 1}  # an extension from before the features list
 
 
@@ -1386,6 +1387,28 @@ class DockViewTest(unittest.TestCase):
         view.show([(object(), OLD_INFO, self.WS_STATE)])  # with workspaces: moving is still offered
         self.right_click(self.row(view, "tab", 2))
         self.assertEqual(self.labels(view), ["Move to Default", "Move to Play"])
+
+    def test_a_tab_reopens_in_another_container(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])  # tab 10 is in no container, on https://a.example
+        self.right_click(self.row(view, "tab", 10))
+        self.assertEqual(self.labels(view), ["Pin tab", "Reopen in container", "Close tab"])
+        choices = self.texts(view, "Reopen in container")
+        self.assertEqual(list(choices), ["▌ Personal & Co", "▌ Work"])  # not where it is
+        choices["▌ Work"].activate()
+        self.assertEqual(self.commands, [{"type": "reopen_in_container", "tabId": 10, "cookieStoreId": "firefox-container-2"}])
+        tabs = [STATE["windows"][0]["tabs"][0], {**STATE["windows"][0]["tabs"][1], "url": "https://mail.example"}]
+        view.show([(object(), INFO, {**STATE, "windows": [{"id": 2, "tabs": tabs}]})])
+        self.right_click(self.row(view, "tab", 11))  # in Personal & Co: "No container" is a choice
+        self.assertEqual(list(self.texts(view, "Reopen in container")), ["▌ No container", "▌ Work"])
+
+    def test_a_page_an_extension_may_not_open_is_not_offered_another_container(self):
+        view = self.make()
+        state = {**STATE, "windows": [{"id": 2, "tabs": [
+            {"id": 10, "title": "config", "url": "about:config", "cookieStoreId": "firefox-default", "active": True}]}]}
+        view.show([(object(), INFO, state)])
+        self.right_click(self.row(view, "tab", 10))
+        self.assertNotIn("Reopen in container", self.labels(view))
 
     def test_a_middle_click_closes_the_tab_it_was_released_on(self):
         view = self.make()

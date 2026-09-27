@@ -15,6 +15,7 @@ from tabdock.model import (  # noqa: E402
     offers_workspaces,
     ordered_containers,
     removal_text,
+    reopenable,
     reordered,
     supports,
     tab_badge,
@@ -216,6 +217,12 @@ class ModelTest(unittest.TestCase):
         self.assertIn("Its 1 open tab will close,", removal_text("Bank", 1))
         self.assertIn("Its 3 open tabs will close,", removal_text("Bank", 3))
         self.assertIn("deletes its cookies", removal_text("Bank", 3))
+
+    def test_only_pages_an_extension_may_open_can_move_to_another_container(self):
+        for url in ("https://a.example/x", "http://b.example", "about:newtab", "about:blank"):
+            self.assertTrue(reopenable({"url": url}), url)
+        for url in ("about:config", "file:///etc/passwd", "moz-extension://x/y", "data:text/html,x", None):
+            self.assertFalse(reopenable({"url": url}), url)
 
     def test_the_panel_offers_what_the_extension_says_it_handles(self):
         self.assertTrue(supports({"features": ["close_tab", "pin_tab"]}, "close_tab"))

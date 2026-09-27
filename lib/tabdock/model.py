@@ -60,6 +60,17 @@ def workspace_label(ws):
     return f'{ws["icon"]} {ws["name"]}' if ws.get("icon") else ws["name"]
 
 
+def reopenable(tab):
+    """Whether an extension may open this tab's page in another container: web pages and the new-tab page, not
+    about:config, file: and the like (Firefox refuses to open those for an extension)."""
+    url = tab.get("url") or ""
+    return url.startswith(("http:", "https:")) or url in ("about:newtab", "about:home", "about:blank")
+
+
+# What an extension may say it handles (`features` in its hello), beyond what every version did.
+FEATURES = ("close_tab", "pin_tab", "containers", "reopen_in_container")
+
+
 def supports(info, feature):
     """Whether the browser's extension handles `feature` ("close_tab", "pin_tab", "containers"): it lists them in its
     hello. An older one lists none, and the panel then offers only what it can do, never a button that does nothing."""
