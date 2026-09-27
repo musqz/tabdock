@@ -132,13 +132,15 @@ checks this), the tag is `v` + `VERSION`, and the package refuses sources whose 
 
 1. Bump `VERSION` and `extension/manifest.json`, rename the changelog's `## Unreleased` to the new version,
    and merge that to `main`.
-2. Sign the extension: `packaging/sign-extension.sh`.
+2. Sign the extension from that `main`: `packaging/sign-extension.sh`. Sign last, after every change to
+   `extension/`: the signed file must match the tagged sources exactly (the PKGBUILD checks this), and a
+   version, once signed, cannot be signed again, so a later change to `extension/` needs a new version.
 3. Tag the release commit and push the tag:
 
    ```bash
-   git tag -a v0.3.0 -m "tabdock 0.3.0" && git push origin v0.3.0
+   git tag -a v0.3.1 -m "tabdock 0.3.1" && git push origin v0.3.1
    ```
 4. On GitHub, **Releases -> Draft a new release**, pick the tag, and attach the signed file from
-   `web-ext-artifacts/`, renamed to `tabdock-0.3.0.xpi` (the PKGBUILD downloads it by that name).
+   `web-ext-artifacts/`, renamed to `tabdock-0.3.1.xpi` (the PKGBUILD downloads it by that name).
 5. In `packaging/PKGBUILD` set `pkgver` (and `pkgrel=1`), run `updpkgsums`, then `makepkg -si` to try it.
    For the AUR, also `makepkg --printsrcinfo > .SRCINFO`.

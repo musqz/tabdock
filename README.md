@@ -5,7 +5,7 @@ through a small WebExtension. Firefox-family (Netscape-lineage, Gecko) browsers 
 FireDragon, Waterfox, LibreWolf; native installs, no Chromium/Blink, no Flatpak/Snap. Goal: a Zen-style
 sidebar (containers, workspaces, autohide) everywhere.
 
-Status: **0.3.0, installable.** Autohiding dock on the left/right edge, real install, signed extension,
+Status: **0.3.1, installable.** Autohiding dock on the left/right edge, real install, signed extension,
 autostart, drag to reorder, new tab per container. The rest of two-way editing (close, pin, edit
 containers) and workspaces are next — see [docs/PLAN.md](docs/PLAN.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
