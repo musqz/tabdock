@@ -142,7 +142,8 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
   browser restarts.
 - **M3 two-way editing:** first slice done (0.3.0): **reordering**, i.e. drag container sections (order kept
   in the extension's `storage.local`, since Firefox cannot reorder containers) and drag tabs within their
-  container (`tabs.move`). Still open: new tab in container, close, pin, container create/rename/recolor/
+  container (`tabs.move`). Second slice done: **new tab in container**, a `+` button per section
+  (`tabs.create({cookieStoreId})`). Still open: close, pin, container create/rename/recolor/
   delete from the panel, "reopen in container" (Firefox cannot change a tab's container, so it reopens the
   tab and loses its history), search box, favicons cache.
 - **M4 workspaces** via `tabs.hide()`; optional native tab-group display.

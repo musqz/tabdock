@@ -117,6 +117,9 @@ async function onCommand(msg) {
         await browser.tabs.update(msg.tabId, { active: true });
         await browser.windows.update(msg.windowId, { focused: true });
         break;
+      case "new_tab":
+        await browser.tabs.create({ cookieStoreId: msg.cookieStoreId, windowId: msg.windowId });
+        break;
       default:
         console.warn("sidepanel: unknown command", msg.type);
     }

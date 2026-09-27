@@ -37,11 +37,17 @@ INFO = {"browser": "Firefox", "version": "156.0", "browserPid": 1}
 
 
 def label_of(row):
-    """The text label of a row. A tab row holds an icon and a label; a section row holds just the label."""
+    """The text label of a row. A tab row holds an icon and a label; a section row holds a label and a button."""
     child = row.get_child() if isinstance(row, Gtk.EventBox) else row
     if isinstance(child, Gtk.Box):
         child = next(c for c in child.get_children() if isinstance(c, Gtk.Label))
     return child
+
+
+def new_tab_button_of(row):
+    """A section row's "+" button, the other child of its box alongside the label."""
+    child = row.get_child() if isinstance(row, Gtk.EventBox) else row
+    return next(c for c in child.get_children() if isinstance(c, Gtk.Button))
 
 
 def button(widget, kind, signal, x=0.0, y=0.0, which=1):
@@ -218,6 +224,52 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(len(view.list.get_children()), 4)
         click(view.list.get_children()[0])
         self.assertEqual(len(view.list.get_children()), 5)
+
+    def test_new_tab_button_sends_new_tab_for_its_own_container_and_window(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, STATE)])
+        row = next(r for r in view.list.get_children() if "Personal & Co" in label_of(r).get_text())
+        new_tab_button_of(row).clicked()
+        self.assertEqual(self.commands, [{"type": "new_tab", "cookieStoreId": "firefox-container-1", "windowId": 2}])
+        self.assertEqual(self.command_conns, [conn])
+
+    def test_new_tab_button_is_absent_for_a_container_the_browser_no_longer_lists(self):
+        # A deleted container's leftover tabs still get a section (model.group_tabs), but
+        # tabs.create({cookieStoreId}) for a store the browser no longer has would just fail.
+        state = {**STATE, "windows": [{
+            "id": 2,
+            "tabs": [{"id": 20, "title": "orphan", "cookieStoreId": "firefox-container-9", "active": False}],
+        }]}
+        view = self.make()
+        view.show([(object(), INFO, state)])
+        row = next(r for r in view.list.get_children() if "firefox-container-9" in label_of(r).get_text())
+        buttons = [c for c in row.get_child().get_children() if isinstance(c, Gtk.Button)]
+        self.assertEqual(buttons, [])
+
+    def test_new_tab_button_names_its_container_in_the_tooltip(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        row = next(r for r in view.list.get_children() if "Personal & Co" in label_of(r).get_text())
+        self.assertEqual(new_tab_button_of(row).get_tooltip_text(), "New tab in Personal & Co")
+
+    def test_new_tab_button_for_no_container_does_not_name_it(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        row = view.list.get_children()[0]  # "No container" stays first
+        self.assertEqual(new_tab_button_of(row).get_tooltip_text(), "New tab")
+
+    def test_new_tab_button_does_not_fold_the_section_or_start_a_drag(self):
+        # .clicked() only proves the button's own wiring never touches fold/drag state; whether a
+        # real click actually lands on the nested Button before the row's EventBox sees it is a
+        # GTK3 property (the deepest widget under the pointer wins) not exercised by this harness,
+        # which never maps a real window (see the drag tests' note above on tests/e2e_x11.py).
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        row = view.list.get_children()[0]  # "No container" has a tab, so a plain click would fold it
+        new_tab_button_of(row).clicked()
+        self.assertEqual(len(view.list.get_children()), 5)  # still unfolded: the section was not toggled
+        self.assertIsNone(view._press)
 
     def test_identical_state_does_not_rebuild_or_restyle(self):
         view = self.make()

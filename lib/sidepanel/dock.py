@@ -46,7 +46,8 @@ CSS = """
 .sp-content {{ background-color: #1b1d23; color: #dfe3ea; }}
 .sp-header {{ background-color: #23262e; border-top: 3px solid {accent}; padding: 5px 8px; }}
 .sp-browser {{ font-weight: bold; color: {accent}; }}
-.sp-section {{ padding: 6px 8px 3px 6px; color: #aab2c0; }}
+.sp-sectionbox {{ padding: 6px 8px 3px 6px; }}
+.sp-section {{ padding: 0; color: #aab2c0; }}
 .sp-row {{ border-left: 3px solid transparent; }}
 .sp-row:hover {{ background-color: #2a2e38; }}
 .sp-row.active {{ background-color: #2f3542; border-left-color: {accent}; }}
@@ -62,6 +63,7 @@ button.sp-btn.sp-pin:hover {{ border-color: #7d8594; }}
 button.sp-btn.sp-pin:checked {{ background-color: {accent}; border-color: {accent}; color: #1b1d23; font-weight: bold; }}
 button.sp-btn.sp-quit {{ margin-left: 6px; }}
 button.sp-btn.sp-quit:hover {{ color: #ff6b6b; }}
+button.sp-btn.sp-newtab {{ margin-left: 4px; }}
 .sp-row.dragging {{ opacity: 0.45; }}
 .sp-row.drop-before {{ box-shadow: inset 0 2px 0 0 {accent}; }}
 .sp-row.drop-after {{ box-shadow: inset 0 -2px 0 0 {accent}; }}
@@ -751,7 +753,7 @@ class DockView:
             for container, tabs in group_tabs(state):
                 key = (browser, container["cookieStoreId"])
                 folded = key in self.collapsed
-                rows.append(self._section(container, tabs, key, folded, conn, colour, state))
+                rows.append(self._section(container, tabs, key, folded, conn, colour, state, window["id"]))
                 if not folded:
                     rows.extend(self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour) for tab in tabs)
         self._replace_rows(rows or [self._label("No browser windows", "sp-empty", wrap=True)])
@@ -774,7 +776,7 @@ class DockView:
         row.get_style_context().add_class("sp-bhead")
         return row
 
-    def _section(self, container, tabs, key, folded, conn, browser_colour, state):
+    def _section(self, container, tabs, key, folded, conn, browser_colour, state, window_id):
         colour = container.get("colorCode") or DEFAULT_ACCENT
         icon = ICONS.get(container.get("icon"), "●")
         name = GLib.markup_escape_text(container["name"])
@@ -787,10 +789,24 @@ class DockView:
         label = self._label(markup, "sp-section", markup=True)
         cid = container["cookieStoreId"]
         # "No container" stays first, and a store the browser does not list as a container (private
-        # windows, say) cannot be ordered: the next snapshot would put it straight back
+        # windows, say) cannot be ordered or offered "new tab here": the next snapshot would put a
+        # reordered one straight back, and a new-tab request for a deleted container would just fail
         known = {c["cookieStoreId"] for c in state.get("containers") or []}
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        box.get_style_context().add_class("sp-sectionbox")
+        box.pack_start(label, True, True, 0)
+        if cid == NO_CONTAINER or cid in known:
+            button = self._button(
+                "+", "New tab" if cid == NO_CONTAINER else f"New tab in {container['name']}", Gtk.Button
+            )
+            button.get_style_context().add_class("sp-newtab")
+            button.connect(
+                "clicked",
+                lambda _b: self._command(conn, {"type": "new_tab", "cookieStoreId": cid, "windowId": window_id}),
+            )
+            box.pack_start(button, False, False, 0)
         return self._row(
-            label, "section", cid, None, conn, browser_colour, (lambda: self._toggle(key)) if tabs else (lambda: None),
+            box, "section", cid, None, conn, browser_colour, (lambda: self._toggle(key)) if tabs else (lambda: None),
             draggable=cid != NO_CONTAINER and cid in known,
         )
 
