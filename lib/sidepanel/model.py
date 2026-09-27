@@ -28,9 +28,9 @@ def window_of_tab(state, tab_id):
 def group_tabs(state):
     """[(container, [tab, ...])] for the focused window.
 
-    No-container tabs first, then every known container in the browser's order
-    (empty ones included, they are targets for "new tab here"), then any
-    unknown cookie store.
+    No-container first, then every known container in the browser's order, then any unknown
+    cookie store. No-container and known containers stay even when empty: they are targets for
+    "new tab here".
     """
     win = focused_window(state)
     if win is None:
@@ -39,9 +39,7 @@ def group_tabs(state):
     for tab in win["tabs"]:
         by_store.setdefault(tab.get("cookieStoreId") or NO_CONTAINER, []).append(tab)
 
-    groups = []
-    if NO_CONTAINER in by_store:
-        groups.append(({"cookieStoreId": NO_CONTAINER, "name": "No container"}, by_store.pop(NO_CONTAINER)))
+    groups = [({"cookieStoreId": NO_CONTAINER, "name": "No container"}, by_store.pop(NO_CONTAINER, []))]
     for container in ordered_containers(state):
         groups.append((container, by_store.pop(container["cookieStoreId"], [])))
     for store, tabs in by_store.items():

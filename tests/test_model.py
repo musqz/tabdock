@@ -61,6 +61,16 @@ class ModelTest(unittest.TestCase):
     def test_no_windows(self):
         self.assertEqual(group_tabs({"windows": []}), [])
 
+    def test_no_container_group_stays_even_when_empty(self):
+        # every tab is in a container: no default-context tab exists, but "No container" is still
+        # a target for "new tab here", same as an empty known container
+        state = {
+            "containers": [{"cookieStoreId": "firefox-container-1", "name": "Personal"}],
+            "windows": [{"id": 1, "tabs": [tab(1, "mail", "firefox-container-1")]}],
+        }
+        groups = group_tabs(state)
+        self.assertEqual([(c["name"], [t["id"] for t in tabs]) for c, tabs in groups], [("No container", []), ("Personal", [1])])
+
     def test_custom_container_order_is_applied_and_no_container_stays_first(self):
         state = {**STATE, "containerOrder": ["firefox-container-2", "firefox-container-1"]}
         names = [c["name"] for c, _ in group_tabs(state)]
