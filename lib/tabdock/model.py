@@ -187,6 +187,7 @@ ACCENTS = {
     "librewolf": "#3fa9f5",
     "waterfox": "#2ec4b6",
     "floorp": "#e5b93a",
+    "midori": "#8bc34a",
 }
 DEFAULT_ACCENT = "#8f9bb3"
 DARK_TEXT = "#1b1d23"  # the panel's background: the text on a filled accent (a pinned button, a chip picked)
@@ -276,6 +277,7 @@ KNOWN_BROWSERS = (
     ("librewolf", "LibreWolf"),
     ("floorp", "Floorp"),
     ("waterfox", "Waterfox"),
+    ("midori", "Midori"),
     ("firefox", "Firefox"),
 )
 

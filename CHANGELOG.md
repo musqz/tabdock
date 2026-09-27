@@ -27,6 +27,9 @@
   other line (comments included) left untouched. Only the panel changed: a panel restart is enough, no new
   signing.
 
+- Midori is a known browser now (its own accent colour, a `midori` `[theme]` key), detected the same way
+  as the others. Only the panel changed: a panel restart is enough, no new signing.
+
 ## 0.4.0
 
 Sign this version's extension and install it in each browser (docs/RELEASE.md): it asks for three new
