@@ -107,6 +107,10 @@ class DockViewTest(unittest.TestCase):
             patcher = mock.patch.object(Gtk.Window, name, lambda w, fn=fn: fn(w))
             patcher.start()
             self.addCleanup(patcher.stop)
+        # a context menu opens as shown (nothing is mapped or grabbed), and a right click needs no real window
+        patcher = mock.patch.object(Gtk.Menu, "popup_at_pointer", lambda menu, _event: menu.show())
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def make(self, **cfg):
         from sidepanel.dock import DockView
@@ -999,6 +1003,190 @@ class DockViewTest(unittest.TestCase):
         view.show([(object(), INFO, DRAG_STATE)])
         view.win.destroy()
         self.assertFalse(view._dump_layout())  # an idle callback that outlived its window: quietly nothing
+
+    # -- workspaces ----------------------------------------------------------------------------------
+
+    WS_STATE = {  # window 2 shows "Work"; tab 3 is pinned, so it shows in every workspace
+        "focusedWindowId": 2,
+        "containers": [],
+        "workspaces": [{"id": "default", "name": "Default"}, {"id": "ws-1", "name": "Work"}, {"id": "ws-2", "name": "Play"}],
+        "windows": [{"id": 2, "workspaceId": "ws-1", "tabs": [
+            {"id": 1, "index": 1, "title": "home", "cookieStoreId": "firefox-default", "workspaceId": "default"},
+            {"id": 2, "index": 2, "title": "ticket", "cookieStoreId": "firefox-default", "workspaceId": "ws-1", "active": True},
+            {"id": 3, "index": 0, "title": "music", "cookieStoreId": "firefox-default", "workspaceId": "ws-2", "pinned": True},
+        ]}],
+    }
+
+    def ws_buttons(self, view):
+        return {button.get_label(): button for _conn, _id, button in view._ws_buttons}
+
+    def selected_ws(self, view):
+        return [label for label, b in self.ws_buttons(view).items() if b.get_style_context().has_class("selected")]
+
+    def right_click(self, widget):
+        button(widget, Gdk.EventType.BUTTON_PRESS, "button-press-event", which=3)
+
+    def menu_items(self, view):
+        return {item.get_label(): item for item in view._menu.get_children()}
+
+    def test_workspaces_are_chips_above_the_tabs_with_the_shown_one_marked(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        self.assertEqual(list(self.ws_buttons(view)), ["Default", "Work", "Play", "+"])
+        self.assertEqual(self.selected_ws(view), ["Work"])
+        self.assertIsInstance(view.list.get_children()[0], Gtk.FlowBox)  # first, above the containers
+
+    def test_only_the_shown_workspaces_tabs_are_listed_and_pinned_tabs_everywhere(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        self.assertEqual({m["id"] for m in view._meta.values() if m["kind"] == "tab"}, {2, 3})
+
+    def test_no_workspaces_in_zen_or_from_an_older_extension(self):
+        view = self.make()
+        view.show([(object(), {**INFO, "browser": "Zen"}, self.WS_STATE)])  # Zen has workspaces of its own
+        self.assertEqual(view._ws_buttons, [])
+        old = {k: v for k, v in STATE.items() if k != "workspaces"}
+        view.show([(object(), INFO, old)])
+        self.assertEqual(view._ws_buttons, [])
+        self.assertNotIsInstance(view.list.get_children()[0], Gtk.FlowBox)
+
+    def test_one_workspace_is_a_chip_too_with_a_plus_to_make_the_next(self):
+        view = self.make()
+        view.show([(object(), INFO, {**STATE, "workspaces": [{"id": "default", "name": "Default"}]})])
+        self.assertEqual(list(self.ws_buttons(view)), ["Default", "+"])
+
+    def test_a_click_on_a_workspace_switches_the_window_to_it(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, self.WS_STATE)])
+        self.ws_buttons(view)["Play"].clicked()
+        self.assertEqual(self.commands, [{"type": "switch_workspace", "windowId": 2, "workspaceId": "ws-2"}])
+        self.assertEqual(self.command_conns, [conn])
+
+    def test_plus_asks_for_a_name_and_makes_the_workspace(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        self.ws_buttons(view)["+"].clicked()
+        self.assertEqual(view._dialog_entry.get_text(), "Workspace 4")  # a name to keep or type over
+        self.assertTrue(view.autohide.held)  # the panel stays while you type
+        view._dialog.realize()  # (never mapped here)
+        self.assertIn(view._dialog.get_window().get_xid(), view.xids)  # typing there is not "another app"
+        view._dialog_entry.set_text("  Deep work  ")
+        view._dialog_entry.emit("activate")  # Enter
+        self.assertEqual(self.commands, [{"type": "new_workspace", "windowId": 2, "name": "Deep work"}])
+        self.assertIsNone(view._dialog)
+        self.assertFalse(view.autohide.held)
+
+    def test_the_name_window_can_be_cancelled_and_an_empty_name_does_nothing(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        self.ws_buttons(view)["+"].clicked()
+        event = Gdk.Event.new(Gdk.EventType.KEY_PRESS)
+        event.keyval = Gdk.KEY_Escape
+        view._dialog.emit("key-press-event", event)
+        self.ws_buttons(view)["+"].clicked()
+        view._dialog_entry.set_text("   ")
+        view._dialog_entry.emit("activate")
+        self.assertEqual(self.commands, [])
+        self.assertIsNone(view._dialog)
+        self.assertFalse(view.autohide.held)
+
+    def test_right_click_on_a_workspace_renames_it(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        self.right_click(self.ws_buttons(view)["Work"])
+        self.assertTrue(view.autohide.held)  # the menu is up: the panel stays
+        self.menu_items(view)["Rename…"].activate()
+        self.assertEqual(view._dialog_entry.get_text(), "Work")
+        view._dialog_entry.set_text("Tickets")
+        view._dialog_entry.emit("activate")
+        # only the rename: a right click on a workspace does not also switch to it
+        self.assertEqual(self.commands, [{"type": "rename_workspace", "workspaceId": "ws-1", "name": "Tickets"}])
+
+    def test_removing_a_workspace_says_where_its_tabs_go(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        self.right_click(self.ws_buttons(view)["Default"])
+        self.assertIn("Remove (its tabs go to Work)", self.menu_items(view))  # the first one: to the next
+        self.right_click(self.ws_buttons(view)["Play"])
+        self.menu_items(view)["Remove (its tabs go to Work)"].activate()  # any other: to the one before it
+        self.assertEqual(self.commands, [{"type": "remove_workspace", "workspaceId": "ws-2"}])
+
+    def test_the_last_workspace_cannot_be_removed(self):
+        view = self.make()
+        view.show([(object(), INFO, {**STATE, "workspaces": [{"id": "default", "name": "Default"}]})])
+        self.right_click(self.ws_buttons(view)["Default"])
+        self.assertFalse(self.menu_items(view)["Remove (the last workspace stays)"].get_sensitive())
+
+    def test_right_click_on_a_tab_moves_it_to_another_workspace(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, self.WS_STATE)])
+        self.right_click(self.row(view, "tab", 2))
+        self.assertEqual(list(self.menu_items(view)), ["Move to Default", "Move to Play"])  # not where it is
+        self.menu_items(view)["Move to Play"].activate()
+        self.assertEqual(self.commands, [{"type": "move_tab_to_workspace", "tabId": 2, "workspaceId": "ws-2"}])
+        self.assertEqual(self.activated, [])  # a right click is not a click
+
+    def test_a_pinned_tab_or_a_single_workspace_offers_no_move(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        self.assertIsNone(view._meta[self.row(view, "tab", 3)]["menu"])  # pinned: in every workspace already
+        view.show([(object(), INFO, {**STATE, "workspaces": [{"id": "default", "name": "Default"}]})])
+        self.assertIsNone(view._meta[self.row(view, "tab", 10)]["menu"])
+
+    def test_the_menu_lets_go_of_the_panel_when_it_closes(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        self.right_click(self.row(view, "tab", 2))
+        self.assertTrue(view.autohide.held)
+        view._menu.emit("deactivate")  # it closes, chosen from or not
+        self.assertFalse(view.autohide.held)
+
+    def test_a_menu_that_cannot_open_does_not_keep_the_panel_open(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        with mock.patch.object(Gtk.Menu, "popup_at_pointer", lambda _menu, _event: None):
+            self.right_click(self.row(view, "tab", 2))
+        self.assertFalse(view.autohide.held)
+
+    def test_a_drag_ending_while_the_name_window_is_up_keeps_the_panel_open(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        self.ws_buttons(view)["+"].clicked()
+        view._hold("drag", True)
+        view._hold("drag", False)
+        self.assertTrue(view.autohide.held)  # still typing a name
+
+    def test_a_browser_band_counts_the_tabs_it_lists(self):
+        view = self.make()
+        zen = {**INFO, "browser": "Zen", "browserPid": 2}
+        ff = object()
+        view.show([(ff, INFO, self.WS_STATE), (object(), zen, DRAG_STATE)], "all")
+        band = next(b for b, m in view._meta.items() if m["kind"] == "browser" and m["conn"] is ff)
+        self.assertTrue(band.get_child().get_text().startswith("Firefox (2)"))  # Work's tab and the pinned one
+
+    def test_layout_dump_hook_reports_the_workspace_chips(self):
+        import json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"SIDEPANEL_LAYOUT_DUMP": tmp + "/rows.json"}):
+            view = self.make()
+            view.show([(object(), INFO, self.WS_STATE)])
+            view._dump_layout()
+            with open(tmp + "/rows.json") as f:
+                rows = json.load(f)
+        self.assertEqual([(r["id"], r["group"]) for r in rows if r["kind"] == "workspace"],
+                         [("default", "Default"), ("ws-1", "Work"), ("ws-2", "Play"), (None, "+")])
+
+    def test_quitting_closes_the_name_window(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        self.ws_buttons(view)["+"].clicked()
+        dialog = view._dialog
+        view.win.destroy()
+        self.assertIsNone(view._dialog)
+        self.assertIsNone(dialog.get_window())  # destroyed with the panel
 
     # -- which monitor: fake layouts stand in for real hardware -------------------------------
 

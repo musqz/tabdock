@@ -328,6 +328,29 @@ class PanelTest(unittest.TestCase):
             self.panel.on_stdin_line(junk)
         self.assertEqual(len(self.ff.sent), 2)  # malformed lines are ignored
 
+    def test_debug_console_drives_workspaces_in_the_focused_window(self):
+        spaces = [{"id": "default", "name": "Default"}, {"id": "ws-1", "name": "Work"}]
+        self.panel.on_message(self.ff, {**state(TAB), "workspaces": spaces})
+        for line in ("ws ws-1", "wsnew Deep work", "wsrename ws-1 Tickets and bugs", "wsrm ws-1", "wsmove 7 default"):
+            self.panel.on_stdin_line(line)
+        self.assertEqual(self.ff.sent, [
+            {"type": "switch_workspace", "windowId": 1, "workspaceId": "ws-1"},
+            {"type": "new_workspace", "windowId": 1, "name": "Deep work"},
+            {"type": "rename_workspace", "workspaceId": "ws-1", "name": "Tickets and bugs"},
+            {"type": "remove_workspace", "workspaceId": "ws-1"},
+            {"type": "move_tab_to_workspace", "tabId": 7, "workspaceId": "default"},
+        ])
+        for junk in ("ws", "ws a b", "wsrename ws-1", "wsrm", "wsmove x default", "wsmove 7"):
+            self.panel.on_stdin_line(junk)
+        self.assertEqual(len(self.ff.sent), 5)  # malformed lines are ignored
+
+    def test_debug_console_offers_no_workspaces_in_zen_or_without_them(self):
+        self.panel.on_stdin_line("wsnew Work")  # this extension sent no workspaces
+        self.panel.follow(ZEN_XID)
+        self.panel.on_message(self.zen, {**state(TAB), "workspaces": [{"id": "default", "name": "Default"}]})
+        self.panel.on_stdin_line("wsnew Work")  # Zen has its own
+        self.assertEqual((self.ff.sent, self.zen.sent), ([], []))
+
     def test_command_goes_to_the_given_browser(self):
         self.panel.command(self.zen, {"type": "move_tab", "tabId": 1, "index": 2})
         self.assertEqual(self.zen.sent, [{"type": "move_tab", "tabId": 1, "index": 2}])

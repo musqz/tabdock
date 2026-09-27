@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- Workspaces, Zen-style: each browser window shows one workspace, and the tabs of the others are hidden, in
+  Firefox's own tab strip too (`tabs.hide`). Chips above the tabs switch (back to the tab you used last there),
+  `+` makes a new one (a small window asks for its name: the dock never takes the keyboard, that window does),
+  a right click renames or removes one, and a right click on a tab moves it to another workspace. New tabs join
+  the workspace their window shows; pinned tabs show in all of them (Firefox cannot hide them); removing a
+  workspace closes nothing (its tabs go to its neighbour, and the menu says which); picking a hidden tab from
+  Firefox's "List all tabs" switches to its workspace. Workspaces, their tabs and what each window shows survive
+  an extension and a browser restart (kept in the session and `storage`). Nothing changes, nothing is hidden,
+  until you make a second workspace; Zen, which has workspaces of its own, gets none.
+  **Set `browser.tabs.closeWindowWithLastTab` to `false`** in `about:config` if you use them: Firefox does not
+  count hidden tabs when it decides a tab is the window's last, so otherwise closing the last tab of a workspace
+  closes the window with every workspace in it (the README has the details).
+  The extension changed and asks for two new permissions, `tabHide` and `sessions`, so this needs a new signing
+  (docs/RELEASE.md); Firefox asks you to approve them when you install it. A panel with the old extension works as
+  before, without workspaces. Tested in real Firefox 156 (`tests/e2e_firefox.py`, now also against the browser's
+  own tab strip, and across an extension and a browser restart) and under a real Openbox (`tests/e2e_x11.py`:
+  the chips, the right-click menu, typing a name). `tests/e2e_x11.py` now clicks its first tab where the layout
+  dump says it is, instead of sweeping pixel rows that depend on fonts.
+
 ## 0.3.1
 
 - The extension signed as 0.3.0 was signed before the `+` new-tab button reached the extension, so in the browser

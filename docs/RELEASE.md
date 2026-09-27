@@ -62,15 +62,19 @@ manifest (a test checks this). AMO rejects a version number it has already signe
 and `extension/manifest.json` together for every new signature (a test checks they agree).
 
 What the permissions are for: `nativeMessaging` (talk to the local helper), `tabs` (list, activate and move
-tabs), `contextualIdentities` and `cookies` (list containers; Firefox requires `cookies` for that API), and
-`storage` (remember the order you gave your container sections, per browser profile). The manifest declares
-that no data is collected, and nothing leaves your computer.
+tabs), `contextualIdentities` and `cookies` (list containers; Firefox requires `cookies` for that API),
+`storage` (remember the order you gave your container sections and your workspaces, per browser profile),
+`tabHide` (a workspace hides the other workspaces' tabs) and `sessions` (remember, across browser restarts,
+which workspace each tab is in and which one each window shows). The manifest declares that no data is
+collected, and nothing leaves your computer.
 
-**A new version needs a new signature.** Version 0.3.0 added the `storage` permission and the reorder
-commands, so it must be signed again (the same command as above, and Mozilla rejects a version number it has
-already signed) and installed in each browser over the old one. Firefox may ask you to approve the new
-permission when it updates. Until then the old extension keeps working, but dragging in the panel does
-nothing in the browser.
+**A new version needs a new signature.** Workspaces (after 0.3.1) add the `tabHide` and `sessions`
+permissions and the workspace commands, so the next version needs a new signing and Firefox asks you to
+approve the two permissions when you install it; until then the panel works as before, without workspaces.
+Version 0.3.0 added the `storage` permission and the reorder commands, so it must be signed again (the
+same command as above, and Mozilla rejects a version number it has already signed) and installed in each
+browser over the old one. Firefox may ask you to approve the new permission when it updates. Until then
+the old extension keeps working, but dragging in the panel does nothing in the browser.
 
 *Optional, later:* the **listed** channel publishes it on addons.mozilla.org: a manual review, then
 automatic updates for everyone. It is desktop-only (uncheck Android) and the description must explain that

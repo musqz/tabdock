@@ -6,7 +6,10 @@ untouched. It exercises what ships: install.sh puts the program into the scratch
 panel runs from that installed copy; packaging/build-extension.sh builds the .xpi, which is
 installed as a temporary add-on through Marionette. Then, against a real `sidepanel --debug`:
   browser -> panel : tabs appear, new tabs show up, panel restart triggers a resync
-  panel -> browser : `activate <id>` switches the active tab
+  panel -> browser : `activate <id>` switches the active tab, tabs move, containers reorder
+  workspaces       : create, switch, move a tab, rename, close a workspace's last tab, remove, and an
+                     extension restart, each checked against the browser's own tab strip too
+                     (skipped in Zen, which has workspaces of its own)
 
     python3 tests/e2e_firefox.py [--firefox /usr/bin/firefox]
 """
@@ -74,6 +77,20 @@ def section_order(snapshot):
     return [name for name, _ in sections(snapshot)]
 
 
+def workspace_lines(snapshot):
+    """[(shown, name, id)]; workspace lines read 'workspace* Name {id}', the star on the one the window shows."""
+    return [(star == "*", name, i) for star, name, i in re.findall(r"^workspace(\*| ) (.+) \{(\S+)\}$", snapshot, re.M)]
+
+
+def shown_workspace(snapshot):
+    return next(((name, i) for shown, name, i in workspace_lines(snapshot) if shown), None)
+
+
+def listed(snapshot):
+    """{title: (id, active)} of the tabs the console lists (the window's workspace only)."""
+    return {title: (int(i), star == "*") for star, title, i in re.findall(r"^ ([ *]) (.*) \[(\d+)\]$", snapshot, re.M)}
+
+
 def eventually(fn, what, timeout=TIMEOUT):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -81,6 +98,11 @@ def eventually(fn, what, timeout=TIMEOUT):
             return
         time.sleep(0.1)
     raise AssertionError(f"timed out waiting for: {what}")
+
+
+def say(panel, line):
+    panel.stdin.write(line + "\n")
+    panel.stdin.flush()
 
 
 class Marionette:
@@ -118,6 +140,26 @@ class Marionette:
                 if msg[2]:
                     raise RuntimeError(f"{command}: {msg[2]}")
                 return msg[3]
+
+    def chrome(self, script):
+        """Run privileged browser code (Marionette's chrome context) and return its value."""
+        self.call("Marionette:SetContext", {"value": "chrome"})
+        try:
+            return self.call("WebDriver:ExecuteScript", {"script": script, "args": []})["value"]
+        finally:
+            self.call("Marionette:SetContext", {"value": "content"})
+
+    def tab_rows(self):
+        """The browser's own tab strip: [(title, hidden, pinned, selected)]."""
+        rows = self.chrome("return gBrowser.tabs.map(t => [t.label, t.hidden, t.pinned, t.selected])")
+        return [tuple(row) for row in rows]
+
+    def strip(self):
+        """{title: (hidden, pinned, selected)}, for titles that occur once."""
+        return {title: (hidden, pinned, selected) for title, hidden, pinned, selected in self.tab_rows()}
+
+    def visible(self):
+        return sorted(title for title, hidden, _pinned, _selected in self.tab_rows() if not hidden)
 
 
 def free_port():
@@ -158,6 +200,13 @@ def main():
                 'user_pref("browser.shell.checkDefaultBrowser", false);\n'
                 'user_pref("datareporting.policy.dataSubmissionEnabled", false);\n'
                 'user_pref("browser.aboutwelcome.enabled", false);\n'
+                # as the README asks for workspaces: Firefox closes the window when its last *visible* tab
+                # closes, the hidden tabs of the other workspaces with it
+                'user_pref("browser.tabs.closeWindowWithLastTab", false);\n'
+                # the browser restart in the workspace checks: restore the session, and keep the temporary
+                # add-on's storage (Firefox removes a temporary add-on when it quits)
+                'user_pref("browser.startup.page", 3);\n'
+                'user_pref("extensions.webextensions.keepStorageOnUninstall", true);\n'
             )
 
         with open(os.path.join(ROOT, "VERSION")) as f:
@@ -173,14 +222,32 @@ def main():
             assert time.monotonic() < deadline, "panel socket never appeared"
             time.sleep(0.1)
 
-        ff = subprocess.Popen(
-            [args.firefox, "--headless", "--no-remote", "--marionette", "--profile", profile, "about:blank"],
-            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        procs.append(ff)
-        m = Marionette(port)
-        m.call("WebDriver:NewSession", {"capabilities": {}})
-        m.call("Addon:Install", {"path": xpi, "temporary": True})
+        browser = []  # the running browser process: the last one launched
+
+        def launch(*urls):
+            ff = subprocess.Popen(
+                # system access: the workspace checks read the real tab strip (ignored by browsers that predate it)
+                [args.firefox, "--headless", "--no-remote", "--marionette", "--remote-allow-system-access", "--profile",
+                 profile, *urls],
+                env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            procs.append(ff)
+            browser[:] = [ff]
+            m = Marionette(port)
+            m.call("WebDriver:NewSession", {"capabilities": {}})
+            m.call("Addon:Install", {"path": xpi, "temporary": True})
+            return ff, m
+
+        def restart(m):
+            """Quit the browser the way a user does (the session is saved) and start it again."""
+            try:
+                m.call("Marionette:Quit", {"flags": ["eAttemptQuit"]})
+            except (OSError, RuntimeError):
+                pass  # the connection may go before the reply
+            browser[0].wait(timeout=TIMEOUT)
+            return launch()[1]
+
+        ff, m = launch("about:blank")
         print("extension installed; waiting for first snapshot ...")
 
         first = out.wait_for(r"== (\S+) (\S+) \(pid (\d+)\) window \d+ ==")
@@ -242,6 +309,11 @@ def main():
         out.wait_for(r"marionette-tab \[\d+\]")
         eventually(lambda: section_order(last_snapshot(out.text)) == wanted, "the order after a panel restart")
         print("OK panel restart: relay reconnected, extension resynced, and the container order survived")
+
+        if first.group(1) == "Zen" or "Zen" in last_snapshot(out.text).splitlines()[0]:
+            print("SKIP workspaces: Zen has workspaces of its own, the panel offers none there")
+        else:
+            check_workspaces(m, panel, out, restart)
         print("ALL OK")
         return 0
     finally:
@@ -254,6 +326,116 @@ def main():
             except subprocess.TimeoutExpired:
                 p.kill()
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def check_workspaces(m, panel, out, restart):
+    snap = lambda: last_snapshot(out.text)  # noqa: E731
+    assert workspace_lines(snap()) == [(True, "Default", "default")], workspace_lines(snap())
+    home = listed(snap())
+    assert {"marionette-tab", "tab-c", "tab-d"} <= set(home), home
+    assert not any(hidden for _t, hidden, _p, _s in m.tab_rows()), "a tab was hidden before any workspace existed"
+    home_active = next(title for title, (_i, active) in home.items() if active)
+    print("OK one Default workspace until you make another, and nothing hidden")
+
+    say(panel, "wsnew Work")
+    eventually(lambda: (shown_workspace(snap()) or ("",))[0] == "Work", "the new workspace shown")
+    work = shown_workspace(snap())[1]
+    eventually(lambda: list(listed(snap())) == ["New Tab"], "only the new workspace's own new tab listed")
+    eventually(lambda: m.visible() == ["New Tab"], "the other tabs hidden in the real tab strip")
+    print("OK wsnew: a new workspace with a new tab; the Default tabs are hidden in the browser too")
+
+    handle = m.call("WebDriver:NewWindow", {"type": "tab", "focus": True})["handle"]
+    m.call("WebDriver:SwitchToWindow", {"handle": handle})
+    m.call("WebDriver:Navigate", {"url": "data:text/html,<title>work-tab</title>"})
+    eventually(lambda: "work-tab" in listed(snap()), "a tab opened in Work listed")
+    assert "marionette-tab" not in listed(snap())
+    print("OK a tab opened while Work shows joins Work")
+
+    say(panel, "ws default")
+    eventually(lambda: shown_workspace(snap()) == ("Default", "default"), "Default shown again")
+    eventually(lambda: set(listed(snap())) == set(home), "exactly the Default tabs listed again")
+    eventually(lambda: listed(snap())[home_active][1], f"{home_active} active again, the tab last used in Default")
+    eventually(lambda: m.strip()["work-tab"][0] and not m.strip()["tab-c"][0], "Work hidden, Default shown")
+    print(f"OK ws: back in Default, on {home_active} again; Work's tabs are hidden in the browser")
+
+    tab_c = listed(snap())["tab-c"][0]
+    say(panel, f"wsmove {tab_c} {work}")
+    eventually(lambda: "tab-c" not in listed(snap()) and m.strip()["tab-c"][0], "tab-c gone to Work")
+    say(panel, f"ws {work}")
+    eventually(lambda: set(listed(snap())) == {"New Tab", "work-tab", "tab-c"}, "Work with tab-c")
+    eventually(lambda: listed(snap())["work-tab"][1], "work-tab active, the tab last used in Work")
+    print("OK wsmove: a tab moved to Work shows there, and not in Default")
+
+    say(panel, "ws default")
+    eventually(lambda: shown_workspace(snap()) == ("Default", "default") and m.strip()["tab-c"][0], "Default shown")
+    m.chrome("gBrowser.selectedTab = gBrowser.tabs.find(t => t.label == 'tab-c')")  # as from "List all tabs"
+    eventually(lambda: shown_workspace(snap()) == ("Work", work), "the window follows the hidden tab picked")
+    eventually(lambda: not m.strip()["tab-c"][0] and m.strip()["tab-d"][0], "Work shown, Default hidden")
+    print("OK picking a hidden tab (the browser's list of all tabs) switches to its workspace")
+
+    say(panel, f"wsrename {work} Deep work")
+    eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "the rename")
+    print("OK wsrename")
+
+    m.chrome("gBrowser.pinTab(gBrowser.tabs.find(t => t.label == 'work-tab'))")
+    say(panel, "ws default")
+    eventually(lambda: shown_workspace(snap()) == ("Default", "default"), "Default shown")
+    eventually(lambda: "work-tab" in listed(snap()) and not m.strip()["work-tab"][0], "the pinned tab in Default")
+    m.chrome("gBrowser.unpinTab(gBrowser.tabs.find(t => t.label == 'work-tab'))")
+    say(panel, f"ws {work}")
+    eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "Work shown")
+    eventually(lambda: "work-tab" not in listed(snap()) and m.strip()["work-tab"][0], "unpinned in Default: stays there")
+    say(panel, f"wsmove {listed_or_hidden_id(m, out, 'work-tab')} {work}")
+    print("OK a pinned tab shows in every workspace; unpinned, it belongs to the one it was unpinned in")
+
+    say(panel, "wsnew Scratch")
+    eventually(lambda: (shown_workspace(snap()) or ("",))[0] == "Scratch", "Scratch shown")
+    scratch = shown_workspace(snap())[1]
+    eventually(lambda: len(listed(snap())) == 1, "Scratch's one new tab")
+    only = next(iter(listed(snap()).values()))[0]
+    m.chrome("gBrowser.removeTab(gBrowser.selectedTab)")
+    eventually(lambda: shown_workspace(snap()) == ("Scratch", scratch) and len(listed(snap())) == 1
+               and next(iter(listed(snap()).values()))[0] != only, "Scratch kept, with a new tab")
+    eventually(lambda: m.visible() == ["New Tab"], "only Scratch's new tab visible in the browser")
+    print("OK closing a workspace's last tab keeps the workspace, with a new tab")
+
+    say(panel, f"wsrm {scratch}")
+    eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "its neighbour shown after the removal")
+    eventually(lambda: {"work-tab", "tab-c"} <= set(listed(snap())) and len(workspace_lines(snap())) == 2,
+               "Scratch's tab moved to its neighbour, nothing closed")
+    print("OK wsrm: the tabs of a removed workspace go to its neighbour, nothing is closed")
+
+    before = m.tab_rows()
+    mark = out.mark()
+    m.chrome("""return (async () => {
+        const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
+        await (await AddonManager.getAddonByID("openbox-sidepanel@musqz.local")).reload();
+    })()""")
+    out.wait_for(r"== \S+ .* window \d+ ==", since=mark)
+    eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "the workspace after an extension restart")
+    eventually(lambda: m.tab_rows() == before, "the same tabs hidden after an extension restart")
+    print("OK extension restart: workspaces, membership and hidden tabs come back from storage and the session")
+
+    before = sorted(m.tab_rows())
+    listed_before = set(listed(snap()))
+    mark = out.mark()
+    m = restart(m)
+    out.wait_for(r"== \S+ .* window \d+ ==", since=mark)
+    eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "the workspace after a browser restart")
+    eventually(lambda: set(listed(snap())) == listed_before, "the same tabs listed after a browser restart")
+    eventually(lambda: sorted(m.tab_rows()) == before, "the same tabs hidden after a browser restart")
+    print("OK browser restart: the same workspaces, the same tabs in each, the others hidden again")
+
+    say(panel, f"wsrm {work}")
+    eventually(lambda: workspace_lines(snap()) == [(True, "Default", "default")], "only Default left")
+    eventually(lambda: not any(hidden for _t, hidden, _p, _s in m.tab_rows()), "every tab visible again")
+    print("OK removing all but one workspace shows every tab again")
+
+
+def listed_or_hidden_id(m, out, title):
+    """A tab's id from the panel's latest listing, whichever workspace shows it."""
+    ids = re.findall(rf"^ [ *] {re.escape(title)} \[(\d+)\]$", out.text, re.M)
+    return ids[-1]
 
 
 if __name__ == "__main__":

@@ -8,6 +8,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 from sidepanel.model import (  # noqa: E402
     format_state,
     group_tabs,
+    heir,
+    in_workspace,
+    offers_workspaces,
     ordered_containers,
     reordered,
     tab_badge,
@@ -146,6 +149,46 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(text.splitlines()[0], "== Firefox 156.0 (pid 42) window 2 ==")
         self.assertIn(" * plain [10]", text)
         self.assertIn("[Work] (0)", text)
+
+    WS_STATE = {
+        "focusedWindowId": 2,
+        "containers": [{"cookieStoreId": "firefox-container-1", "name": "Personal"}],
+        "workspaces": [{"id": "default", "name": "Default"}, {"id": "ws-1", "name": "Work"}],
+        "windows": [{"id": 2, "workspaceId": "ws-1", "tabs": [
+            {**tab(10, "home"), "workspaceId": "default"},
+            {**tab(11, "ticket", "firefox-container-1", active=True), "workspaceId": "ws-1"},
+            {**tab(12, "music"), "workspaceId": "default", "pinned": True},
+        ]}],
+    }
+
+    def test_groups_hold_only_the_workspace_the_window_shows_and_pinned_tabs(self):
+        groups = group_tabs(self.WS_STATE)
+        self.assertEqual([(c["name"], [t["id"] for t in tabs]) for c, tabs in groups],
+                         [("No container", [12]), ("Personal", [11])])  # not "home": it is in Default
+
+    def test_an_extension_without_workspaces_shows_every_tab(self):
+        self.assertTrue(in_workspace(tab(1, "x"), None))
+        self.assertTrue(in_workspace(tab(1, "x"), "ws-1"))  # a tab that does not say shows wherever
+        self.assertEqual([t["id"] for _c, tabs in group_tabs(STATE) for t in tabs], [10, 13, 11, 12])
+
+    def test_workspaces_are_offered_except_in_zen_and_by_an_older_extension(self):
+        self.assertTrue(offers_workspaces({"browser": "Firefox"}, self.WS_STATE))
+        self.assertTrue(offers_workspaces({"browser": "LibreWolf"}, self.WS_STATE))
+        self.assertFalse(offers_workspaces({"browser": "Zen"}, self.WS_STATE))  # it has workspaces of its own
+        self.assertFalse(offers_workspaces({"browser": "Firefox"}, STATE))  # 0.3.x sends none
+
+    def test_the_heir_of_a_removed_workspace_is_its_neighbour(self):
+        spaces = [{"id": "a"}, {"id": "b"}, {"id": "c"}]
+        self.assertEqual(heir(spaces, "b"), {"id": "a"})  # the one before it
+        self.assertEqual(heir(spaces, "c"), {"id": "b"})
+        self.assertEqual(heir(spaces, "a"), {"id": "b"})  # the first: the one after it
+        self.assertIsNone(heir(spaces[:1], "a"))  # the last workspace stays
+        self.assertIsNone(heir(spaces, "gone"))
+
+    def test_format_state_lists_the_workspaces_and_marks_the_shown_one(self):
+        lines = format_state({"browser": "Firefox", "version": "156.0"}, self.WS_STATE).splitlines()
+        self.assertEqual(lines[1:3], ["workspace  Default {default}", "workspace* Work {ws-1}"])
+        self.assertNotIn(" home [10]", lines)  # another workspace's tab is not listed
 
     def test_waiting_text_without_a_packaged_extension(self):
         self.assertEqual(waiting_text("/nonexistent/tabdock.xpi"), "Waiting for a browser with the Sidepanel extension")
