@@ -189,15 +189,37 @@ ACCENTS = {
     "floorp": "#e5b93a",
 }
 DEFAULT_ACCENT = "#8f9bb3"
+DARK_TEXT = "#1b1d23"  # the panel's background: the text on a filled accent (a pinned button, a chip picked)
 
 
-def accent(info):
-    """Colour identifying a browser, so the active one is recognisable at a glance."""
+def accents(theme=None):
+    """The colour of each browser ACCENTS knows and of any "other" one (and of the strip while none is
+    connected), with the config's [theme]: a browser's own key wins over `accent`, which wins over the
+    built-in colour."""
+    theme = theme or {}
+    return {key: theme.get(key) or theme.get("accent") or colour
+            for key, colour in {**ACCENTS, "other": DEFAULT_ACCENT}.items()}
+
+
+def accent(info, colours=None):
+    """Colour identifying a browser, so the active one is recognisable at a glance. `colours`: accents()."""
+    colours = colours or accents()
     name = (info.get("browser") or "").lower()
-    for key, colour in ACCENTS.items():
-        if key in name:
-            return colour
-    return DEFAULT_ACCENT
+    return next((c for key, c in colours.items() if key != "other" and key in name), colours["other"])
+
+
+def _luminance(colour):
+    """WCAG relative luminance of "#rrggbb"."""
+    channels = (int(colour[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    r, g, b = (c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def on_accent(colour):
+    """The text colour that reads best on a fill of `colour`: the panel's dark one on the built-in accents
+    (all light), white on a dark accent chosen in [theme]."""
+    lum, dark = _luminance(colour), _luminance(DARK_TEXT)
+    return DARK_TEXT if (lum + 0.05) / (dark + 0.05) >= 1.05 / (lum + 0.05) else "#ffffff"
 
 
 def ancestors(pid):

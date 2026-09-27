@@ -27,12 +27,13 @@ from gi.repository import Gdk, GdkX11, GLib, Gtk, Pango  # noqa: E402,F401
 from . import favicons, geometry  # noqa: E402
 from .autohide import Autohide  # noqa: E402
 from .model import (  # noqa: E402
-    ACCENTS,
+    DARK_TEXT,
     DEFAULT_ACCENT,
     FEATURES,
     NO_CONTAINER,
     WS_COLORS,
     accent,
+    accents,
     browser_label,
     colour_name,
     edits_workspaces,
@@ -46,6 +47,7 @@ from .model import (  # noqa: E402
     heir,
     matches,
     offers_workspaces,
+    on_accent,
     ordered_containers,
     reordered,
     tab_badge,
@@ -61,7 +63,7 @@ CSS = """
 .sp-panel {{ background-color: #1b1d23; }}
 .sp-content {{ background-color: #1b1d23; color: #dfe3ea; }}
 .sp-header {{ background-color: #23262e; border-top: 3px solid {accent}; padding: 5px 8px; }}
-.sp-browser {{ font-weight: bold; color: {accent}; }}
+.sp-browser {{ font-weight: bold; color: {name}; }}
 .sp-sectionbox {{ padding: 6px 8px 3px 6px; }}
 .sp-section {{ padding: 0; color: #aab2c0; }}
 .sp-row {{ border-left: 3px solid transparent; }}
@@ -76,7 +78,7 @@ button.sp-btn {{ padding: 0 6px; min-height: 0; min-width: 0; background: none; 
 button.sp-btn:hover {{ color: #ffffff; }}
 button.sp-btn.sp-pin {{ border: 1px solid #454b58; border-radius: 9px; padding: 0 8px; }}
 button.sp-btn.sp-pin:hover {{ border-color: #7d8594; }}
-button.sp-btn.sp-pin:checked {{ background-color: {accent}; border-color: {accent}; color: #1b1d23; font-weight: bold; }}
+button.sp-btn.sp-pin:checked {{ background-color: {accent}; border-color: {accent}; color: {on_accent}; font-weight: bold; }}
 button.sp-btn.sp-quit {{ margin-left: 6px; }}
 button.sp-btn.sp-quit:hover {{ color: #ff6b6b; }}
 button.sp-btn.sp-newtab {{ margin-left: 4px; }}
@@ -86,7 +88,7 @@ button.sp-btn.sp-newtab {{ margin-left: 4px; }}
 .sp-chips {{ padding: 4px 6px 3px 6px; background-color: #1b1d23; }}
 button.sp-btn.sp-chip {{ border: 1px solid #454b58; border-radius: 9px; padding: 0 8px; }}
 button.sp-btn.sp-chip:hover {{ border-color: #7d8594; color: #ffffff; }}
-button.sp-btn.sp-chip.selected {{ background-color: {accent}; border-color: {accent}; color: #1b1d23; font-weight: bold; }}
+button.sp-btn.sp-chip.selected {{ background-color: {accent}; border-color: {accent}; color: {on_accent}; font-weight: bold; }}
 .sp-row.sp-bhead {{ border-left: none; margin-top: 6px; }}
 .sp-bandlabel {{ padding: 5px 8px; color: #1b1d23; font-weight: bold; }}
 .sp-wsrow {{ padding: 5px 6px 2px 6px; }}
@@ -108,19 +110,22 @@ def acc_class(colour):
 
 
 # The colours that must differ from row to row (with several browsers listed, "the accent" is no
-# longer one colour): the active tab, the drop marker and the chips. Fixed, so loaded once.
-BROWSER_CSS = "".join(
-    f".sp-row.active.{acc_class(c)} {{ border-left-color: {c}; }}"
-    f".sp-row.drop-before.{acc_class(c)} {{ box-shadow: inset 0 2px 0 0 {c}; }}"
-    f".sp-row.drop-after.{acc_class(c)} {{ box-shadow: inset 0 -2px 0 0 {c}; }}"
-    f"button.sp-btn.sp-chip.{acc_class(c)} {{ border-color: {c}; }}"
-    f"button.sp-btn.sp-chip.{acc_class(c)}:hover {{ border-color: shade({c}, 1.35); }}"
-    f"button.sp-btn.sp-chip.selected.{acc_class(c)} {{ background-color: {c}; border-color: {c}; }}"
-    f".sp-bhead.{acc_class(c)} {{ background-color: {c}; }}"
-    f".sp-bhead.{acc_class(c)}:hover {{ background-color: shade({c}, 1.15); }}"
-    f"button.sp-btn.sp-ws.selected.{acc_class(c)} {{ box-shadow: inset 0 -2px 0 0 {c}; }}"
-    for c in (*ACCENTS.values(), DEFAULT_ACCENT)
-)
+# longer one colour): the active tab, the drop marker and the chips. Loaded again only when [theme] changes.
+def browser_css(colours):
+    """The rules for each browser colour in `colours` (a text readable on it where it fills something)."""
+    return "".join(
+        f".sp-row.active.{acc_class(c)} {{ border-left-color: {c}; }}"
+        f".sp-row.drop-before.{acc_class(c)} {{ box-shadow: inset 0 2px 0 0 {c}; }}"
+        f".sp-row.drop-after.{acc_class(c)} {{ box-shadow: inset 0 -2px 0 0 {c}; }}"
+        f"button.sp-btn.sp-chip.{acc_class(c)} {{ border-color: {c}; }}"
+        f"button.sp-btn.sp-chip.{acc_class(c)}:hover {{ border-color: shade({c}, 1.35); }}"
+        f"button.sp-btn.sp-chip.selected.{acc_class(c)} {{ background-color: {c}; border-color: {c}; color: {on_accent(c)}; }}"
+        f".sp-bhead.{acc_class(c)} {{ background-color: {c}; }}"
+        f".sp-bhead.{acc_class(c)}:hover {{ background-color: shade({c}, 1.15); }}"
+        f".sp-bhead.{acc_class(c)} .sp-bandlabel {{ color: {on_accent(c)}; }}"
+        f"button.sp-btn.sp-ws.selected.{acc_class(c)} {{ box-shadow: inset 0 -2px 0 0 {c}; }}"
+        for c in sorted(set(colours))
+    )
 
 
 def ws_class(color):
@@ -214,11 +219,12 @@ class DockView:
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), self._css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
-        self._set_accent(DEFAULT_ACCENT)
-        per_browser = Gtk.CssProvider()
-        per_browser.load_from_data((BROWSER_CSS + WS_CSS).encode())
+        self._colours = accents(cfg.get("theme"))  # each browser's colour, with the config's [theme]
+        self._set_accent(self._colours["other"])
+        self._per_browser = Gtk.CssProvider()
+        self._per_browser.load_from_data((browser_css(self._colours.values()) + WS_CSS).encode())
         Gtk.StyleContext.add_provider_for_screen(
-            Gdk.Screen.get_default(), per_browser, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            Gdk.Screen.get_default(), self._per_browser, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
         self.strip = self._dock_window("sp-strip", "tabdock-strip")
@@ -320,7 +326,8 @@ class DockView:
         else:
             self.browser_name.set_text("All browsers")
             self.browser_name.set_tooltip_text(None)
-        self._set_accent(accent(focus) if focus else DEFAULT_ACCENT)  # only the strip and header wear it: no rebuild
+        # only the strip and the header wear it: no rebuild
+        self._set_accent(accent(focus, self._colours) if focus else self._colours["other"])
         snapshot = (self.sources, frozenset(self.collapsed), mode, tuple(choices))
         if snapshot != self._last:
             self._last = snapshot
@@ -338,7 +345,7 @@ class DockView:
         self._ws_buttons = []
         self._set_chips(mode, choices)
         self.browser_name.set_text("")
-        self._set_accent(DEFAULT_ACCENT)
+        self._set_accent(self._colours["other"])
         self._replace_rows([self._label(waiting_text(), "sp-empty", wrap=True)])
 
     def set_hidden(self, hidden):
@@ -413,6 +420,13 @@ class DockView:
         self.set_pinned(self.cfg["pinned"])  # syncs the button, autohide and strut in one place
         self.icons_btn.set_active(self.cfg["icons"])  # (the toggle handler redraws when it changed)
         self._place()  # side, width or monitor may have changed too
+        colours = accents(self.cfg.get("theme"))
+        if colours != self._colours:  # new [theme] colours: the next show() rebuilds the rows in them
+            self._colours = colours
+            self._per_browser.load_from_data((browser_css(colours.values()) + WS_CSS).encode())
+            self._last = None
+            if not self.sources:
+                self._set_accent(colours["other"])  # (nothing listed: no show() to come)
 
     # -- windows -------------------------------------------------------------------
 
@@ -822,7 +836,9 @@ class DockView:
         if colour == self._accent:
             return  # reloading the provider restyles every widget: only do it on a real change
         self._accent = colour
-        self._css_data = CSS.format(accent=colour)
+        text = on_accent(colour)
+        # the browser's name is written in the accent on the dark header, unless the accent is too dark to read there
+        self._css_data = CSS.format(accent=colour, on_accent=text, name=colour if text == DARK_TEXT else "#dfe3ea")
         self._css.load_from_data(self._css_data.encode())
 
     def _replace_rows(self, rows):
@@ -852,7 +868,7 @@ class DockView:
         for conn, info, state in self.sources:
             # per browser process: two profiles of the same browser fold independently
             browser = info.get("browserPid") or info.get("browser")
-            colour = accent(info)
+            colour = accent(info, self._colours)
             window = focused_window(state)
             self._state = state  # (what a tab row looks its group up in)
             groups = group_tabs(state, every_workspace=finding)  # the focused window's tabs, in the workspace it shows

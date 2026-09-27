@@ -234,6 +234,15 @@ class PanelTest(unittest.TestCase):
         panel.reconfigure({"follow": "last", "view": "all"})  # the file wins over a chip clicked since
         self.assertEqual(panel.view.calls[-1], ("show", "Firefox+Zen"))
 
+    def test_a_reload_with_new_theme_colours_redraws_in_them(self):
+        self.assertEqual(self.panel.colours["firefox"], "#ff7139")
+        self.panel.reconfigure({"follow": "last", "view": "auto", "theme": {"firefox": "#4c9aff"}})
+        self.assertEqual(self.shown(), ["Firefox"])
+        self.assertEqual(self.view.last["choices"], [("Firefox", "#4c9aff"), ("Zen", "#9d7cd8")])
+        self.view.calls.clear()
+        self.panel.reconfigure({"follow": "last", "view": "auto", "theme": {"firefox": "#4c9aff"}})
+        self.assertEqual(self.shown(), [])  # the same colours: nothing to redraw
+
     def test_the_chosen_browser_closing_goes_back_to_auto(self):
         self.panel.choose(self.zen)
         self.panel.on_close(self.zen)

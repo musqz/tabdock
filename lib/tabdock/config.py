@@ -1,5 +1,8 @@
 import os
+import re
 import tomllib
+
+from .model import ACCENTS
 
 DEFAULTS = {
     "side": "left",
@@ -11,8 +14,11 @@ DEFAULTS = {
     "badges": True,  # a tab's leading "(3)" unread count, shown as a small badge instead of plain text
     "pinned": False,
     "start_with_browser": True,  # read by the native-messaging relay, not by the panel itself
+    "theme": {},  # the [theme] section: colours, only those given (model.accents() fills in the rest)
 }
 CHOICES = {"side": ("left", "right"), "follow": ("last", "hide"), "view": ("auto", "all")}
+THEME_KEYS = ("accent", *ACCENTS, "other")
+_COLOUR_RE = re.compile(r"#(?:[0-9a-f]{3}){1,2}", re.IGNORECASE)
 
 
 def socket_path():
@@ -54,7 +60,25 @@ def validate(user):
     for key in ("icons", "badges", "pinned", "start_with_browser"):
         if not isinstance(cfg[key], bool):
             raise ValueError(f"{key} must be true or false (got {cfg[key]!r})")
+    cfg["theme"] = _theme(cfg["theme"])
     return cfg
+
+
+def _theme(theme):
+    """The [theme] section with every colour as "#rrggbb"; raises ValueError like validate()."""
+    if not isinstance(theme, dict):
+        raise ValueError(f"theme must be a [theme] section of colours (got {theme!r})")
+    unknown = sorted(set(theme) - set(THEME_KEYS))
+    if unknown:  # most likely an option written below the [theme] line, which TOML then counts as part of it
+        raise ValueError(f'unknown option(s) in [theme]: {", ".join(unknown)} (known: {", ".join(THEME_KEYS)}); '
+                         "every other option goes above the [theme] line")
+    colours = {}
+    for key, value in theme.items():
+        if not isinstance(value, str) or not _COLOUR_RE.fullmatch(value):
+            raise ValueError(f'theme {key} must be a colour such as "#4c9aff" (got {value!r})')
+        value = value.lower()
+        colours[key] = value if len(value) == 7 else "#" + "".join(c * 2 for c in value[1:])  # "#abc" -> "#aabbcc"
+    return colours
 
 
 def load(path=None):

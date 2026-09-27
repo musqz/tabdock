@@ -215,6 +215,34 @@ class DockViewTest(unittest.TestCase):
         self.assertIn("#8f9bb3", view._css_data)
         self.assertEqual(view.browser_name.get_text(), "")
 
+    def test_theme_colours_the_panel_instead_of_the_browser_colour(self):
+        view = self.make(theme={"firefox": "#1e3a8a"})
+        self.assertIn("#8f9bb3", view._css_data)  # nothing listed yet: the colour of any other browser
+        view.show([(object(), INFO, STATE)])
+        self.assertIn("#1e3a8a", view._css_data)  # Firefox's colour from [theme], not its orange
+        self.assertNotIn("#ff7139", view._css_data)
+        pinned = next(line for line in view._css_data.splitlines() if line.startswith("button.sp-btn.sp-pin:checked"))
+        self.assertIn("color: #ffffff", pinned)  # a dark accent: the text on it turns white
+        name = next(line for line in view._css_data.splitlines() if line.startswith(".sp-browser"))
+        self.assertIn("color: #dfe3ea", name)  # ...and the browser's name, on the dark header, the usual text colour
+        self.assertTrue(all(r.get_style_context().has_class("acc-1e3a8a") for r in view.list.get_children()))
+        # (as GTK prints the rules back, so they were parsed): white text on a browser band in that colour too
+        self.assertIn(".acc-1e3a8a.sp-bhead .sp-bandlabel {\n  color: rgb(255,255,255);", view._per_browser.to_string())
+
+    def test_a_reload_applies_new_theme_colours(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, STATE)])
+        self.assertIn(".sp-browser { font-weight: bold; color: #ff7139; }", view._css_data)  # a light accent: in the name
+        view.reconfigure({**DEFAULTS, "theme": {"accent": "#4c9aff"}})
+        view.show([(conn, INFO, STATE)])  # the same tabs: rebuilt all the same, in the new colour
+        self.assertIn("#4c9aff", view._css_data)
+        self.assertTrue(all(r.get_style_context().has_class("acc-4c9aff") for r in view.list.get_children()))
+        view.clear()
+        self.assertIn("#4c9aff", view._css_data)  # with nothing listed, the strip wears it too
+        view.reconfigure({**DEFAULTS, "theme": {"other": "#123456"}})  # a reload while nothing is listed
+        self.assertIn("#123456", view._css_data)
+
     def test_click_activates_tab_in_its_window(self):
         view = self.make()
         conn = object()

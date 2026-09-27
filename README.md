@@ -106,6 +106,20 @@ reads; one still in `~/.config/openbox-sidepanel/` from before the rename is use
 | `pinned` | `false` | start pinned |
 | `start_with_browser` | `true` | start the panel when a browser with the extension opens and none is running |
 
+A `[theme]` section, last in the file, sets the accent colour instead of each browser's own (Firefox orange,
+Zen purple, ...). The accent is on the strip, the header's line and browser name, buttons that are on, the
+active tab's bar and the chips:
+
+```toml
+[theme]
+accent = "#4c9aff"    # every browser in this one colour
+firefox = "#4c9aff"   # or one browser (also zen, firedragon, librewolf, waterfox, floorp); wins over accent
+other = "#8f9bb3"     # any other browser, and the strip while none is connected
+```
+
+Colours are `"#rrggbb"` or `"#rgb"`. On a dark accent the text turns white, and the browser's name in the
+header takes the usual text colour, so both stay readable.
+
 Config is read at startup only: quit (`✕`) and restart from the menu to apply changes. The header also
 has live toggles (icons, pin, side, quit) that last until the next restart.
 
