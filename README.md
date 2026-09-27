@@ -54,7 +54,7 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/tabdock-nmhost  
 Needs `python-gobject` (GTK 3) and `python-xlib`.
 
 ```bash
-./install.sh                     # program -> ~/.local, browser manifest, "Tabdock" menu entry
+./install.sh                     # program -> ~/.local, browser manifest, "Tabdock" menu entry, a config
 packaging/sign-extension.sh      # signs the extension (safe prompts for your Mozilla credentials)
 ```
 
@@ -91,8 +91,10 @@ browser can reach the relay.
 
 ## Configuration
 
-Copy [configs/config.toml](configs/config.toml) to `~/.config/tabdock/config.toml` (`tabdock -h` shows the path it
-reads; one still in `~/.config/openbox-sidepanel/` from before the rename is used until you move it):
+`./install.sh` puts [configs/config.toml](configs/config.toml), every option explained, at `~/.config/tabdock/config.toml`
+when you have none, and never overwrites yours. With the Arch package, copy `/usr/share/tabdock/configs/config.toml`
+there. `tabdock -h` shows the path it reads; one still in `~/.config/openbox-sidepanel/` from before the rename is
+used until you move it:
 
 | key | default | meaning |
 |-----|---------|---------|

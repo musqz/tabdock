@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `./install.sh` puts a config to edit at `~/.config/tabdock/config.toml` (the example, every option explained)
+  when you have none, and says where it is. It never overwrites yours, and makes none while your config is still
+  in `~/.config/openbox-sidepanel/` (a new one would be read instead of it). `--uninstall` removes it only while
+  it is still the example; one with your settings stays. The Arch package says where to copy it from.
+
 - A `[theme]` section in `config.toml` sets the accent colour, the orange (for Firefox) of the strip, the
   header's line and browser name, buttons that are on, the active tab's bar, the chips and the drop marker:
   `accent = "#4c9aff"` for every browser, or one browser's own (`firefox = "#4c9aff"`, and `zen`, `firedragon`,

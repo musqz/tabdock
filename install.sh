@@ -6,8 +6,9 @@
 #   ./install.sh --uninstall              remove exactly what install created
 #
 # Installed under $PREFIX/share/tabdock, with $PREFIX/bin/tabdock linking to it, plus the
-# native-messaging manifest that lets the browser start the relay. Nothing outside those
-# paths is touched (your Openbox autostart is only mentioned, never edited).
+# native-messaging manifest that lets the browser start the relay, and ~/.config/tabdock/config.toml
+# to edit when you have none (never overwritten). Nothing outside those paths is touched (your
+# Openbox autostart is only mentioned, never edited).
 set -euo pipefail
 
 shopt -u patsub_replacement 2>/dev/null || true  # keep '&' in paths literal
@@ -29,6 +30,10 @@ old_receipt="$old_share/.installed"
 # native-messaging manifest dirs. One manifest in ~/.mozilla serves Firefox, Zen, FireDragon,
 # Waterfox and LibreWolf: each was verified with tests/e2e_firefox.py --firefox <browser>.
 nm_dirs=("$HOME/.mozilla/native-messaging-hosts")
+# the config to edit, per user (also with PREFIX=/usr); the one from before the rename is read while it is the only one
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/tabdock"
+config="$config_dir/config.toml"
+old_config="${XDG_CONFIG_HOME:-$HOME/.config}/openbox-sidepanel/config.toml"
 
 installed=()
 
@@ -167,6 +172,31 @@ write_desktop_entry() {
     installed+=("$file")
 }
 
+# A config to edit, copied from the example when there is none. It is yours from then on: never overwritten and
+# not in the receipt (a later install must not remove it as stale); --uninstall removes it only while unedited.
+write_config() {
+    if [[ -e $config ]]; then
+        printf '%-10s %s (yours, never overwritten; every option: %s)\n' kept "$config" "$share/configs/config.toml"
+    elif [[ -e $old_config ]]; then
+        # a new one would be read instead of it (the panel looks there first), with only the defaults in it
+        printf '%-10s %s (your config is still %s: move it there)\n' skipped "$config" "$old_config"
+    else
+        install -Dm644 -- "$root/configs/config.toml" "$config"
+        printf '%-10s %s\n' installed "$config"
+    fi
+}
+
+# The config while it is still the example it was made from; one with your settings in it stays.
+remove_config() {
+    [[ -e $config ]] || return 0
+    if cmp -s -- "$config" "$share/configs/config.toml" || cmp -s -- "$config" "$root/configs/config.toml"; then
+        remove "$config"
+        rmdir -- "$config_dir" 2> /dev/null || true  # only when empty (saved signing credentials stay)
+    else
+        printf '%-10s %s (your settings: remove it yourself if you want)\n' kept "$config"
+    fi
+}
+
 # files an earlier version installed that this one no longer ships, including a whole install from
 # before the rename to tabdock
 remove_stale() {
@@ -222,10 +252,13 @@ do_install() {
     link_bin
     write_manifests
     write_desktop_entry
+    write_config
     remove_stale
     write_receipt
     verify
     mention_old_command
+    local settings=$config  # the file the panel reads
+    [[ ! -e $config && -e $old_config ]] && settings=$old_config
     cat <<EOF
 
 Next:
@@ -235,11 +268,14 @@ Next:
        - "Tabdock" in your application menu
        - at login: add this line to ~/.config/openbox/autostart, after picom starts:
              (sleep 5.0s && $(printf '%q' "$bin")) &
+  3. Settings (side, width, colours, ...): $(printf '%q' "$settings")
+     read when the panel starts: quit it with its x and start it again after a change
 EOF
 }
 
 do_uninstall() {
     local path dir file target
+    remove_config  # first: it is compared with the example the receipt's files include
     if [[ -f $receipt ]]; then
         while IFS= read -r path; do remove_listed "$path"; done < "$receipt"
         remove "$receipt"
@@ -269,6 +305,6 @@ do_uninstall() {
 case "${1:-}" in
     "") do_install ;;
     --uninstall) do_uninstall ;;
-    -h | --help) sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
+    -h | --help) sed -n '2,11p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
     *) echo "usage: $0 [--uninstall]" >&2; exit 2 ;;
 esac
