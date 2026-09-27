@@ -139,7 +139,7 @@ lib/tabdock/              panel python package
 lib/native-host/          tabdock-nmhost
 extension/                manifest.json, background.js, icons/
 configs/                  config.toml default, nm manifest template, tabdock.desktop (autostart)
-docs/                     PLAN.md, PROTOCOL.md, RELEASE.md
+docs/                     PLAN.md, PROTOCOL.md, RELEASE.md, USAGE.md
 tests/                    unit tests (pytest) + manual e2e_*.py scripts
 packaging/                PKGBUILD, build-extension.sh, sign-extension.sh, tabdock.install
 .gitignore                includes CLAUDE.md, claude.md, __pycache__, web-ext-artifacts/
