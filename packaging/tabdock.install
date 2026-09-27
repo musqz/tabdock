@@ -6,3 +6,14 @@ post_install() {
     its manifest in ~/.mozilla/native-messaging-hosts overrides this package's.
 EOF
 }
+
+post_upgrade() {
+    # $2 is the version upgraded from; 0.3.1 was the last one whose command was sidepanel
+    if (( $(vercmp "${2%-*}" 0.3.1) <= 0 )); then
+        cat <<'EOF'
+==> The command is "tabdock" now (/usr/bin/tabdock), not "sidepanel": update autostart lines and
+    keybindings that start it; the menu entry is "Tabdock". Quit a panel still running from before
+    (its x button), then start tabdock.
+EOF
+    fi
+}

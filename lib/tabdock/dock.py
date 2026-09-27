@@ -128,7 +128,7 @@ class DockView:
         self._row_order = []  # row widgets in display order
         self._press = None  # the button-1 press in progress: {box, x, y, t, dragging, target, after}
         self._deferred = None  # a state update that arrived mid-drag, applied after the drop
-        self._dump_path = os.environ.get("SIDEPANEL_LAYOUT_DUMP")  # a test hook: off unless set at start
+        self._dump_path = os.environ.get("TABDOCK_LAYOUT_DUMP")  # a test hook: off unless set at start
         self._dump_pending = False
         self.sources = []  # [(conn, hello, state)] of the browsers listed
         # icons are known by _icon_key(url); all in memory only: nothing about your tabs is written to disk
@@ -152,7 +152,7 @@ class DockView:
         self._screen_handlers = []
         self._closed = False
 
-        GLib.set_prgname("openbox-sidepanel")
+        GLib.set_prgname("tabdock")
         self._css = Gtk.CssProvider()
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), self._css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
@@ -164,8 +164,8 @@ class DockView:
             Gdk.Screen.get_default(), per_browser, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
-        self.strip = self._dock_window("sp-strip", "openbox-sidepanel-strip")
-        self.win = self._dock_window("sp-panel", "openbox-sidepanel-panel")
+        self.strip = self._dock_window("sp-strip", "tabdock-strip")
+        self.win = self._dock_window("sp-panel", "tabdock-panel")
         self.win.connect("destroy", lambda _w: on_quit())
 
         self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -175,7 +175,7 @@ class DockView:
         header.get_style_context().add_class("sp-header")
         self.browser_name = Gtk.Label(label="", xalign=0)
         self.browser_name.get_style_context().add_class("sp-browser")
-        self.quit_btn = self._button("✕", "Quit sidepanel", Gtk.Button)
+        self.quit_btn = self._button("✕", "Quit tabdock", Gtk.Button)
         self.quit_btn.get_style_context().add_class("sp-quit")
         self.quit_btn.connect("clicked", lambda _b: on_quit())
         self.flip_btn = self._button("⇄", "Switch side", Gtk.Button)
@@ -401,7 +401,7 @@ class DockView:
         else:  # "outer", or an output name that is not connected
             if name != "outer" and not self._warned_monitor:
                 self._warned_monitor = True
-                print(f"sidepanel: no monitor named {name!r}, using the outer screen edge", file=sys.stderr)
+                print(f"tabdock: no monitor named {name!r}, using the outer screen edge", file=sys.stderr)
             index = geometry.outer_monitor(rects, self.cfg["side"], primary)
         return rects[index]
 
@@ -687,7 +687,7 @@ class DockView:
             GLib.idle_add(self._dump_layout)
 
     def _dump_layout(self):
-        """SIDEPANEL_LAYOUT_DUMP=<file> writes where every row is, in screen pixels, so an end-to-end
+        """TABDOCK_LAYOUT_DUMP=<file> writes where every row is, in screen pixels, so an end-to-end
         test can drag with a real pointer without guessing coordinates."""
         self._dump_pending = False
         path = self._dump_path

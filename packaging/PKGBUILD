@@ -49,28 +49,29 @@ EOF
 package() {
     cd "$pkgname-$pkgver"
     local share=/usr/share/$pkgname f
-    # the same layout install.sh creates: the relay finds the panel at ../../sidepanel
-    install -Dm755 sidepanel "$pkgdir$share/sidepanel"
+    # the same layout install.sh creates: the relay finds the panel at ../../tabdock
+    install -Dm755 tabdock "$pkgdir$share/tabdock"
     install -Dm644 VERSION "$pkgdir$share/VERSION"
     while IFS= read -r -d '' f; do
         install -Dm644 "$f" "$pkgdir$share/$f"
-    done < <(find lib/sidepanel -type f -not -path '*/__pycache__/*' -print0)
-    install -Dm755 lib/native-host/sidepanel-nmhost "$pkgdir$share/lib/native-host/sidepanel-nmhost"
+    done < <(find lib/tabdock -type f -not -path '*/__pycache__/*' -print0)
+    install -Dm755 lib/native-host/tabdock-nmhost "$pkgdir$share/lib/native-host/tabdock-nmhost"
     install -Dm644 configs/config.toml "$pkgdir$share/configs/config.toml"
     install -Dm644 extension/icons/icon-96.png "$pkgdir$share/icon.png"
     install -Dm644 "$srcdir/$pkgname-$pkgver.xpi" "$pkgdir$share/$pkgname.xpi"
 
     install -d "$pkgdir/usr/bin"
-    ln -s "$share/sidepanel" "$pkgdir/usr/bin/sidepanel"
+    ln -s "$share/tabdock" "$pkgdir/usr/bin/tabdock"
 
-    # system-wide native-messaging manifest (a per-user one in ~/.mozilla takes precedence)
+    # system-wide native-messaging manifest (a per-user one in ~/.mozilla takes precedence), named by the
+    # extension, which kept its name through the rename to tabdock
     install -d "$pkgdir/usr/lib/mozilla/native-messaging-hosts"
-    sed "s|@HOST_PATH@|$share/lib/native-host/sidepanel-nmhost|" configs/openbox_sidepanel.json.in \
+    sed "s|@HOST_PATH@|$share/lib/native-host/tabdock-nmhost|" configs/openbox_sidepanel.json.in \
         > "$pkgdir/usr/lib/mozilla/native-messaging-hosts/openbox_sidepanel.json"
 
     install -d "$pkgdir/usr/share/applications"
-    sed -e "s|@BIN@|/usr/bin/sidepanel|" -e "s|@ICON@|$share/icon.png|" configs/sidepanel.desktop.in \
-        > "$pkgdir/usr/share/applications/openbox-sidepanel.desktop"
+    sed -e "s|@BIN@|/usr/bin/tabdock|" -e "s|@ICON@|$share/icon.png|" configs/tabdock.desktop.in \
+        > "$pkgdir/usr/share/applications/tabdock.desktop"
 
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
     install -Dm644 README.md CHANGELOG.md docs/RELEASE.md -t "$pkgdir/usr/share/doc/$pkgname"

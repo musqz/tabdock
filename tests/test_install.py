@@ -26,17 +26,18 @@ class InstallTest(unittest.TestCase):
 
     def layout(self, prefix=None):
         self.prefix = prefix or os.path.join(self.home, ".local")
-        self.share = os.path.join(self.prefix, "share", "openbox-sidepanel")
-        self.bin = os.path.join(self.prefix, "bin", "sidepanel")
-        self.relay = os.path.join(self.share, "lib", "native-host", "sidepanel-nmhost")
+        self.share = os.path.join(self.prefix, "share", "tabdock")
+        self.bin = os.path.join(self.prefix, "bin", "tabdock")
+        self.relay = os.path.join(self.share, "lib", "native-host", "tabdock-nmhost")
         self.manifest = os.path.join(self.home, ".mozilla", "native-messaging-hosts", "openbox_sidepanel.json")
 
     def base_env(self):
-        # XDG_DATA_HOME pinned inside the throwaway home: a real one must never receive test files
+        # XDG dirs pinned inside the throwaway home: a real one must never be read or receive test files
         return {
             **os.environ,
             "HOME": self.home,
             "XDG_DATA_HOME": os.path.join(self.home, ".local", "share"),
+            "XDG_CONFIG_HOME": os.path.join(self.home, ".config"),
             "PATH": os.path.dirname(self.bin) + ":" + os.environ["PATH"],
         }
 
@@ -46,10 +47,10 @@ class InstallTest(unittest.TestCase):
     def test_installs_a_self_contained_working_copy(self):
         done = self.run_install()
         self.assertEqual(done.returncode, 0, done.stderr)
-        for rel in ("sidepanel", "VERSION", "lib/sidepanel/app.py", "lib/sidepanel/dock.py", "configs/config.toml",
-                    "lib/native-host/sidepanel-nmhost"):
+        for rel in ("tabdock", "VERSION", "lib/tabdock/app.py", "lib/tabdock/dock.py", "configs/config.toml",
+                    "lib/native-host/tabdock-nmhost"):
             self.assertTrue(os.path.isfile(os.path.join(self.share, rel)), rel)
-        self.assertEqual(os.readlink(self.bin), os.path.join(self.share, "sidepanel"))
+        self.assertEqual(os.readlink(self.bin), os.path.join(self.share, "tabdock"))
         self.assertTrue(os.access(self.relay, os.X_OK))
         with open(self.manifest) as f:
             manifest = json.load(f)
@@ -58,7 +59,7 @@ class InstallTest(unittest.TestCase):
         with open(os.path.join(ROOT, "VERSION")) as f:
             version = f.read().strip()
         ran = subprocess.run([self.bin, "--version"], capture_output=True, text=True)
-        self.assertEqual(ran.stdout.strip(), f"sidepanel {version}")  # it runs from the installed copy
+        self.assertEqual(ran.stdout.strip(), f"tabdock {version}")  # it runs from the installed copy
         self.assertIn("verified", done.stdout)
         self.assertIn("(sleep 5.0s &&", done.stdout)  # the autostart line is printed, not applied
 
@@ -69,14 +70,14 @@ class InstallTest(unittest.TestCase):
         actions = again.stdout.split("Next:")[0]
         self.assertNotRegex(actions, r"(?m)^(installed|updated)\b")  # nothing new on a second run
         self.assertIn("unchanged", actions)
-        with open(os.path.join(self.share, "lib", "sidepanel", "app.py"), "a") as f:
+        with open(os.path.join(self.share, "lib", "tabdock", "app.py"), "a") as f:
             f.write("# local edit\n")
         third = self.run_install()
         self.assertRegex(third.stdout, r"updated\s+\S+app\.py")
 
     def test_stale_files_from_an_older_version_are_removed(self):
         self.run_install()
-        stale = os.path.join(self.share, "lib", "sidepanel", "gone.py")
+        stale = os.path.join(self.share, "lib", "tabdock", "gone.py")
         with open(stale, "w") as f:
             f.write("old\n")
         with open(os.path.join(self.share, ".installed"), "a") as f:
@@ -99,7 +100,7 @@ class InstallTest(unittest.TestCase):
 
     def test_uninstall_keeps_a_link_that_now_points_elsewhere(self):
         self.run_install()
-        elsewhere = os.path.join(self.tmp.name, "other-build", "sidepanel")
+        elsewhere = os.path.join(self.tmp.name, "other-build", "tabdock")
         os.makedirs(os.path.dirname(elsewhere))
         with open(elsewhere, "w") as f:
             f.write("#!/bin/sh\n")
@@ -126,33 +127,91 @@ class InstallTest(unittest.TestCase):
         self.assertTrue(os.path.exists(self.manifest))  # belongs to the install under ~/.local
         self.assertIn("kept", removed.stderr)
         self.assertIn(self.relay, removed.stderr)  # tells where it points, so the PREFIX can be found
-        self.assertTrue(os.path.isfile(os.path.join(self.share, "sidepanel")))  # the real install is untouched
+        self.assertTrue(os.path.isfile(os.path.join(self.share, "tabdock")))  # the real install is untouched
 
     def test_verifying_the_install_leaves_no_bytecode(self):
         self.run_install()
         stray = [d for d, _, _ in os.walk(self.share) if os.path.basename(d) == "__pycache__"]
         self.assertEqual(stray, [])
 
+    def old_install(self):
+        """What install.sh left before the rename to tabdock: share/openbox-sidepanel, bin/sidepanel linking to
+        it, its menu entry and the browser manifest, all listed in its receipt, plus bytecode its panel wrote."""
+        old_share = os.path.join(self.prefix, "share", "openbox-sidepanel")
+        old_bin = os.path.join(self.prefix, "bin", "sidepanel")
+        old_entry = os.path.join(self.home, ".local", "share", "applications", "openbox-sidepanel.desktop")
+        files = [os.path.join(old_share, rel) for rel in
+                 ("sidepanel", "VERSION", "lib/sidepanel/app.py", "lib/native-host/sidepanel-nmhost")]
+        for path in (*files, old_entry, os.path.join(old_share, "lib", "sidepanel", "__pycache__", "app.pyc")):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write("old\n")
+        os.makedirs(os.path.dirname(old_bin))
+        os.symlink(files[0], old_bin)
+        os.makedirs(os.path.dirname(self.manifest))
+        with open(self.manifest, "w") as f:
+            json.dump({"name": "openbox_sidepanel", "path": files[-1]}, f)
+        with open(os.path.join(old_share, ".installed"), "w") as f:
+            f.write("\n".join([*files, old_bin, self.manifest, old_entry]) + "\n")
+        return old_share, old_bin, old_entry
+
+    def test_installing_replaces_an_install_from_before_the_rename(self):
+        old_share, old_bin, old_entry = self.old_install()
+        done = self.run_install()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertFalse(os.path.exists(old_share))
+        self.assertFalse(os.path.lexists(old_bin))
+        self.assertFalse(os.path.exists(old_entry))
+        with open(self.manifest) as f:
+            self.assertEqual(json.load(f)["path"], self.relay)  # the same manifest, for the new relay
+        self.assertEqual(self.run_install("--uninstall").returncode, 0)
+        self.assertEqual(files_under(self.home), [])  # nothing of the old install is left for anyone to find
+
+    def test_uninstall_also_removes_an_install_from_before_the_rename(self):
+        _, old_bin, _ = self.old_install()
+        removed = self.run_install("--uninstall")
+        self.assertEqual(removed.returncode, 0, removed.stderr)
+        self.assertFalse(os.path.lexists(old_bin))
+        self.assertEqual(files_under(self.home), [])
+
+    def test_says_where_the_old_command_is_still_started(self):
+        openbox = os.path.join(self.home, ".config", "openbox")
+        os.makedirs(openbox)
+        with open(os.path.join(openbox, "autostart"), "w") as f:
+            f.write("picom &\n(sleep 5.0s && ~/.local/bin/sidepanel) &         # Sidepanel\n")
+        with open(os.path.join(openbox, "rc.xml"), "w") as f:
+            f.write("<command>openbox-sidepanel.sh</command>\n<command>sidepanel</command>\n")
+        done = self.run_install()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("sidepanel", done.stderr)
+        self.assertIn(os.path.join(openbox, "autostart") + ":2:", done.stderr)
+        self.assertIn(os.path.join(openbox, "rc.xml") + ":2:", done.stderr)
+        self.assertNotIn(":1:", done.stderr)  # picom, and a name that merely contains it
+        with open(os.path.join(openbox, "autostart"), "w") as f:
+            f.write("(sleep 5.0s && ~/.local/bin/tabdock) &\n")
+        os.remove(os.path.join(openbox, "rc.xml"))
+        self.assertEqual(self.run_install().stderr, "")  # updated: nothing to say
+
     def test_whole_package_tree_is_installed(self):
         # a checkout with a subpackage and a non-.py data file the installer has never heard of
         checkout = os.path.join(self.tmp.name, "checkout")
-        for rel in ("install.sh", "sidepanel", "VERSION"):
+        for rel in ("install.sh", "tabdock", "VERSION"):
             os.makedirs(os.path.dirname(os.path.join(checkout, rel)), exist_ok=True)
             shutil.copy2(os.path.join(ROOT, rel), os.path.join(checkout, rel))
         for sub in ("lib", "configs", "extension"):
             shutil.copytree(os.path.join(ROOT, sub), os.path.join(checkout, sub), ignore=shutil.ignore_patterns("__pycache__"))
-        os.makedirs(os.path.join(checkout, "lib", "sidepanel", "newpkg"))
+        os.makedirs(os.path.join(checkout, "lib", "tabdock", "newpkg"))
         for rel in ("newpkg/__init__.py", "newpkg/data.css"):
-            with open(os.path.join(checkout, "lib", "sidepanel", rel), "w") as f:
+            with open(os.path.join(checkout, "lib", "tabdock", rel), "w") as f:
                 f.write("x\n")
         done = subprocess.run([os.path.join(checkout, "install.sh")], env=self.base_env(), capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stderr)
         for rel in ("newpkg/__init__.py", "newpkg/data.css"):
-            self.assertTrue(os.path.isfile(os.path.join(self.share, "lib", "sidepanel", rel)), rel)
+            self.assertTrue(os.path.isfile(os.path.join(self.share, "lib", "tabdock", rel)), rel)
 
     def test_installs_a_menu_entry_and_removes_it_again(self):
         self.assertEqual(self.run_install().returncode, 0)
-        entry = os.path.join(self.home, ".local", "share", "applications", "openbox-sidepanel.desktop")
+        entry = os.path.join(self.home, ".local", "share", "applications", "tabdock.desktop")
         with open(entry) as f:
             text = f.read()
         self.assertIn(f"Exec={self.bin}\n", text)  # absolute: launchers do not share your shell's PATH
@@ -167,7 +226,7 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(files_under(self.home), [])
 
     def exec_as_a_launcher_reads_it(self):
-        entry = os.path.join(self.home, ".local", "share", "applications", "openbox-sidepanel.desktop")
+        entry = os.path.join(self.home, ".local", "share", "applications", "tabdock.desktop")
         with open(entry) as f:
             value = re.search(r"^Exec=(.*)$", f.read(), re.M).group(1)
         return shlex.split(value.replace("%%", "%"))  # quoting first, then the %% -> % field-code rule
@@ -196,7 +255,7 @@ class InstallTest(unittest.TestCase):
     def test_replaces_an_identical_hand_copied_launcher(self):
         # what happens when the launcher is copied to ~/.local/bin by hand: it cannot find its files
         os.makedirs(os.path.dirname(self.bin))
-        shutil.copy2(os.path.join(ROOT, "sidepanel"), self.bin)
+        shutil.copy2(os.path.join(ROOT, "tabdock"), self.bin)
         broken = subprocess.run([self.bin, "--version"], capture_output=True, text=True)
         self.assertNotEqual(broken.returncode, 0)
 
@@ -204,7 +263,7 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("hand-copied", done.stdout)
         self.assertTrue(os.path.islink(self.bin))
-        self.assertEqual(os.readlink(self.bin), os.path.join(self.share, "sidepanel"))
+        self.assertEqual(os.readlink(self.bin), os.path.join(self.share, "tabdock"))
         self.assertEqual(subprocess.run([self.bin, "--version"], capture_output=True).returncode, 0)
         removed = self.run_install("--uninstall")
         self.assertEqual(removed.returncode, 0)
@@ -213,8 +272,8 @@ class InstallTest(unittest.TestCase):
     def test_launcher_without_its_files_explains_instead_of_a_traceback(self):
         alone = os.path.join(self.tmp.name, "alone")
         os.makedirs(alone)
-        shutil.copy2(os.path.join(ROOT, "sidepanel"), alone)
-        ran = subprocess.run([os.path.join(alone, "sidepanel")], capture_output=True, text=True)
+        shutil.copy2(os.path.join(ROOT, "tabdock"), alone)
+        ran = subprocess.run([os.path.join(alone, "tabdock")], capture_output=True, text=True)
         self.assertEqual(ran.returncode, 1)
         self.assertIn("install.sh", ran.stderr)
         self.assertNotIn("Traceback", ran.stderr)
@@ -243,7 +302,7 @@ class InstallTest(unittest.TestCase):
         self.layout(prefix=os.path.join(self.tmp.name, "pfx"))
         done = self.run_install(PREFIX=self.prefix)
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertTrue(os.path.isfile(os.path.join(self.share, "sidepanel")))
+        self.assertTrue(os.path.isfile(os.path.join(self.share, "tabdock")))
         with open(self.manifest) as f:  # manifests are per-user whatever the prefix
             self.assertEqual(json.load(f)["path"], self.relay)
 

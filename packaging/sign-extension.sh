@@ -12,13 +12,16 @@
 # They are asked one at a time, checked before anything is sent, and passed to web-ext through
 # this script's environment only: never on a command line, in your shell history or in the repo.
 # What you typed is never printed back, only its shape. --save keeps the pair, once signing has
-# proven it right, in ~/.config/openbox-sidepanel/amo-credentials (mode 600, outside the repo).
+# proven it right, in ~/.config/tabdock/amo-credentials (mode 600, outside the repo).
 set -euo pipefail
 
 root="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 artifacts="${ARTIFACTS_DIR:-$root/web-ext-artifacts}"
-creds_dir="${XDG_CONFIG_HOME:-$HOME/.config}/openbox-sidepanel"
+creds_dir="${XDG_CONFIG_HOME:-$HOME/.config}/tabdock"
 creds_file="$creds_dir/amo-credentials"
+# saved before the rename to tabdock: still used, and deleted by --forget, while there is no new one
+legacy_creds="${XDG_CONFIG_HOME:-$HOME/.config}/openbox-sidepanel/amo-credentials"
+[[ -e $creds_file || ! -e $legacy_creds ]] || creds_file=$legacy_creds
 
 save=0 forget=0 dry=0
 for arg in "$@"; do

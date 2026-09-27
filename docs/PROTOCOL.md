@@ -2,13 +2,13 @@
 
 ```
 extension <-- native messaging (stdio, 4-byte native-endian length + JSON) --> relay
-relay     <-- Unix socket $XDG_RUNTIME_DIR/openbox-sidepanel.sock (JSON lines) --> panel
+relay     <-- Unix socket $XDG_RUNTIME_DIR/tabdock.sock (JSON lines) --> panel
 ```
 
-The relay (`lib/native-host/sidepanel-nmhost`) forwards messages unchanged in both
+The relay (`lib/native-host/tabdock-nmhost`) forwards messages unchanged in both
 directions, with two additions: it sends `resync` to the extension whenever the panel
 (re)connects, and it adds `browserPid` (its parent process = the browser) to `hello`.
-`SIDEPANEL_SOCKET` overrides the socket path (tests).
+`TABDOCK_SOCKET` overrides the socket path (tests).
 
 ## Extension -> panel
 

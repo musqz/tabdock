@@ -4,7 +4,7 @@
 Scratch profile + throwaway $HOME, so your real profile, ~/.local and native-messaging dir are
 untouched. It exercises what ships: install.sh puts the program into the scratch $HOME and the
 panel runs from that installed copy; packaging/build-extension.sh builds the .xpi, which is
-installed as a temporary add-on through Marionette. Then, against a real `sidepanel --debug`:
+installed as a temporary add-on through Marionette. Then, against a real `tabdock --debug`:
   browser -> panel : tabs appear, new tabs show up, panel restart triggers a resync
   panel -> browser : `activate <id>` switches the active tab
 
@@ -127,7 +127,7 @@ def free_port():
 
 
 def start_panel(env):
-    installed = os.path.join(env["HOME"], ".local", "bin", "sidepanel")  # the copy install.sh made
+    installed = os.path.join(env["HOME"], ".local", "bin", "tabdock")  # the copy install.sh made
     proc = subprocess.Popen(
         [installed, "--debug"],
         env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1,
@@ -140,14 +140,14 @@ def main():
     ap.add_argument("--firefox", default="/usr/bin/firefox")
     args = ap.parse_args()
 
-    tmp = tempfile.mkdtemp(prefix="sidepanel-e2e-")
+    tmp = tempfile.mkdtemp(prefix="tabdock-e2e-")
     procs = []
     try:
         home = os.path.join(tmp, "home")
         profile = os.path.join(tmp, "profile")
         os.makedirs(home)
         os.makedirs(profile)
-        env = {**os.environ, "HOME": home, "SIDEPANEL_SOCKET": os.path.join(tmp, "sp.sock")}
+        env = {**os.environ, "HOME": home, "TABDOCK_SOCKET": os.path.join(tmp, "sp.sock")}
         subprocess.run([os.path.join(ROOT, "install.sh")], env=env, check=True, capture_output=True)
 
         port = free_port()
@@ -164,12 +164,12 @@ def main():
             version = f.read().strip()
         subprocess.run([os.path.join(ROOT, "packaging", "build-extension.sh")], env={**env, "OUT_DIR": tmp},
                        check=True, capture_output=True)
-        xpi = os.path.join(tmp, f"openbox-sidepanel-{version}.xpi")
+        xpi = os.path.join(tmp, f"tabdock-{version}.xpi")
 
         panel, out = start_panel(env)
         procs.append(panel)
         deadline = time.monotonic() + TIMEOUT
-        while not os.path.exists(env["SIDEPANEL_SOCKET"]):
+        while not os.path.exists(env["TABDOCK_SOCKET"]):
             assert time.monotonic() < deadline, "panel socket never appeared"
             time.sleep(0.1)
 

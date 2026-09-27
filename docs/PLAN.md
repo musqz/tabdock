@@ -1,4 +1,4 @@
-# Plan: openbox-sidepanel — autohide desktop side panel driven by a Firefox extension
+# Plan: tabdock — autohide desktop side panel driven by a Firefox extension
 
 ## Context
 
@@ -37,7 +37,7 @@ Verified on this machine (2026-09-19):
               │  runtime.connectNative("openbox_sidepanel")   stdio, 4-byte length + JSON
               ▼
         native-host relay (tiny python, spawned by the browser, one per browser instance)
-              │  Unix socket  $XDG_RUNTIME_DIR/openbox-sidepanel.sock   (JSON lines)
+              │  Unix socket  $XDG_RUNTIME_DIR/tabdock.sock   (JSON lines)
               ▼
         panel process (python + GTK3)  ── X11: dock window, strut, _NET_ACTIVE_WINDOW watch
 ```
@@ -62,13 +62,13 @@ before or after the browser; the extension reconnects with backoff.
 - `windows.onFocusChanged` tells the panel which browser window is focused, so the panel never has to
   map individual X windows to browser windows (multi-window solved without title hacks).
 
-### Native host (`lib/native-host/sidepanel-nmhost`)
+### Native host (`lib/native-host/tabdock-nmhost`)
 - ~40 lines of python: read/write native-messaging frames on stdio <-> line-JSON on the Unix socket.
   Adds its parent PID (the browser process) to `hello`. Exits when either side closes.
 - Manifest template in `configs/` -> installed to `~/.mozilla/native-messaging-hosts/` (Firefox) and
   `~/.zen/native-messaging-hosts/` (Zen); `allowed_extensions` holds the extension ID.
 
-### Panel (`sidepanel` + `lib/sidepanel/`)
+### Panel (`tabdock` + `lib/tabdock/`)
 - Python + GTK3 (PyGObject) + python-xlib. Modules: `app.py` (main loop), `ipc.py` (socket server,
   one connection per browser), `model.py` (state per browser), `x11.py` (props, strut, active window),
   `config.py`, `ui/` (widgets).
@@ -93,7 +93,7 @@ before or after the browser; the extension reconnects with backoff.
 - **Pin toggle:** header button / hotkey sets `_NET_WM_STRUT_PARTIAL` so the panel stays open and
   windows are laid out beside it; unpin removes the strut and returns to autohide.
 - **Left/right:** `side = left | right` and `monitor = outer | primary | <output name>` in
-  `~/.config/openbox-sidepanel/config.toml`; changing it reloads on SIGHUP or `sidepanel --reload`.
+  `~/.config/tabdock/config.toml`; changing it reloads on SIGHUP or `tabdock --reload`.
 - **Content:** header (browser name + pin + side flip); pinned row; one collapsible section per
   container (colored bar, icon, name, `+` for a new tab in that container); a "no container" section;
   window switcher when the browser has >1 window; active tab highlighted; search/filter box.
@@ -115,12 +115,12 @@ minimum version on Firefox 156 during M4.
 ## Repo layout (agreed before commit 1, per global CLAUDE.md)
 
 ```
-sidepanel                 main executable (python)
+tabdock                   main executable (python)
 install.sh  README.md  CHANGELOG.md  SOURCES.md
-lib/sidepanel/            panel python package
-lib/native-host/          sidepanel-nmhost
+lib/tabdock/              panel python package
+lib/native-host/          tabdock-nmhost
 extension/                manifest.json, background.js, icons/
-configs/                  config.toml default, nm manifest template, sidepanel.desktop (autostart)
+configs/                  config.toml default, nm manifest template, tabdock.desktop (autostart)
 docs/                     PLAN.md, PROTOCOL.md, userChrome-snippet.css
 tests/                    protocol fixtures, fake-extension script
 packaging/                PKGBUILD later
@@ -171,7 +171,7 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
 ## Verification
 
 - M1: `web-ext run` (or `about:debugging`) with Firefox 156 and a scratch profile; open tabs in 2
-  containers; `sidepanel --debug` prints the snapshot; open/close/switch tabs and see the snapshot
+  containers; `tabdock --debug` prints the snapshot; open/close/switch tabs and see the snapshot
   update within ~100 ms; kill the panel and confirm the extension reconnects when it comes back.
 - M2: `xprop` on the panel window shows `_NET_WM_WINDOW_TYPE_DOCK` (and `_NET_WM_STRUT_PARTIAL` only when
   pinned); pointer at the screen edge expands it; switching focus between Firefox and Zen swaps content;

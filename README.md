@@ -10,7 +10,7 @@ autostart, drag to reorder, new tab per container. The rest of two-way editing (
 containers) and workspaces are next — see [docs/PLAN.md](docs/PLAN.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ```
-Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost  <-- unix socket -->  sidepanel
+Firefox + extension/  <-- native messaging -->  lib/native-host/tabdock-nmhost  <-- unix socket -->  tabdock
 ```
 
 ## How it behaves
@@ -36,7 +36,7 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost
 Needs `python-gobject` (GTK 3) and `python-xlib`.
 
 ```bash
-./install.sh                     # program -> ~/.local, browser manifest, "Sidepanel" menu entry
+./install.sh                     # program -> ~/.local, browser manifest, "Tabdock" menu entry
 packaging/sign-extension.sh      # signs the extension (safe prompts for your Mozilla credentials)
 ```
 
@@ -45,7 +45,7 @@ addons.mozilla.org, unlisted) before it survives a restart. Full signing steps, 
 every way to start the panel: [docs/RELEASE.md](docs/RELEASE.md).
 
 `./install.sh --uninstall` removes exactly what was installed. Day to day you never need a terminal: the
-panel starts with the browser (`start_with_browser`), from the "Sidepanel" menu entry, or an autostart
+panel starts with the browser (`start_with_browser`), from the "Tabdock" menu entry, or an autostart
 line / keybinding.
 
 **Arch Linux:** `cd packaging && makepkg -si` installs the latest release system-wide instead, with the
@@ -56,22 +56,24 @@ overrides the package's.
 
 ## Development
 
-Run from the checkout with `./sidepanel` (`--debug` for a console view, no GUI). To try the extension
-without signing: `about:debugging#/runtime/this-firefox` -> "Load Temporary Add-on..." ->
-`extension/manifest.json` (forgotten on restart). Run `./install.sh` first so the browser can reach the relay.
+Run from the checkout with `./tabdock` (`--debug` for a console view, no GUI; `-h` for the options and where
+its config and log are). To try the extension without signing: `about:debugging#/runtime/this-firefox` ->
+"Load Temporary Add-on..." -> `extension/manifest.json` (forgotten on restart). Run `./install.sh` first so the
+browser can reach the relay.
 
 ## Troubleshooting
 
-- **Panel doesn't appear when a browser opens:** run `sidepanel` in a terminal to see why (a bad
-  `config.toml` is reported there); the browser-launched copy logs to `$XDG_RUNTIME_DIR/openbox-sidepanel.log`.
-- **"Waiting for a browser with the Sidepanel extension":** extension not installed/enabled, or the
+- **Panel doesn't appear when a browser opens:** run `tabdock` in a terminal to see why (a bad
+  `config.toml` is reported there); the browser-launched copy logs to `$XDG_RUNTIME_DIR/tabdock.log`.
+- **"Waiting for a browser with the Tabdock extension":** extension not installed/enabled, or the
   native-messaging manifest is missing — see [docs/RELEASE.md](docs/RELEASE.md).
 - **Panel only opens on part of the edge:** another tool's invisible hotspot windows (e.g. `fittsmon`'s
   `[Left]`) are catching the pointer first. Find them: `xwininfo -root -tree | grep -E ' (2x[0-9]+|[0-9]+x2)\+'`.
 
 ## Configuration
 
-Copy [configs/config.toml](configs/config.toml) to `~/.config/openbox-sidepanel/config.toml`:
+Copy [configs/config.toml](configs/config.toml) to `~/.config/tabdock/config.toml` (`tabdock -h` shows the path it
+reads; one still in `~/.config/openbox-sidepanel/` from before the rename is used until you move it):
 
 | key | default | meaning |
 |-----|---------|---------|
@@ -123,9 +125,9 @@ directory. `e2e_x11.py` opens a small Xephyr window on your desktop while it run
 
 | Path | What |
 |------|------|
-| `sidepanel`, `VERSION` | main executable and the version it reports |
+| `tabdock`, `VERSION` | main executable and the version it reports |
 | `install.sh` | install / uninstall (see docs/RELEASE.md) |
-| `lib/sidepanel/` | panel: socket server, model, geometry, autohide, X11 helpers, site icons, GTK dock |
+| `lib/tabdock/` | panel: socket server, model, geometry, autohide, X11 helpers, site icons, GTK dock |
 | `lib/native-host/` | native-messaging relay |
 | `extension/` | the WebExtension (MV2), with icons |
 | `packaging/` | `build-extension.sh` (reproducible .xpi), `sign-extension.sh`, Arch `PKGBUILD` |

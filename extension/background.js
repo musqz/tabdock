@@ -4,6 +4,8 @@
 // The relay waits for the panel itself and asks us to "resync" whenever the
 // panel (re)connects, so we never push state unprompted while nobody listens.
 
+// Named before the rename to tabdock and kept, like the add-on id: the browser finds the relay's
+// manifest (openbox_sidepanel.json) by this name, in installs this signed file cannot update.
 const HOST = "openbox_sidepanel";
 const RECONNECT_MS = 3000; // only needed if the relay process itself died
 const DEBOUNCE_MS = 50;
@@ -77,7 +79,7 @@ function push() {
     try {
       send(await snapshot());
     } catch (e) {
-      console.error("sidepanel: snapshot failed", e);
+      console.error("tabdock: snapshot failed", e);
     }
   }, DEBOUNCE_MS);
 }
@@ -121,10 +123,10 @@ async function onCommand(msg) {
         await browser.tabs.create({ cookieStoreId: msg.cookieStoreId, windowId: msg.windowId });
         break;
       default:
-        console.warn("sidepanel: unknown command", msg.type);
+        console.warn("tabdock: unknown command", msg.type);
     }
   } catch (e) {
-    console.error("sidepanel: command failed", msg, e);
+    console.error("tabdock: command failed", msg, e);
   }
 }
 
@@ -137,14 +139,14 @@ function connect() {
   try {
     port = browser.runtime.connectNative(HOST);
   } catch (e) {
-    console.error("sidepanel: connectNative failed", e);
+    console.error("tabdock: connectNative failed", e);
     port = null;
     scheduleReconnect();
     return;
   }
   port.onMessage.addListener(onCommand);
   port.onDisconnect.addListener((p) => {
-    console.warn("sidepanel: relay disconnected", p.error && p.error.message);
+    console.warn("tabdock: relay disconnected", p.error && p.error.message);
     port = null;
     panelUp = false;
     scheduleReconnect();

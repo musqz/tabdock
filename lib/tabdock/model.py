@@ -214,7 +214,7 @@ PACKAGED_XPI = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__f
 
 def waiting_text(xpi=PACKAGED_XPI):
     """What the panel says while no browser is connected: with the packaged extension, where to find it."""
-    text = "Waiting for a browser with the Sidepanel extension"
+    text = "Waiting for a browser with the Tabdock extension"
     if not os.path.isfile(xpi):
         return text
     return f"{text}.\n\nInstall it once in each browser: about:addons → gear icon → Install Add-on From File… → {xpi}"

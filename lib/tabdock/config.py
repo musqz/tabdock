@@ -16,17 +16,26 @@ CHOICES = {"side": ("left", "right"), "follow": ("last", "hide"), "view": ("auto
 
 
 def socket_path():
-    return os.environ.get("SIDEPANEL_SOCKET") or os.path.join(
-        os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "openbox-sidepanel.sock"
-    )
+    return os.environ.get("TABDOCK_SOCKET") or os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "tabdock.sock")
+
+
+def log_path():
+    """Where the relay sends the output of a panel it starts (it computes the same path itself)."""
+    return os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "tabdock.log")
+
+
+LEGACY_DIR = "openbox-sidepanel"  # the config directory from before the rename to tabdock
+
+
+def config_dir(name="tabdock"):
+    return os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), name)
 
 
 def config_path():
-    return os.path.join(
-        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
-        "openbox-sidepanel",
-        "config.toml",
-    )
+    """~/.config/tabdock/config.toml, or the one from before the rename to tabdock while only that one exists."""
+    path = os.path.join(config_dir(), "config.toml")
+    legacy = os.path.join(config_dir(LEGACY_DIR), "config.toml")
+    return legacy if not os.path.exists(path) and os.path.exists(legacy) else path
 
 
 def validate(user):
@@ -49,7 +58,7 @@ def validate(user):
 
 
 def load(path=None):
-    """Defaults overlaid with ~/.config/openbox-sidepanel/config.toml (if present)."""
+    """Defaults overlaid with config_path() (if present)."""
     try:
         with open(path or config_path(), "rb") as f:
             user = tomllib.load(f)

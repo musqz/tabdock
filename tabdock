@@ -3,13 +3,13 @@ import os
 import sys
 
 lib = os.path.join(os.path.dirname(os.path.realpath(__file__)), "lib")
-if not os.path.isdir(os.path.join(lib, "sidepanel")):
+if not os.path.isdir(os.path.join(lib, "tabdock")):
     sys.exit(
-        f"sidepanel: its files are not next to {os.path.realpath(__file__)}.\n"
+        f"tabdock: its files are not next to {os.path.realpath(__file__)}.\n"
         "Run ./install.sh from the source checkout; do not copy this file by hand."
     )
 sys.path.insert(0, lib)
 
-from sidepanel.app import main  # noqa: E402
+from tabdock.app import main  # noqa: E402
 
 sys.exit(main())

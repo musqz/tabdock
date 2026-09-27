@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "Openbox Sidepanel",
+  "name": "Tabdock",
   "version": "0.3.1",
-  "description": "Shows your tabs and containers in the openbox-sidepanel desktop panel. Talks only to a local helper; nothing leaves your computer.",
+  "description": "Shows your tabs and containers in the tabdock desktop panel. Talks only to a local helper; nothing leaves your computer.",
   "icons": {
     "48": "icons/icon-48.png",
     "96": "icons/icon-96.png"

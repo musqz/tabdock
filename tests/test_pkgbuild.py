@@ -84,13 +84,13 @@ class PkgbuildTest(unittest.TestCase):
         done = self.run_function("package")
         self.assertEqual(done.returncode, 0, done.stderr)
         share = self.path(SHARE)
-        for rel in ("sidepanel", "VERSION", "configs/config.toml", "icon.png", "tabdock.xpi"):
+        for rel in ("tabdock", "VERSION", "configs/config.toml", "icon.png", "tabdock.xpi"):
             self.assertTrue(os.path.isfile(os.path.join(share, rel)), rel)
-        self.assertTrue(os.access(os.path.join(share, "sidepanel"), os.X_OK))
-        self.assertEqual(os.readlink(self.path("/usr/bin/sidepanel")), f"{SHARE}/sidepanel")
+        self.assertTrue(os.access(os.path.join(share, "tabdock"), os.X_OK))
+        self.assertEqual(os.readlink(self.path("/usr/bin/tabdock")), f"{SHARE}/tabdock")
         # the whole panel package, so a new module is never left out; no bytecode
-        shipped = files_under(os.path.join(share, "lib", "sidepanel"))
-        expected = [f for f in files_under(os.path.join(ROOT, "lib", "sidepanel")) if "__pycache__" not in f]
+        shipped = files_under(os.path.join(share, "lib", "tabdock"))
+        expected = [f for f in files_under(os.path.join(ROOT, "lib", "tabdock")) if "__pycache__" not in f]
         self.assertEqual(shipped, expected)
         self.assertTrue(os.path.isfile(self.path("/usr/share/licenses/tabdock/LICENSE")))
 
@@ -99,7 +99,7 @@ class PkgbuildTest(unittest.TestCase):
         self.assertEqual(self.run_function("package").returncode, 0)
         lib = os.path.join(self.path(SHARE), "lib")
         ran = subprocess.run(["python3", "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
-                              "from sidepanel.model import waiting_text; print(waiting_text())", lib],
+                              "from tabdock.model import waiting_text; print(waiting_text())", lib],
                              capture_output=True, text=True, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
         self.assertEqual(ran.returncode, 0, ran.stderr)
         self.assertTrue(ran.stdout.strip().endswith(self.path(f"{SHARE}/tabdock.xpi")))
@@ -109,19 +109,19 @@ class PkgbuildTest(unittest.TestCase):
         self.assertEqual(self.run_function("package").returncode, 0)
         with open(self.path("/usr/lib/mozilla/native-messaging-hosts/openbox_sidepanel.json")) as f:
             manifest = json.load(f)
-        relay = f"{SHARE}/lib/native-host/sidepanel-nmhost"
+        relay = f"{SHARE}/lib/native-host/tabdock-nmhost"
         self.assertEqual(manifest["path"], relay)
         self.assertTrue(os.access(self.path(relay), os.X_OK))
-        # the relay starts the panel at ../../sidepanel from its own location
-        self.assertTrue(os.path.isfile(os.path.normpath(os.path.join(self.path(relay), "..", "..", "..", "sidepanel"))))
+        # the relay starts the panel at ../../tabdock from its own location
+        self.assertTrue(os.path.isfile(os.path.normpath(os.path.join(self.path(relay), "..", "..", "..", "tabdock"))))
         self.assertEqual(manifest["allowed_extensions"], ["openbox-sidepanel@musqz.local"])
 
     def test_menu_entry_runs_the_packaged_launcher(self):
         self.sources()
         self.assertEqual(self.run_function("package").returncode, 0)
-        with open(self.path("/usr/share/applications/openbox-sidepanel.desktop")) as f:
+        with open(self.path("/usr/share/applications/tabdock.desktop")) as f:
             entry = f.read()
-        self.assertIn("Exec=/usr/bin/sidepanel\n", entry)
+        self.assertIn("Exec=/usr/bin/tabdock\n", entry)
         self.assertIn(f"Icon={SHARE}/icon.png\n", entry)
         self.assertNotIn("@", entry)
 

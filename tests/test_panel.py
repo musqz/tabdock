@@ -6,7 +6,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
-from sidepanel.app import Panel  # noqa: E402
+from tabdock.app import Panel  # noqa: E402
 
 FIREFOX_XID, ZEN_XID, TERM_XID, PANEL_XID, LIBRE_XID = 101, 102, 103, 104, 105
 
@@ -166,7 +166,7 @@ class PanelTest(unittest.TestCase):
 
     def test_hello_name_comes_from_the_process_not_the_reported_name(self):
         zen = FakeConn()
-        with mock.patch("sidepanel.model.os.readlink", return_value="/opt/zen-browser-bin/zen-bin"):
+        with mock.patch("tabdock.model.os.readlink", return_value="/opt/zen-browser-bin/zen-bin"):
             self.panel.on_message(zen, {"type": "hello", "browser": "Firefox", "browserPid": 4242})
         self.assertEqual(self.panel.browsers[zen]["browser"], "Zen")  # Zen reports itself as Firefox
 
@@ -266,7 +266,7 @@ class PanelTest(unittest.TestCase):
         self.panel.on_message(libre, {"type": "hello", "browser": "LibreWolf", "browserPid": 4242})
         self.x.clients = [300, 301, PANEL_XID]  # the panel is on top, and a child of the browser
         self.x.pids = {300: 5000, 301: 5001, PANEL_XID: 5002}
-        with mock.patch("sidepanel.app.owns_window", side_effect=lambda browser, window: window >= 5001):
+        with mock.patch("tabdock.app.owns_window", side_effect=lambda browser, window: window >= 5001):
             self.panel.activate_tab(libre, 7, 1)
         self.assertEqual(self.x.activated, [301])  # topmost window of the browser, not the panel's own
 
@@ -276,7 +276,7 @@ class PanelTest(unittest.TestCase):
         self.panel.follow(TERM_XID)
         self.x.clients = [300, TERM_XID]  # ...but ZEN_XID has since been closed; another Zen window is open
         self.x.pids = {300: 5000, TERM_XID: 9}
-        with mock.patch("sidepanel.app.owns_window", side_effect=lambda browser, window: window == 5000):
+        with mock.patch("tabdock.app.owns_window", side_effect=lambda browser, window: window == 5000):
             self.panel.activate_tab(self.zen, 7, 1)
         self.assertEqual(self.x.activated, [300])
         self.assertNotIn(ZEN_XID, self.panel.browser_xids.values())
@@ -305,7 +305,7 @@ class PanelTest(unittest.TestCase):
     def test_a_browser_with_no_window_at_all_is_just_told(self):
         libre = FakeConn()
         self.panel.on_message(libre, {"type": "hello", "browser": "LibreWolf", "browserPid": 4242})
-        with mock.patch("sidepanel.app.owns_window", return_value=False):
+        with mock.patch("tabdock.app.owns_window", return_value=False):
             self.panel.activate_tab(libre, 7, 1)
         self.assertEqual(libre.sent[-1]["type"], "activate_tab")
         self.assertEqual(self.x.activated, [])
