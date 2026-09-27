@@ -1,7 +1,7 @@
 # Tabdock
 
-An autohiding X11/Openbox side panel that mirrors the focused browser's tabs and containers, two-way,
-through a small WebExtension.
+An autohiding X11/Openbox side panel that mirrors Firefox based browser's tabs and containers, two-way,
+through a small WebExtension. Chromium browser are not supported.
 
 Status: **0.4.0, installable.**
 
