@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Packaging: the PKGBUILD compares the release's `manifest.json` with the sources by what it says, not byte by
+  byte. Mozilla's signing lays it out anew (one value per line, no final newline), so `makepkg` refused the
+  correctly signed v0.4.0 extension as "signed from other code". Every other file is still compared exactly,
+  and a manifest that says anything else is still refused. No new signing or tag is needed for 0.4.0.
+
 ## 0.4.0
 
 Sign this version's extension and install it in each browser (docs/RELEASE.md): it asks for three new

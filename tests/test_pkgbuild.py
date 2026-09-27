@@ -26,7 +26,7 @@ class PkgbuildTest(unittest.TestCase):
         self.pkgdir = os.path.join(tmp.name, "pkg")
         os.makedirs(self.srcdir)
 
-    def sources(self, version=VERSION, signed=True, stale=False):
+    def sources(self, version=VERSION, signed=True, stale=False, manifest=None):
         """What makepkg leaves in $srcdir: the unpacked tag tarball (this checkout) and the release .xpi,
         built by packaging/build-extension.sh and "signed" by adding Mozilla's signature file to it."""
         os.symlink(ROOT, os.path.join(self.srcdir, f"tabdock-{version}"))
@@ -40,6 +40,8 @@ class PkgbuildTest(unittest.TestCase):
                 data = unsigned.read(item)
                 if stale and item == "background.js":
                     data += b"\n// signed from older code\n"
+                if manifest and item == "manifest.json":
+                    data = manifest(json.loads(data)).encode()
                 z.writestr(item, data)
             if signed:
                 z.writestr("META-INF/mozilla.rsa", "signature")
@@ -72,6 +74,18 @@ class PkgbuildTest(unittest.TestCase):
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("differs from extension/", done.stderr)
         self.assertIn("background.js", done.stderr)
+
+    def test_prepare_accepts_the_manifest_as_mozilla_lays_it_out(self):
+        # signing rewrites manifest.json one value per line, without the final newline (seen on v0.4.0's release)
+        self.sources(manifest=lambda m: json.dumps(m, indent=2))
+        done = self.run_function("prepare")
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_prepare_refuses_a_manifest_that_says_something_else(self):
+        self.sources(manifest=lambda m: json.dumps({**m, "permissions": [*m["permissions"], "history"]}, indent=2))
+        done = self.run_function("prepare")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("(manifest.json)", done.stderr)
 
     def test_prepare_refuses_sources_whose_version_differs(self):
         self.sources(version="9.9.9")
