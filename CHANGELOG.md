@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- A `[theme]` section in `config.toml` sets the accent colour, the orange (for Firefox) of the strip, the
+  header's line and browser name, buttons that are on, the active tab's bar, the chips and the drop marker:
+  `accent = "#4c9aff"` for every browser, or one browser's own (`firefox = "#4c9aff"`, and `zen`, `firedragon`,
+  `librewolf`, `waterfox`, `floorp`, `other`), which wins over `accent`. On a dark accent the text turns white,
+  and the browser's name in the header takes the usual text colour, so both stay readable. A reload (SIGHUP)
+  applies it too. Only the panel changed: `./install.sh` and a panel restart are enough, no new signing.
+
 - Packaging: the PKGBUILD compares the release's `manifest.json` with the sources by what it says, not byte by
   byte. Mozilla's signing lays it out anew (one value per line, no final newline), so `makepkg` refused the
   correctly signed v0.4.0 extension as "signed from other code". Every other file is still compared exactly,

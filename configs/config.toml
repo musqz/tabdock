@@ -54,3 +54,15 @@ start_with_browser = true
 # Start pinned: the panel stays open and windows are laid out beside it (an outer screen
 # edge only; on an inner edge it stays open as an overlay). false = autohide on hover.
 pinned = false
+
+# Colours. Every line below [theme] belongs to it, so any other option goes above that line.
+# The accent colour is on the strip at the screen edge, the header's top line and browser name, the pin,
+# icons and find buttons while they are on, the active tab's bar, the chip picked and the drop marker. By
+# default each browser has its own, so you can tell which one the panel shows: Firefox orange, Zen purple,
+# FireDragon red, LibreWolf blue, Waterfox teal, Floorp gold, and grey for any other one. Take the # off a
+# line to change it; colours are written "#rrggbb" (or "#rgb"). On a dark accent the text turns white,
+# and the browser's name takes the usual text colour, so both stay readable.
+[theme]
+# accent = "#4c9aff"    every browser in this one colour
+# firefox = "#4c9aff"   one browser (also zen, firedragon, librewolf, waterfox, floorp): wins over accent
+# other = "#8f9bb3"     any other browser, and the strip while no browser is connected

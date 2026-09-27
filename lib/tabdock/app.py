@@ -13,6 +13,7 @@ from . import config  # noqa: E402
 from .ipc import Server  # noqa: E402
 from .model import (  # noqa: E402
     accent,
+    accents,
     choice_labels,
     detect_browser,
     focused_window,
@@ -33,6 +34,7 @@ class Panel:
 
     def __init__(self, cfg, x=None):
         self.cfg = cfg
+        self.colours = accents(cfg.get("theme"))  # each browser's colour, with the config's [theme]
         self.x = x  # x11.XConn or None (headless)
         self.view = None
         self.browsers = {}  # Connection -> hello message
@@ -106,10 +108,11 @@ class Panel:
     def reconfigure(self, cfg):
         self.cfg = cfg
         mode, self.mode = self.mode, cfg["view"]  # the file wins over a chip clicked since, like pin and side
+        colours, self.colours = self.colours, accents(cfg.get("theme"))
         self.view.reconfigure(cfg)
         if cfg["follow"] == "last":
             self.view.set_hidden(False)
-        if self.mode != mode:
+        if self.mode != mode or self.colours != colours:
             self._render()
 
     def _window_of(self, conn):
@@ -210,7 +213,7 @@ class Panel:
 
     def _render(self):
         shown = self._shown()
-        choices = [(c, label, accent(self.browsers[c])) for c, label in choice_labels(self.browsers)]
+        choices = [(c, label, accent(self.browsers[c], self.colours)) for c, label in choice_labels(self.browsers)]
         if not shown:  # nothing to show yet: never leave another browser's tabs under this one's header
             self.view.clear(self.mode, choices)  # (the chips stay: they are the way to another browser)
             return

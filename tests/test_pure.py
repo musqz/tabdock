@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 from tabdock import config  # noqa: E402
 from tabdock.autohide import Autohide  # noqa: E402
 from tabdock.geometry import TRIGGER_PX, dock_rect, outer_monitor, strut  # noqa: E402
-from tabdock.model import accent, ancestors, detect_browser, match_browser, owns_window  # noqa: E402
+from tabdock.model import accent, accents, ancestors, detect_browser, match_browser, on_accent, owns_window  # noqa: E402
 
 
 class ConfigTest(unittest.TestCase):
@@ -86,6 +86,35 @@ class ConfigTest(unittest.TestCase):
                 f.write("")
             self.assertEqual(config.config_path(), new)  # once there is a new one, the old one is ignored
             self.assertEqual(config.load()["side"], "left")
+
+    def test_theme(self):
+        self.assertEqual(config.DEFAULTS["theme"], {})  # each browser keeps its own colour unless asked
+        cfg = config.validate({"theme": {"accent": "#4C9AFF", "firefox": "#0af", "other": "#123456"}})
+        self.assertEqual(cfg["theme"], {"accent": "#4c9aff", "firefox": "#00aaff", "other": "#123456"})
+        self.assertEqual(config.DEFAULTS["theme"], {})  # (validating one never changes the defaults)
+        for bad in (
+            {"theme": "blue"},  # a section, not a value
+            {"theme": {"accent": "blue"}},  # a name: the colour also names a style class, so only #hex
+            {"theme": {"accent": "4c9aff"}},
+            {"theme": {"accent": "#4c9af"}},
+            {"theme": {"accent": "#4c9aff; color: red"}},
+            {"theme": {"firefox": 0x4C9AFF}},
+            {"theme": {"chrome": "#4c9aff"}},  # not a browser the panel knows
+        ):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                config.validate(bad)
+
+    def test_an_option_written_below_theme_says_where_it_belongs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "c.toml")
+            with open(path, "w") as f:
+                f.write('side = "right"\n[theme]\naccent = "#4c9aff"\npinned = true\n')  # TOML: pinned is theme's
+            with self.assertRaisesRegex(ValueError, r"in \[theme\]: pinned .*above the \[theme\] line"):
+                config.load(path)
+            with open(path, "w") as f:
+                f.write('side = "right"\npinned = true\n[theme]\naccent = "#4c9aff"\n')
+            cfg = config.load(path)
+            self.assertEqual((cfg["side"], cfg["pinned"], cfg["theme"]), ("right", True, {"accent": "#4c9aff"}))
 
     def test_shipped_template_is_valid(self):
         template = os.path.join(os.path.dirname(__file__), "..", "configs", "config.toml")
@@ -339,6 +368,30 @@ class MatchTest(unittest.TestCase):
         browsers = [name for _key, name in KNOWN_BROWSERS]
         self.assertEqual(len({accent({"browser": b}) for b in browsers}), len(browsers))
         self.assertNotIn(accent({"browser": "Floorp"}), ("#8f9bb3", accent({"browser": "Firefox"})))
+
+    def test_theme_colours(self):
+        self.assertEqual(accents(), accents({}))
+        self.assertEqual(accents()["firefox"], "#ff7139")
+        self.assertEqual(accents()["other"], "#8f9bb3")
+        one = accents({"accent": "#4c9aff"})  # every browser, and the strip with none connected
+        self.assertEqual(set(one.values()), {"#4c9aff"})
+        mixed = accents({"accent": "#4c9aff", "zen": "#00ff00"})  # a browser's own key wins over accent
+        self.assertEqual((mixed["zen"], mixed["firefox"]), ("#00ff00", "#4c9aff"))
+        own = accents({"firefox": "#4c9aff"})  # the other browsers keep theirs
+        self.assertEqual((own["firefox"], own["zen"], own["other"]), ("#4c9aff", "#9d7cd8", "#8f9bb3"))
+        self.assertEqual(accent({"browser": "Firefox"}, own), "#4c9aff")
+        self.assertEqual(accent({"browser": "Zen"}, own), "#9d7cd8")
+        self.assertEqual(accent({"browser": "Mystery"}, accents({"other": "#123456"})), "#123456")
+        self.assertEqual(accent({}, accents({"other": "#123456"})), "#123456")
+
+    def test_text_on_an_accent_stays_readable(self):
+        # every built-in colour keeps the dark text it always had
+        for colour in accents().values():
+            self.assertEqual(on_accent(colour), "#1b1d23", colour)
+        for dark in ("#1e3a8a", "#000000", "#7a1f1f", "#2d2d6e"):
+            self.assertEqual(on_accent(dark), "#ffffff", dark)
+        for light in ("#ffffff", "#ffcb00", "#4c9aff"):
+            self.assertEqual(on_accent(light), "#1b1d23", light)
 
 
 if __name__ == "__main__":
