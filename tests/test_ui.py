@@ -229,6 +229,31 @@ class DockViewTest(unittest.TestCase):
         # (as GTK prints the rules back, so they were parsed): white text on a browser band in that colour too
         self.assertIn(".acc-1e3a8a.sp-bhead .sp-bandlabel {\n  color: rgb(255,255,255);", view._per_browser.to_string())
 
+    def test_advanced_section_lists_every_known_browser_and_sets_its_colour(self):
+        from tabdock.model import ACCENTS
+
+        view = self.make()
+        self.assertEqual(view.advanced.get_label(), "Advanced")
+        self.assertEqual(set(view._swatches), {*ACCENTS, "other"})
+        with mock.patch("tabdock.dock.config.set_theme_colour") as set_theme_colour:
+            view._swatches["waterfox"].clicked()
+            self.assertEqual(view._dialog.get_title(), "Waterfox colour")
+            rgba = Gdk.RGBA()
+            rgba.parse("#2ec4b6")
+            view._dialog_chooser.set_rgba(rgba)
+            view._dialog_ok.clicked()
+        set_theme_colour.assert_called_once_with("waterfox", "#2ec4b6")
+        self.assertEqual(view.cfg["theme"]["waterfox"], "#2ec4b6")
+        # the swatch itself wears the colour it was just set to
+        self.assertTrue(view._swatches["waterfox"].get_style_context().has_class("acc-2ec4b6"))
+
+    def test_advanced_swatches_follow_a_config_reload(self):
+        view = self.make()
+        self.assertTrue(view._swatches["firefox"].get_style_context().has_class("acc-ff7139"))
+        view.reconfigure({**DEFAULTS, "theme": {"firefox": "#4c9aff"}})
+        self.assertTrue(view._swatches["firefox"].get_style_context().has_class("acc-4c9aff"))
+        self.assertFalse(view._swatches["firefox"].get_style_context().has_class("acc-ff7139"))
+
     def test_right_click_on_the_header_name_sets_its_theme_colour(self):
         view = self.make()
         view.show([(object(), INFO, STATE)])

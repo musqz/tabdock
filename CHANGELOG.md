@@ -27,6 +27,11 @@
   other line (comments included) left untouched. Only the panel changed: a panel restart is enough, no new
   signing.
 
+- An "Advanced" section at the bottom of the panel lists every browser tabdock knows, each with a colour
+  swatch button that opens the same colour chooser (see above) — a second way to reach it that doesn't
+  depend on a browser being connected or the header name being right-clicked. Only the panel changed: a
+  panel restart is enough, no new signing.
+
 ## 0.4.0
 
 Sign this version's extension and install it in each browser (docs/RELEASE.md): it asks for three new
