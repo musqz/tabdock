@@ -22,7 +22,9 @@ Openbox `autostart` or `rc.xml` that still start `sidepanel` are pointed out. No
 On Arch, the package does all of this system-wide instead: `cd packaging && makepkg -si` installs the
 program to `/usr/share/tabdock`, `/usr/bin/tabdock`, the menu entry, the signed extension, and the manifest
 in `/usr/lib/mozilla/native-messaging-hosts`. Use one or the other: a per-user manifest from `install.sh`
-overrides the package's.
+overrides the package's. The package needs a release with the signed `.xpi` attached (step 4 of "Releasing a
+version"): v0.3.1 has none, and its tag sits one merge before the 0.3.1 sources, so it cannot be packaged; use
+`install.sh` until the next release.
 
 ## 2. Get the extension signed (once per version)
 
@@ -154,8 +156,11 @@ checks this), the tag is `v` + `VERSION`, and the package refuses sources whose 
    git switch main && git pull && v=$(<VERSION)
    git tag -a "v$v" -m "tabdock $v" && git push origin "v$v"
    ```
-4. On GitHub, **Releases -> Draft a new release**, pick the tag, and attach the signed file from
-   `web-ext-artifacts/`, renamed to `tabdock-0.3.1.xpi` (the PKGBUILD downloads it by that name, so a
-   release without it cannot be packaged).
+4. On GitHub, **Releases -> Draft a new release**, pick the tag, and attach
+   `web-ext-artifacts/tabdock-<version>.xpi`: `sign-extension.sh` leaves the signed file under that name too, and
+   prints the command (`gh release upload v<version> web-ext-artifacts/tabdock-<version>.xpi`). The PKGBUILD
+   downloads it by that name, so a release without it cannot be packaged (makepkg stops with a download error
+   for `.../releases/download/v<version>/tabdock-<version>.xpi`). To try the package before uploading, copy the
+   file into `packaging/`: makepkg uses a source file already there instead of downloading it.
 5. In `packaging/PKGBUILD` set `pkgver` (and `pkgrel=1`), run `updpkgsums`, then `makepkg -si` to try it.
    For the AUR, also `makepkg --printsrcinfo > .SRCINFO`.

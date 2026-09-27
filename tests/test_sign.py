@@ -140,8 +140,9 @@ class SignScriptTest(unittest.TestCase):
         done = self.run_script(stdin=f"{ISSUER}\n{SECRET}\n")
         self.assertEqual(done.returncode, 0, self.out(done))
         self.assertIn("signed and verified", done.stdout)
-        signed = [f for f in os.listdir(self.artifacts) if f.endswith(f"-{VERSION}.xpi")]
+        signed = [f for f in os.listdir(self.artifacts) if f.endswith(f"-{VERSION}.xpi") and not f.startswith("tabdock-")]
         self.assertEqual(len(signed), 1)
+        self.assert_ready_for_the_release(done, signed[0])
         log = self.npx_log()
         self.assertLess(log.index(" lint "), log.index(" sign "))  # lint first
         self.assertIn("credentials in environment", log)  # the child got them...
@@ -234,6 +235,16 @@ class SignScriptTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, self.out(done))
         self.assertIn("already signed", done.stdout)
         self.assertEqual(self.npx_log(), "")
+        self.assert_ready_for_the_release(done, f"openbox-sidepanel-{VERSION}.xpi")  # e.g. signed before this existed
+        again = self.run_script(stdin="", dry=True)
+        self.assertIn(f"tabdock-{VERSION}.xpi", again.stdout)  # the copy is found too, and left as it is
+
+    def assert_ready_for_the_release(self, done, signed_name):
+        """The signed file, also under the name the GitHub release and packaging/PKGBUILD use, and how to attach it."""
+        release = os.path.join(self.artifacts, f"tabdock-{VERSION}.xpi")
+        with open(release, "rb") as a, open(os.path.join(self.artifacts, signed_name), "rb") as b:
+            self.assertEqual(a.read(), b.read())
+        self.assertIn(f"gh release upload v{VERSION} {release}", done.stdout)
 
     def test_signing_that_names_the_file_like_the_slug_is_still_found(self):
         done = self.run_script(stdin=f"{ISSUER}\n{SECRET}\n", FAKE_SIGNED_NAME=f"openbox-sidepanel-{VERSION}.xpi")

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Packaging: `packaging/sign-extension.sh` now also leaves the signed extension as
+  `web-ext-artifacts/tabdock-<version>.xpi`, the name the GitHub release attaches it by and `packaging/PKGBUILD`
+  downloads it by, and prints the `gh release upload` command for it (also when the version was signed before).
+  The v0.3.1 release was published without that file, so `makepkg` failed to download
+  `.../releases/download/v0.3.1/tabdock-0.3.1.xpi`; its tag also sits one merge before the 0.3.1 sources. The
+  README and docs/RELEASE.md say so and point to `./install.sh` until the next release.
+
 - Edit containers from the panel: right-click a container section to rename it, pick its colour or icon (Firefox's
   own), make a new container (named in a small window; it gets a colour no container has yet), or remove it.
   Removing asks first, with Cancel as the default so a stray Enter removes nothing, and says what goes: its tabs
