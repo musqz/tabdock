@@ -135,12 +135,17 @@ checks this), the tag is `v` + `VERSION`, and the package refuses sources whose 
 2. Sign the extension from that `main`: `packaging/sign-extension.sh`. Sign last, after every change to
    `extension/`: the signed file must match the tagged sources exactly (the PKGBUILD checks this), and a
    version, once signed, cannot be signed again, so a later change to `extension/` needs a new version.
-3. Tag the release commit and push the tag:
+3. Tag `main` once the bump is merged, and push the tag. Take the version from `VERSION` rather than typing
+   it: tagging before the bump is merged then asks for the previous version's tag, which already exists, so
+   `git tag` refuses instead of tagging sources that still say the old version (v0.3.1 was first tagged
+   that way, one merge too early).
 
    ```bash
-   git tag -a v0.3.1 -m "tabdock 0.3.1" && git push origin v0.3.1
+   git switch main && git pull && v=$(<VERSION)
+   git tag -a "v$v" -m "tabdock $v" && git push origin "v$v"
    ```
 4. On GitHub, **Releases -> Draft a new release**, pick the tag, and attach the signed file from
-   `web-ext-artifacts/`, renamed to `tabdock-0.3.1.xpi` (the PKGBUILD downloads it by that name).
+   `web-ext-artifacts/`, renamed to `tabdock-0.3.1.xpi` (the PKGBUILD downloads it by that name, so a
+   release without it cannot be packaged).
 5. In `packaging/PKGBUILD` set `pkgver` (and `pkgrel=1`), run `updpkgsums`, then `makepkg -si` to try it.
    For the AUR, also `makepkg --printsrcinfo > .SRCINFO`.
