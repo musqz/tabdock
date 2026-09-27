@@ -7,7 +7,7 @@
 #
 # Installed under $PREFIX/share/openbox-sidepanel, with $PREFIX/bin/sidepanel linking to it, plus
 # the native-messaging manifest that lets the browser start the relay. Nothing outside those
-# paths is touched (your Openbox autostart and picom config are only mentioned, never edited).
+# paths is touched (your Openbox autostart is only mentioned, never edited).
 set -euo pipefail
 
 shopt -u patsub_replacement 2>/dev/null || true  # keep '&' in paths literal
@@ -64,7 +64,6 @@ install_files() {
     done < <(find "$root/lib/sidepanel" -type f -not -path '*/__pycache__/*' -print0 | sort -z)
     put 755 "$root/lib/native-host/sidepanel-nmhost" "$relay"
     put 644 "$root/configs/config.toml" "$share/configs/config.toml"
-    put 644 "$root/configs/picom-sidepanel.conf" "$share/configs/picom-sidepanel.conf"
     put 644 "$root/extension/icons/icon-96.png" "$share/icon.png"  # for the menu entry
 }
 
@@ -193,8 +192,6 @@ Next:
        - "Sidepanel" in your application menu
        - at login: add this line to ~/.config/openbox/autostart, after picom starts:
              (sleep 5.0s && $(printf '%q' "$bin")) &
-  3. Optional animation: cp $share/configs/picom-sidepanel.conf ~/.config/picom/include/sidepanel.conf
-     and include it from your picom rules (see the comments in that file).
 EOF
 }
 

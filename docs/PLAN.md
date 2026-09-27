@@ -85,8 +85,8 @@ before or after the browser; the extension reconnects with backoff.
   back to the content's minimum width). Pointer enter -> panel after ~120 ms; leave -> hidden after
   ~400 ms. Overlay by default (no strut). Fullscreen windows sit above the dock layer in Openbox,
   so the panel stays out of the way during fullscreen video.
-- **Animation:** none built in (user runs picom): the panel only maps/unmaps, so compositor
-  open/close animations apply; `configs/picom-sidepanel.conf` is the rule.
+- **Animation:** none built in. The panel only maps/unmaps, so any compositor the user runs applies
+  its own open/close animation; no rule file is shipped, set one up in the compositor directly if wanted.
 - **Active browser always visible:** the panel header names the browser in its accent colour (Firefox
   orange, Zen purple, FireDragon red, LibreWolf blue) and the collapsed strip carries the same
   colour, so it is clear which browser is active even with window borders hidden.

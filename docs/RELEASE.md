@@ -18,6 +18,10 @@ system-wide (the manifest stays per-user). `./install.sh --uninstall` removes ex
 
 ## 2. Get the extension signed (once per version)
 
+**Installed tabdock from a package** (an AUR or repo build)? Skip to step 3 below: the package ships
+the extension already signed, at a fixed path (`/usr/share/tabdock/tabdock.xpi`). Signing happens once,
+when the package is built, not per user. The rest of this section is only for a from-source install.
+
 Signing needs a free Mozilla account, which only you can create. Then:
 
 1. Sign in at <https://addons.mozilla.org/developers/> and open **Manage API Keys**
@@ -39,9 +43,10 @@ Signing needs a free Mozilla account, which only you can create. Then:
    If a value has the wrong shape (an issuer without `user:`, a secret that is not 64 characters) it says so
    and sends nothing.
 3. The signed `.xpi` is written to `web-ext-artifacts/` (the script prints the path). Install it in each
-   browser: `about:addons` -> gear icon -> **Install Add-on From File...** -> pick the signed file. It survives
-   restarts. Use the same signed file in every browser (Firefox, Zen, FireDragon, Waterfox, LibreWolf);
-   each has its own add-ons list, so install it once per browser.
+   browser: `about:addons` -> gear icon -> **Install Add-on From File...** -> pick the signed file
+   (`web-ext-artifacts/*.xpi` here, or `/usr/share/tabdock/tabdock.xpi` if you installed from a package).
+   It survives restarts. Use the same signed file in every browser (Firefox, Zen, FireDragon, Waterfox,
+   LibreWolf); each has its own add-ons list, so install it once per browser.
 
 To build the unsigned file yourself: `packaging/build-extension.sh`, and to lint by hand:
 `npx web-ext lint --source-dir extension` (expect 0 errors, 0 warnings).
