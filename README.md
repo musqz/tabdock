@@ -164,3 +164,7 @@ directory. `e2e_x11.py` opens a small Xephyr window on your desktop while it run
 | `configs/` | native-messaging manifest template, sample config |
 | `docs/` | plan, protocol, install and release guide |
 | `tests/` | unit, protocol and end-to-end tests |
+
+<img width="320" height="1440" alt="Image" src="https://github.com/user-attachments/assets/14557b70-0a00-4510-99c8-65a62725c298" />
+
+<img width="320" height="1440" alt="Image" src="https://github.com/user-attachments/assets/d7ae7694-e9c7-4da3-9797-a997a611c256" />
