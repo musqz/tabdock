@@ -1,4 +1,4 @@
-# openbox-sidepanel
+# Tabdock
 
 A desktop side panel for Openbox/X11 that shows the tabs and containers of the focused
 Firefox-family browser, kept in two-way sync through a small WebExtension. Goal: a Zen-style
