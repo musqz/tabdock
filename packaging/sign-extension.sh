@@ -77,7 +77,7 @@ for_release() {  # a copy of the signed file under that name, and what to do wit
     echo "for the release: $release_file"
     echo "  attach it to the GitHub release v$version (docs/RELEASE.md), for example:"
     echo "    gh release upload v$version $(printf '%q' "$release_file")"
-    echo "  packaging/PKGBUILD downloads it from there; a package built here finds it in packaging/ too"
+    echo "  packaging/PKGBUILD downloads it from there (to build the package before uploading, copy it into packaging/)"
 }
 
 existing="$(newest_signed)"

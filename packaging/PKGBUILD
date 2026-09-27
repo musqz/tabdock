@@ -5,7 +5,7 @@
 # once per version (docs/RELEASE.md, "Releasing a version") and installed to
 # /usr/share/tabdock/tabdock.xpi for every user.
 pkgname=tabdock
-pkgver=0.3.1
+pkgver=0.4.0
 pkgrel=1
 pkgdesc="Autohiding X11 side panel with the tabs and containers of Firefox-family browsers"
 arch=('any')
