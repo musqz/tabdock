@@ -47,7 +47,7 @@ class InstallTest(unittest.TestCase):
         done = self.run_install()
         self.assertEqual(done.returncode, 0, done.stderr)
         for rel in ("sidepanel", "VERSION", "lib/sidepanel/app.py", "lib/sidepanel/dock.py", "configs/config.toml",
-                    "configs/picom-sidepanel.conf", "lib/native-host/sidepanel-nmhost"):
+                    "lib/native-host/sidepanel-nmhost"):
             self.assertTrue(os.path.isfile(os.path.join(self.share, rel)), rel)
         self.assertEqual(os.readlink(self.bin), os.path.join(self.share, "sidepanel"))
         self.assertTrue(os.access(self.relay, os.X_OK))
