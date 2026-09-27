@@ -6,8 +6,9 @@ FireDragon, Waterfox, LibreWolf; native installs, no Chromium/Blink, no Flatpak/
 sidebar (containers, workspaces, autohide) everywhere.
 
 Status: **0.3.1, installable.** Autohiding dock on the left/right edge, real install, signed extension,
-autostart, drag to reorder, new tab per container. The rest of two-way editing (close, pin, edit
-containers) and workspaces are next — see [docs/PLAN.md](docs/PLAN.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
+autostart, drag to reorder, new tab per container. Since 0.3.1, not yet released: Zen-style workspaces (they need
+the next signed extension). The rest of two-way editing (close, pin, edit containers) is next — see
+[docs/PLAN.md](docs/PLAN.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ```
 Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost  <-- unix socket -->  sidepanel
@@ -22,6 +23,9 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/sidepanel-nmhost
   activate it.
 - **Drag to reorder:** container sections and tabs within their own container. Order is remembered per
   browser profile (Firefox can't reorder containers itself). "No container" always stays first.
+- **Workspaces:** chips above the tabs; each browser window shows one workspace and the others' tabs are
+  hidden in the browser's own tab strip too. Click to switch, `+` for a new one, right-click to rename or
+  remove it, right-click a tab to move it to another. See Workspaces below.
 - **Several browsers:** chips under the header choose what's listed — `auto` (current browser), one
   chip per browser, or `all` (every browser, foldable, its own colour band). Clicking a tab in another
   browser activates it and raises its window. `view = "all"` starts in that view.
@@ -99,6 +103,32 @@ Safeguards: `https:` only, no cookies/referrer, public addresses only (checked a
 max 3 redirects), 256 KB / 10 s hard limits, sniffed and decoded (PNG/ICO/GIF, or a self-contained SVG)
 in a sandboxed child process with memory/CPU limits, memory-only cache (nothing written to disk). A tab
 without an icon says why on hover.
+
+### Workspaces
+
+Zen-style and exclusive: each browser window shows one workspace, and the tabs of the others are hidden
+(`tabs.hide`), in Firefox's own tab strip as well as in the panel. Nothing changes until you make a second
+workspace with `+`: until then no tab is ever hidden, and your existing tabs become the "Default" workspace.
+
+- **Switching** goes back to the tab you used last in that workspace (a new tab if it has none).
+- **New tabs** join the workspace their window shows, and so does a tab dragged in from another window. A
+  new window starts in the workspace of the window you were in.
+- **Pinned tabs** can't be hidden by Firefox, so they show in every workspace. Unpinning one puts it in the
+  workspace you unpinned it in.
+- **Removing** a workspace closes nothing: its tabs move to the workspace next to it (the menu says which).
+  The last workspace stays.
+- **Restarts:** workspaces, the tabs in each and what every window shows survive a browser restart
+  (restoring the previous session). Disabling or removing the extension shows every hidden tab again.
+- **Zen** has workspaces of its own, so the panel offers none there, and the extension never hides a tab in it.
+- Firefox tells you once that an extension is hiding tabs, and still lists hidden tabs under "List all
+  tabs" (the `⌄` at the end of the tab strip). Picking one from there switches to its workspace.
+
+**Set `browser.tabs.closeWindowWithLastTab` to `false`** in `about:config` if you use workspaces. Firefox
+does not count hidden tabs when it decides whether a tab is the window's last: with the default `true`,
+closing the last tab of a workspace closes the whole window, and the other workspaces' tabs with it (they
+come back with History → Recently Closed Windows, or Restore Previous Session if it was the last window). With
+`false`, Firefox leaves a new tab instead and the workspace stays. An extension can neither read nor change
+this setting, nor stop a window from closing.
 
 ### Multiple monitors
 

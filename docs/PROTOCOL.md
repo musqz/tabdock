@@ -15,15 +15,24 @@ directions, with two additions: it sends `resync` to the extension whenever the 
 | type    | fields | notes |
 |---------|--------|-------|
 | `hello` | `browser`, `version`, `browserPid` (added by relay) | sent on every resync, before `state`. `browser` is what `getBrowserInfo()` reports, which is unreliable (Zen says "Firefox"), so the panel names the browser from `/proc/<browserPid>/exe` and only falls back to this |
-| `state` | `focusedWindowId`, `containerOrder[]`, `containers[]`, `windows[]` | full snapshot, debounced 50 ms after any change |
+| `state` | `focusedWindowId`, `containerOrder[]`, `containers[]`, `workspaces[]`, `windows[]` | full snapshot, debounced 50 ms after any change |
 
 `containers[]`: `{cookieStoreId, name, color, colorCode, icon}`.
-`windows[]`: `{id, focused, tabs[]}`; `tabs[]`: `{id, index, title, url, favIconUrl, cookieStoreId, active, pinned, audible, discarded}`.
+`windows[]`: `{id, focused, workspaceId, tabs[]}`; `tabs[]`: `{id, index, title, url, favIconUrl, cookieStoreId, active, pinned, audible, discarded, hidden, workspaceId}`.
 `focusedWindowId` is the last browser window that had focus (it keeps its value while another app is active).
 Tabs without a container have `cookieStoreId: "firefox-default"`.
 `containerOrder` is the user's own order of the container sections: cookieStoreIds, kept by the extension
 (per browser profile, in `storage.local`), because Firefox cannot reorder containers itself. Ids named there
 come first in that order (unknown ones are ignored); containers not named keep the browser's order after them.
+
+`workspaces[]`: `{id, name}` in the order they were made (per browser profile, in `storage.local`). A window's
+`workspaceId` is the workspace it shows; a tab's is the workspace it belongs to (both kept in the browser
+session, `sessions.setWindowValue` / `setTabValue`, so they survive a restart although ids change). The
+extension hides (`tabs.hide`) every tab of another workspace than its window's, and shows its own; pinned
+tabs cannot be hidden, so they show in every workspace. The window always shows the workspace of its active
+tab. Until a second workspace is created (or the first renamed) the list is `[{id: "default", name:
+"Default"}]`, every id is `"default"`, nothing is stored and no tab is ever hidden or shown. The panel
+offers no workspaces in Zen (it has its own) or from an older extension (no `workspaces` key).
 
 ## Panel -> extension
 
@@ -35,5 +44,15 @@ come first in that order (unknown ones are ignored); containers not named keep t
 | `move_tab` | `tabId`, `index` | `tabs.move`: `index` is the tab's final position in its window (it leaves its old place first, so moving forward lands one earlier than the target's index); the resulting `tabs.onMoved` triggers a new `state` |
 | `set_container_order` | `order[]` (cookieStoreIds) | stores the order of the panel's container sections and pushes a new `state`; the panel also shows it at once without waiting |
 | `new_tab` | `cookieStoreId`, `windowId` | `tabs.create` in that container and window (the `+` on a container section); the resulting `tabs.onCreated` triggers a new `state` |
+| `switch_workspace` | `windowId`, `workspaceId` | the window shows that workspace: its tab used last becomes active (a new tab if it has none), the others' tabs are hidden |
+| `new_workspace` | `windowId`, `name` | adds a workspace (an empty name becomes "Workspace N") and switches the window to it, on a new tab |
+| `rename_workspace` | `workspaceId`, `name` | names are trimmed and cut at 64 characters; an empty one is ignored |
+| `remove_workspace` | `workspaceId` | closes nothing: its tabs, and the windows that showed it, go to its neighbour (the one before it, or after it if it was first). The last workspace stays |
+| `move_tab_to_workspace` | `tabId`, `workspaceId` | the tab joins that workspace; if it was the active tab of a window showing another one, the window stays and activates its own tab used last (a new tab if none) |
+
+A tab that is created (new tab, link, another window) joins the workspace its window shows, unless the session
+already knows its workspace (restored, or reopened after closing it: it goes back there). A tab dragged to another
+window joins that window's workspace, and an unpinned tab the workspace it was unpinned in. A new window shows
+the workspace of the window focused before it.
 
 Later milestones add `close_tab`, `pin_tab`, `focus_window` and `container_*`.

@@ -25,8 +25,35 @@ def window_of_tab(state, tab_id):
     return None
 
 
+def workspaces(state):
+    """[{id, name}] of the browser profile; empty from an extension older than workspaces."""
+    return state.get("workspaces") or []
+
+
+def offers_workspaces(info, state):
+    """Whether the panel shows workspaces for this browser. Not in Zen, which has workspaces of its own
+    (the extension then never hides a tab: nothing there starts using them)."""
+    return bool(workspaces(state)) and info.get("browser") != "Zen"
+
+
+def heir(spaces, ws_id):
+    """The workspace that takes over the tabs of a removed one: the one before it, or after it if it is the
+    first (the extension does the same). None when it is the only one: the last workspace cannot go."""
+    ids = [ws["id"] for ws in spaces]
+    if len(ids) < 2 or ws_id not in ids:
+        return None
+    at = ids.index(ws_id)
+    return spaces[at - 1 if at else 1]
+
+
+def in_workspace(tab, workspace):
+    """Whether a tab shows in `workspace` (None: an extension without workspaces, every tab shows).
+    Pinned tabs cannot be hidden, so they show in every workspace."""
+    return workspace is None or bool(tab.get("pinned")) or tab.get("workspaceId", workspace) == workspace
+
+
 def group_tabs(state):
-    """[(container, [tab, ...])] for the focused window.
+    """[(container, [tab, ...])] for the focused window, in the workspace it shows.
 
     No-container first, then every known container in the browser's order, then any unknown
     cookie store. No-container and known containers stay even when empty: they are targets for
@@ -37,7 +64,8 @@ def group_tabs(state):
         return []
     by_store = {}
     for tab in win["tabs"]:
-        by_store.setdefault(tab.get("cookieStoreId") or NO_CONTAINER, []).append(tab)
+        if in_workspace(tab, win.get("workspaceId")):
+            by_store.setdefault(tab.get("cookieStoreId") or NO_CONTAINER, []).append(tab)
 
     groups = [({"cookieStoreId": NO_CONTAINER, "name": "No container"}, by_store.pop(NO_CONTAINER, []))]
     for container in ordered_containers(state):
@@ -224,6 +252,9 @@ def format_state(info, state):
     win = focused_window(state)
     head = f'== {browser_label(info)}' + (f' window {win["id"]}' if win else " (no windows)") + " =="
     lines = [head]
+    for ws in workspaces(state):  # "workspace* Name {id}": the star marks the one the window shows
+        mark = "*" if win and ws["id"] == win.get("workspaceId") else " "
+        lines.append(f'workspace{mark} {ws["name"]} {{{ws["id"]}}}')
     for container, tabs in group_tabs(state):
         lines.append(f'[{container["name"]}] ({len(tabs)}) {container["cookieStoreId"]}')  # the id: for `order`
         for tab in tabs:
