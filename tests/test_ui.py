@@ -509,6 +509,41 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(image.get_size_request(), (16, 16))  # its room is kept, so nothing shifts when it arrives
         self.assertIsNone(image.get_pixbuf())
 
+    def test_a_tab_with_an_unread_count_gets_a_badge(self):
+        view = self.make()
+        state = {**STATE, "windows": [{"id": 2, "tabs": [
+            {"id": 10, "title": "(3) plain", "cookieStoreId": "firefox-default", "active": True},
+        ]}]}
+        view.show([(object(), INFO, state)])
+        self.assertEqual(self.tab_widgets(view, 10), [Gtk.Label, Gtk.Label])
+        row = self.row(view, "tab", 10).get_child()
+        self.assertEqual(label_of(row).get_text(), "plain")
+        self.assertEqual(row.get_children()[-1].get_text(), "3")
+
+    def test_an_icon_and_a_badge_together_keep_the_title_first_among_labels(self):
+        view = self.make(icons=True)
+        state = {**STATE, "windows": [{"id": 2, "tabs": [
+            {"id": 10, "title": "(3) plain", "cookieStoreId": "firefox-default", "active": True},
+        ]}]}
+        view.show([(object(), INFO, state)])
+        self.assertEqual(self.tab_widgets(view, 10), [Gtk.Image, Gtk.Label, Gtk.Label])
+        row = self.row(view, "tab", 10).get_child()
+        self.assertEqual(label_of(row).get_text(), "plain")
+        self.assertEqual(row.get_children()[-1].get_text(), "3")
+
+    def test_a_tab_without_an_unread_count_has_no_badge(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        self.assertEqual(self.tab_widgets(view, 10), [Gtk.Label])
+
+    def test_badges_can_be_turned_off(self):
+        view = self.make(badges=False)
+        state = {**STATE, "windows": [{"id": 2, "tabs": [
+            {"id": 10, "title": "(3) plain", "cookieStoreId": "firefox-default", "active": True},
+        ]}]}
+        view.show([(object(), INFO, state)])
+        self.assertEqual(self.tab_widgets(view, 10), [Gtk.Label])
+
     def test_an_icon_that_is_in_the_page_as_data_shows_without_any_download(self):
         view = self.make(icons=True)
         with mock.patch("sidepanel.favicons.download", side_effect=AssertionError("no network for a data: icon")):

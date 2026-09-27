@@ -35,6 +35,7 @@ from .model import (  # noqa: E402
     focused_window,
     group_tabs,
     reordered,
+    tab_badge,
     tab_label,
     tab_move_index,
 )
@@ -52,6 +53,7 @@ CSS = """
 .sp-row.active label {{ font-weight: bold; }}
 .sp-tabbox {{ padding: 4px 10px 4px 19px; }}
 .sp-tab {{ padding: 0; }}
+.sp-badge {{ background-color: #e64553; color: #ffffff; font-weight: bold; font-size: 0.8em; padding: 0 5px; border-radius: 8px; }}
 .sp-empty {{ padding: 16px; color: #7d8594; }}
 button.sp-btn {{ padding: 0 6px; min-height: 0; min-width: 0; background: none; border: none; box-shadow: none; color: #aab2c0; }}
 button.sp-btn:hover {{ color: #ffffff; }}
@@ -808,6 +810,11 @@ class DockView:
             self._want_icon(tab.get("favIconUrl"), image)
             box.pack_start(image, False, False, 0)
         box.pack_start(label, True, True, 0)
+        badge = self.cfg["badges"] and tab_badge(tab)
+        if badge:
+            badge_label = self._label(badge, "sp-badge")
+            badge_label.set_tooltip_text(f"{badge} unread, from the tab's title")
+            box.pack_start(badge_label, False, False, 0)
         return self._row(
             box, "tab", tab["id"], group, conn, colour, lambda: self.on_activate(conn, tab["id"], window_id),
             active=bool(tab.get("active")), pinned=bool(tab.get("pinned")),

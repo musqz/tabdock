@@ -9,6 +9,8 @@ from sidepanel.model import (  # noqa: E402
     group_tabs,
     ordered_containers,
     reordered,
+    tab_badge,
+    tab_label,
     tab_move_index,
     window_of_tab,
 )
@@ -104,6 +106,28 @@ class ModelTest(unittest.TestCase):
     def test_window_of_tab(self):
         self.assertEqual(window_of_tab(STATE, 11), 2)
         self.assertIsNone(window_of_tab(STATE, 999))
+
+    def test_tab_badge_reads_a_leading_unread_count(self):
+        self.assertEqual(tab_badge(tab(1, "(3) Inbox")), "3")
+        self.assertEqual(tab_badge(tab(1, " (3) Inbox")), "3")  # a leading space still counts
+        self.assertEqual(tab_badge(tab(1, "(99+) Inbox")), "99+")  # Gmail/Slack-style overflow
+        self.assertIsNone(tab_badge(tab(1, "Inbox")))
+        self.assertIsNone(tab_badge(tab(1, "(Draft) Inbox")))
+        self.assertIsNone(tab_badge(tab(1, "(0) Inbox")))  # nothing unread is not a badge
+        self.assertIsNone(tab_badge(tab(1, "(00) Inbox")))  # however padded
+        self.assertIsNone(tab_badge(tab(1, "(2024) Annual Report")))  # a year, not a count
+        self.assertIsNone(tab_badge({}))
+
+    def test_tab_label_drops_the_badge_prefix(self):
+        self.assertEqual(tab_label(tab(1, "(3) Inbox")), "Inbox")
+        self.assertEqual(tab_label(tab(1, "(3)")), "(untitled)")  # nothing left to show otherwise
+        self.assertEqual(tab_label(tab(1, "Inbox")), "Inbox")
+        self.assertEqual(tab_label(tab(1, "(2024) Annual Report")), "(2024) Annual Report")
+
+    def test_format_state_shows_the_unread_count_alongside_the_stripped_title(self):
+        state = {**STATE, "windows": [{"id": 2, "tabs": [tab(10, "(3) Inbox")]}]}
+        text = format_state({"browser": "Firefox", "version": "156.0", "browserPid": 42}, state)
+        self.assertIn(" Inbox (3) [10]", text)
 
     def test_format_state(self):
         text = format_state({"browser": "Firefox", "version": "156.0", "browserPid": 42}, STATE)

@@ -107,6 +107,7 @@ Copy [configs/config.toml](configs/config.toml) to `~/.config/openbox-sidepanel/
 | `follow` | `"last"` | `"last"` or `"hide"` while a non-browser window is active |
 | `view` | `"auto"` | `"auto"` (the browser in use) or `"all"` (every open browser) when the panel starts; the chips switch it while running |
 | `icons` | `false` | site icons before the tab titles. Off by default because the panel downloads them itself, outside the browser's proxy and DNS settings: read "Site icons" below first. The `icons` button in the header switches it while running |
+| `badges` | `true` | a tab title starting with an unread count, e.g. `"(3) Inbox"`, gets a small badge instead of showing the count as plain text. Only reads the title the browser already reports; turn off if a site's title starts the same way for another reason (a year, a numbered list) and gets mistaken for one |
 | `pinned` | `false` | start pinned |
 | `start_with_browser` | `true` | start the panel when a browser with the extension opens and none is running |
 

@@ -40,6 +40,12 @@ view = "auto"
 # The "icons" button in the header switches it while the panel runs (until the next start).
 icons = false
 
+# A tab whose title starts with an unread count, e.g. "(3) Inbox", gets a small badge instead of
+# showing the count as plain text. On by default: it only reads the title the browser already
+# reports, no extra network or permissions. Turn off if a site's title happens to start the same
+# way for another reason (a year, a numbered list) and gets mistaken for one.
+badges = true
+
 # Start the panel when a browser with the extension opens and no panel is running (a browser start
 # is enough, no autostart needed). A panel you quit with the X button is not restarted until the next
 # browser start. false = only start it yourself (app menu, autostart line, keybinding).

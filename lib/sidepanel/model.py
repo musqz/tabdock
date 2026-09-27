@@ -1,7 +1,13 @@
 """Pure helpers over the extension's state snapshot (no GTK/GLib, unit-testable)."""
 import os
+import re
 
 NO_CONTAINER = "firefox-default"
+
+# Many sites (forums, mail, chat) prepend an unread count to their tab title, e.g. "(3) Inbox".
+# Capped at 3 digits (plus an optional "+", as in "99+") so a year or a numbered list ("(2024) Report")
+# is not mistaken for one; a leading "(0)" is excluded separately in `tab_badge`, below.
+_BADGE_RE = re.compile(r"^\s*\((\d{1,3}\+?)\)\s*")
 
 
 def focused_window(state):
@@ -190,7 +196,17 @@ def browser_label(info):
 
 
 def tab_label(tab):
-    return tab.get("title") or tab.get("url") or "(untitled)"
+    title = tab.get("title")
+    if not title:
+        return tab.get("url") or "(untitled)"
+    return _BADGE_RE.sub("", title, count=1) or tab.get("url") or "(untitled)"
+
+
+def tab_badge(tab):
+    """The leading unread count in the tab's title (see `_BADGE_RE`), or None. A zero count
+    (however padded, "0", "00", ...) means nothing is unread, so it is not a badge."""
+    m = _BADGE_RE.match(tab.get("title") or "")
+    return m.group(1) if m and int(m.group(1).rstrip("+")) != 0 else None
 
 
 def format_state(info, state):
@@ -200,5 +216,7 @@ def format_state(info, state):
     for container, tabs in group_tabs(state):
         lines.append(f'[{container["name"]}] ({len(tabs)}) {container["cookieStoreId"]}')  # the id: for `order`
         for tab in tabs:
-            lines.append(f' {"*" if tab.get("active") else " "} {tab_label(tab)} [{tab["id"]}]')
+            badge = tab_badge(tab)
+            mark = f" ({badge})" if badge else ""
+            lines.append(f' {"*" if tab.get("active") else " "} {tab_label(tab)}{mark} [{tab["id"]}]')
     return "\n".join(lines)

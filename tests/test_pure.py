@@ -35,6 +35,8 @@ class ConfigTest(unittest.TestCase):
         # the panel downloads icons itself, from your own address: never without being asked
         self.assertIs(config.DEFAULTS["icons"], False)
         self.assertIs(config.validate({"icons": True})["icons"], True)
+        self.assertIs(config.DEFAULTS["badges"], True)  # reads only the title the browser already reports
+        self.assertIs(config.validate({"badges": False})["badges"], False)
 
     def test_rejects_bad_values(self):
         for bad in (
@@ -43,6 +45,8 @@ class ConfigTest(unittest.TestCase):
             {"view": "zen"},  # a browser is chosen with its chip, not in the file
             {"icons": "yes"},
             {"icons": 1},
+            {"badges": "yes"},
+            {"badges": 1},
             {"width": 50},
             {"width": "wide"},
             {"width": True},
