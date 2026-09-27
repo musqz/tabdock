@@ -65,7 +65,7 @@ before or after the browser; the extension reconnects with backoff.
   map individual X windows to browser windows (multi-window solved without title hacks).
 
 ### Native host (`lib/native-host/tabdock-nmhost`)
-- ~40 lines of python: read/write native-messaging frames on stdio <-> line-JSON on the Unix socket.
+- ~170 lines of python: read/write native-messaging frames on stdio <-> line-JSON on the Unix socket.
   Adds its parent PID (the browser process) to `hello`. Exits when either side closes.
 - Manifest template in `configs/` -> installed to `~/.mozilla/native-messaging-hosts/` (Firefox) and
   `~/.zen/native-messaging-hosts/` (Zen); `allowed_extensions` holds the extension ID.
@@ -73,7 +73,9 @@ before or after the browser; the extension reconnects with backoff.
 ### Panel (`tabdock` + `lib/tabdock/`)
 - Python + GTK3 (PyGObject) + python-xlib. Modules: `app.py` (main loop), `ipc.py` (socket server,
   one connection per browser), `model.py` (state per browser), `x11.py` (props, strut, active window),
-  `config.py`, `ui/` (widgets).
+  `config.py`, `dock.py` (the GTK window, CSS, rows), `autohide.py` (hover open/close timing),
+  `favicons.py` (site-icon fetch/decode), `geometry.py` (strut/monitor math), `ui.py` (headless
+  console view for `--debug`).
 - **Browser follow logic:** watch `_NET_ACTIVE_WINDOW` on the root window through python-xlib
   PropertyNotify wired into the GLib main loop (no polling). Resolve the active window's
   `_NET_WM_PID` -> walk to the browser PID reported in `hello`; fall back to `WM_CLASS`
@@ -90,8 +92,11 @@ before or after the browser; the extension reconnects with backoff.
 - **Animation:** none built in. The panel only maps/unmaps, so any compositor the user runs applies
   its own open/close animation; no rule file is shipped, set one up in the compositor directly if wanted.
 - **Active browser always visible:** the panel header names the browser in its accent colour (Firefox
-  orange, Zen purple, FireDragon red, LibreWolf blue) and the collapsed strip carries the same
-  colour, so it is clear which browser is active even with window borders hidden.
+  orange, Zen purple, FireDragon red, Waterfox teal, LibreWolf blue, Floorp gold) and the collapsed
+  strip carries the same colour, so it is clear which browser is active even with window borders
+  hidden. A `[theme]` section in `config.toml` (as built) overrides the accent globally or per
+  browser; on a dark custom accent the text switches to white by a WCAG luminance check
+  (`model.on_accent`) so it stays readable.
 - **Pin toggle:** header button / hotkey sets `_NET_WM_STRUT_PARTIAL` so the panel stays open and
   windows are laid out beside it; unpin removes the strut and returns to autohide.
 - **Left/right:** `side = left | right` and `monitor = outer | primary | <output name>` in
@@ -104,7 +109,8 @@ before or after the browser; the extension reconnects with backoff.
   Trade-off: a cookie-less favicon fetch outside the container. The alternative is converting them
   inside the extension, which needs `<all_urls>`.
 - Click tab -> `activate_tab` + raise/focus the browser window (extension `windows.update`
-  `focused:true`; fallback `wmctrl -ia <xid>` if Openbox declines focus).
+  `focused:true`; fallback sends an EWMH `_NET_ACTIVE_WINDOW` `ClientMessage` directly via
+  python-xlib, `lib/tabdock/x11.py:activate()`, if Openbox declines focus).
 
 ### Workspaces (M4, as built)
 Firefox has no native workspaces, so they are exclusive workspaces in the extension with `tabs.hide()`
@@ -127,15 +133,15 @@ panel shows them as they are: a grouped tab wears its group's name in the group'
 ## Repo layout (agreed before commit 1, per global CLAUDE.md)
 
 ```
-tabdock                   main executable (python)
-install.sh  README.md  CHANGELOG.md  SOURCES.md
+tabdock  VERSION           main executable (python) and the version it reports
+install.sh  README.md  CHANGELOG.md  LICENSE
 lib/tabdock/              panel python package
 lib/native-host/          tabdock-nmhost
 extension/                manifest.json, background.js, icons/
 configs/                  config.toml default, nm manifest template, tabdock.desktop (autostart)
-docs/                     PLAN.md, PROTOCOL.md, userChrome-snippet.css
-tests/                    protocol fixtures, fake-extension script
-packaging/                PKGBUILD later
+docs/                     PLAN.md, PROTOCOL.md, RELEASE.md
+tests/                    unit tests (pytest) + manual e2e_*.py scripts
+packaging/                PKGBUILD, build-extension.sh, sign-extension.sh, tabdock.install
 .gitignore                includes CLAUDE.md, claude.md, __pycache__, web-ext-artifacts/
 ```
 Git repo is initialised on a `feat/` branch; nothing on `main` except README updates.
@@ -155,14 +161,14 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
 - **M3 two-way editing:** first slice done (0.3.0): **reordering**, i.e. drag container sections (order kept
   in the extension's `storage.local`, since Firefox cannot reorder containers) and drag tabs within their
   container (`tabs.move`). Second slice done: **new tab in container**, a `+` button per section
-  (`tabs.create({cookieStoreId})`). Third slice done (unreleased): **close and pin** (a `✕` on the hovered tab,
+  (`tabs.create({cookieStoreId})`). Third slice done: **close and pin** (a `✕` on the hovered tab,
   middle-click, and the tab's right-click menu; `tabs.remove`, `tabs.update({pinned})`), where closing a
-  workspace's only visible tab never closes the window. Fourth slice done (unreleased): **edit containers**, a
+  workspace's only visible tab never closes the window. Fourth slice done: **edit containers**, a
   container section's right-click menu to create, rename, recolour, re-icon and remove one (removal asks first:
-  its tabs close and Firefox deletes its cookies). Fifth slice done (unreleased): **reopen in container**
+  its tabs close and Firefox deletes its cookies). Fifth slice done: **reopen in container**
   (Firefox cannot change a tab's container, so the page opens anew there and the original closes, its history
   left behind) and a **search** (a find window beside the panel, over every workspace). M3 is complete.
-- **M4 workspaces (done, unreleased):** exclusive, via `tabs.hide()`, verified with the real-browser test
+- **M4 workspaces (done):** exclusive, via `tabs.hide()`, verified with the real-browser test
   (`tests/e2e_firefox.py`: create, switch, move, rename, pin/unpin, last tab, remove, extension and browser
   restart, each checked against Firefox's own tab strip) and under Openbox (`tests/e2e_x11.py`: the chips, the
   right-click menu, the name window). Since then: an icon, a colour and a container per workspace, and keyboard
@@ -170,10 +176,12 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
   nothing: Firefox's own tab groups are shown too (each grouped tab wears its group's name in its colour).
 - **M5 more browsers (done, pulled forward):** verified with `tests/e2e_firefox.py --firefox <browser>` on
   Firefox, Zen, FireDragon (`firedragon-bin`), Waterfox (`waterfox-bin`) and LibreWolf (`librewolf`), all
-  native packages. Every one reads `~/.mozilla/native-messaging-hosts`, so the single manifest from
-  `install.sh` covers them and no per-browser directories (`~/.zen`, `~/.firedragon`, `~/.librewolf`) are
-  needed. Process-based identification tells them apart (Zen even reports itself as "Firefox"); Waterfox
-  has its own accent colour. The signed `.xpi` is installed once per browser.
+  native packages. Floorp is supported the same way (own accent colour, `KNOWN_BROWSERS` entry, same
+  manifest) but has not been run through `e2e_firefox.py` yet. Every one reads
+  `~/.mozilla/native-messaging-hosts`, so the single manifest from `install.sh` covers them and no
+  per-browser directories (`~/.zen`, `~/.firedragon`, `~/.librewolf`) are needed. Process-based
+  identification tells them apart (Zen even reports itself as "Firefox"); Waterfox has its own accent
+  colour. The signed `.xpi` is installed once per browser.
 - **Later, only if wanted:** tree tabs, Zen-workspace import, publishing `packaging/PKGBUILD` on the AUR.
 
 ## Risks
@@ -183,11 +191,13 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
 2. **Extension signing:** release Firefox needs signed add-ons. Use an unlisted AMO self-signed XPI
    (free) or `web-ext run` / `about:debugging` temporary load during development. FireDragon/LibreWolf
    may allow unsigned installs.
-3. **Focus stealing:** Openbox may refuse focus changes from the browser; fallback `wmctrl -ia`.
+3. **Focus stealing:** Openbox may refuse focus changes from the browser; fallback sends an EWMH
+   `_NET_ACTIVE_WINDOW` `ClientMessage` directly via python-xlib (`lib/tabdock/x11.py`).
 4. **Hover strip vs. other edge users:** on a right-edge panel the browser scrollbar shares the edge on a
    maximised window. Keep the strip at 3 px and prefer outer monitor edges (see Context).
 5. **Firefox still shows its own tab strip:** the panel replaces it visually only if the user hides the
-   strip (userChrome.css snippet documented in `docs/`; not shipped as an install step).
+   strip (a userChrome.css snippet to do that is planned but not yet written; not shipped as an install
+   step).
 6. **Closing a workspace's last tab closes the window:** Firefox ignores hidden tabs when deciding whether a tab
    is the window's last (`Tabbrowser.#isLastTabInWindow`), so with `browser.tabs.closeWindowWithLastTab = true`
    (the default) the window goes, and the other workspaces' tabs with it (restorable from recently closed
