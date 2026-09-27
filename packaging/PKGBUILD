@@ -17,8 +17,8 @@ source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
         "$pkgname-$pkgver.xpi::$url/releases/download/v$pkgver/$pkgname-$pkgver.xpi")
 noextract=("$pkgname-$pkgver.xpi")  # a zip: makepkg would unpack it otherwise
 # run `updpkgsums` once the v$pkgver tag and its release asset exist
-sha256sums=('SKIP'
-            'SKIP')
+sha256sums=('cab5f744e16016acedd12338239c7e8378a7b207a7a29a29f76c1d0dcf858fc9'
+            '3d9f923586bd8b3e901d41f64b2b1cb7171f417631b8e5c5572053d1b1f09603')
 
 prepare() {
     cd "$pkgname-$pkgver"
@@ -29,17 +29,33 @@ prepare() {
         return 1
     fi
     # the release's .xpi must be this version's extension, signed: Mozilla's signature inside (the same
-    # test as packaging/sign-extension.sh) and every other file identical to extension/ in these sources
+    # test as packaging/sign-extension.sh) and every other file identical to extension/ in these sources.
+    # manifest.json is compared by what it says: Mozilla's signing rewrites its layout (one value per line).
     python3 - "$srcdir/$pkgname-$pkgver.xpi" extension <<'EOF' || return 1
-import os, sys, zipfile
+import json, os, sys, zipfile
 xpi, src = sys.argv[1:3]
 name = os.path.basename(xpi)
+
+
+def same(n, data):
+    path = os.path.join(src, n)
+    if not os.path.isfile(path):
+        return False
+    with open(path, "rb") as f:
+        mine = f.read()
+    if n == "manifest.json":
+        try:
+            return json.loads(data) == json.loads(mine)
+        except ValueError:
+            return False
+    return data == mine
+
+
 with zipfile.ZipFile(xpi) as z:
     files = [n for n in z.namelist() if not n.endswith("/")]
     if "META-INF/mozilla.rsa" not in files:
         sys.exit(f"{name} from the release is not signed by Mozilla")
-    differ = [n for n in files if not n.startswith("META-INF/")
-              and (not os.path.isfile(os.path.join(src, n)) or z.read(n) != open(os.path.join(src, n), "rb").read())]
+    differ = [n for n in files if not n.startswith("META-INF/") and not same(n, z.read(n))]
 if differ:
     sys.exit(f"{name} from the release differs from extension/ in these sources ({', '.join(differ)}): it was "
              "signed from other code. Sign this version's extension (a version already signed needs a new one).")
