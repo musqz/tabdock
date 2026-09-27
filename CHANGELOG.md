@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- An Arch package: `packaging/PKGBUILD` builds a release from its `v<version>` tag and installs it system-wide
+  (`/usr/share/tabdock`, `/usr/bin/sidepanel`, the menu entry, and the native-messaging manifest in
+  `/usr/lib/mozilla/native-messaging-hosts`), with the signed extension, taken from the GitHub release, at
+  `/usr/share/tabdock/tabdock.xpi`. Releases are tagged `v` + `VERSION` from 0.2.0 on; docs/RELEASE.md has the
+  steps.
+
+## 0.3.0
+
 - Site icons before the tab titles, and a toggle (the `icons` button in the header, `icons = true` in the
   config). **Off by default**, because the panel downloads the icons itself, from your own address and system
   DNS, outside the browser's proxy, VPN, DNS-over-HTTPS and per-container settings, for every listed tab

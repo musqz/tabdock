@@ -16,11 +16,17 @@ both read it). It prints every file it touches and ends by running `sidepanel --
 installed copy. Nothing else is edited. `PREFIX=/usr SUDO=sudo ./install.sh` installs the program
 system-wide (the manifest stays per-user). `./install.sh --uninstall` removes exactly what was installed.
 
+On Arch, the package does all of this system-wide instead: `cd packaging && makepkg -si` installs the
+program to `/usr/share/tabdock`, `/usr/bin/sidepanel`, the menu entry, the signed extension, and the manifest
+in `/usr/lib/mozilla/native-messaging-hosts`. Use one or the other: a per-user manifest from `install.sh`
+overrides the package's.
+
 ## 2. Get the extension signed (once per version)
 
 **Installed tabdock from a package** (an AUR or repo build)? Skip to step 3 below: the package ships
-the extension already signed, at a fixed path (`/usr/share/tabdock/tabdock.xpi`). Signing happens once,
-when the package is built, not per user. The rest of this section is only for a from-source install.
+the extension already signed, at a fixed path (`/usr/share/tabdock/tabdock.xpi`). Signing happens once
+per release, by the maintainer (see "Releasing a version"), not per user. The rest of this section is only
+for a from-source install.
 
 Signing needs a free Mozilla account, which only you can create. Then:
 
@@ -117,3 +123,22 @@ position from the other tool's config or put the panel on an edge without one (`
 
 Bump `VERSION` and `extension/manifest.json`, run `./install.sh`, then rebuild, sign and install the new
 `.xpi` as above. Unlisted extensions do not auto-update.
+
+## 6. Releasing a version
+
+`VERSION` is the one version number: the panel reports it, the extension's manifest must match it (a test
+checks this), the tag is `v` + `VERSION`, and the package refuses sources whose `VERSION` differs from its
+`pkgver`.
+
+1. Bump `VERSION` and `extension/manifest.json`, rename the changelog's `## Unreleased` to the new version,
+   and merge that to `main`.
+2. Sign the extension: `packaging/sign-extension.sh`.
+3. Tag the release commit and push the tag:
+
+   ```bash
+   git tag -a v0.3.0 -m "tabdock 0.3.0" && git push origin v0.3.0
+   ```
+4. On GitHub, **Releases -> Draft a new release**, pick the tag, and attach the signed file from
+   `web-ext-artifacts/`, renamed to `tabdock-0.3.0.xpi` (the PKGBUILD downloads it by that name).
+5. In `packaging/PKGBUILD` set `pkgver` (and `pkgrel=1`), run `updpkgsums`, then `makepkg -si` to try it.
+   For the AUR, also `makepkg --printsrcinfo > .SRCINFO`.
