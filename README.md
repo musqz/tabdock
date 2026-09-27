@@ -2,8 +2,8 @@
 
 A desktop side panel for Openbox/X11 that mirrors the focused browser's tabs and containers, two-way,
 through a small WebExtension. Firefox-family (Netscape-lineage, Gecko) browsers only — Firefox, Zen,
-FireDragon, Waterfox, LibreWolf; native installs, no Chromium/Blink, no Flatpak/Snap. Goal: a Zen-style
-sidebar (containers, workspaces, autohide) everywhere.
+FireDragon, Waterfox, LibreWolf, Floorp; native installs, no Chromium/Blink, no Flatpak/Snap. Goal: a
+Zen-style sidebar (containers, workspaces, autohide) everywhere.
 
 Status: **0.4.0, installable.** Autohiding dock on the left/right edge, real install, signed extension,
 autostart, drag to reorder, new tab per container; since 0.4.0 also Zen-style workspaces; closing, pinning and
@@ -18,7 +18,8 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/tabdock-nmhost  
 ## How it behaves
 
 - **Collapsed:** a 3 px strip tinted in the active browser's colour (Firefox orange, Zen purple,
-  FireDragon red, Waterfox teal, LibreWolf blue). Hover to open (~120 ms); leaving closes it (~400 ms).
+  FireDragon red, Waterfox teal, LibreWolf blue, Floorp gold). Hover to open (~120 ms); leaving closes
+  it (~400 ms).
 - **Open:** the header names the active browser; below it, one collapsible section per container
   (colour, icon, name, tab count) with its tabs, site icons optional (see Site icons). Click a tab to
   activate it.
