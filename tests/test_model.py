@@ -16,6 +16,7 @@ from tabdock.model import (  # noqa: E402
     ordered_containers,
     removal_text,
     reordered,
+    supports,
     tab_badge,
     tab_label,
     tab_move_index,
@@ -215,6 +216,11 @@ class ModelTest(unittest.TestCase):
         self.assertIn("Its 1 open tab will close,", removal_text("Bank", 1))
         self.assertIn("Its 3 open tabs will close,", removal_text("Bank", 3))
         self.assertIn("deletes its cookies", removal_text("Bank", 3))
+
+    def test_the_panel_offers_what_the_extension_says_it_handles(self):
+        self.assertTrue(supports({"features": ["close_tab", "pin_tab"]}, "close_tab"))
+        self.assertFalse(supports({"features": ["close_tab"]}, "containers"))
+        self.assertFalse(supports({"browser": "Firefox"}, "close_tab"))  # an older extension lists nothing
 
     def test_waiting_text_without_a_packaged_extension(self):
         self.assertEqual(waiting_text("/nonexistent/tabdock.xpi"), "Waiting for a browser with the Tabdock extension")

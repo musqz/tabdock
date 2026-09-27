@@ -14,7 +14,7 @@ directions, with two additions: it sends `resync` to the extension whenever the 
 
 | type    | fields | notes |
 |---------|--------|-------|
-| `hello` | `browser`, `version`, `browserPid` (added by relay) | sent on every resync, before `state`. `browser` is what `getBrowserInfo()` reports, which is unreliable (Zen says "Firefox"), so the panel names the browser from `/proc/<browserPid>/exe` and only falls back to this |
+| `hello` | `browser`, `version`, `features`, `browserPid` (added by relay) | sent on every resync, before `state`. `browser` is what `getBrowserInfo()` reports, which is unreliable (Zen says "Firefox"), so the panel names the browser from `/proc/<browserPid>/exe` and only falls back to this. `features` lists what the extension handles beyond what every version did (`close_tab`, `pin_tab`, `containers`): the panel offers only those, so an older extension (no `features`) never gets a `✕` or a menu item that does nothing |
 | `state` | `focusedWindowId`, `containerOrder[]`, `containers[]`, `workspaces[]`, `windows[]` | full snapshot, debounced 50 ms after any change |
 
 `containers[]`: `{cookieStoreId, name, color, colorCode, icon}`.

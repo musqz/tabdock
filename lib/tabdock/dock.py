@@ -36,6 +36,7 @@ from .model import (  # noqa: E402
     colour_name,
     edits_workspaces,
     removal_text,
+    supports,
     focused_window,
     group_tabs,
     heir,
@@ -564,7 +565,7 @@ class DockView:
         return label
 
     def _row(self, child, kind, ident, group, conn, colour, on_click, active=False, draggable=True, pinned=False,
-             menu=None):
+             menu=None, closable=False):
         """A row of the browser `conn`, in its colour. Hover/active styling lives on the EventBox: a
         windowless label gets no prelight.
 
@@ -589,7 +590,7 @@ class DockView:
         box.add(child)
         self._meta[box] = {
             "kind": kind, "id": ident, "group": group, "conn": conn, "click": on_click,
-            "draggable": draggable, "pinned": pinned, "menu": menu,
+            "draggable": draggable, "pinned": pinned, "menu": menu, "closable": closable,
         }
         self._row_order.append(box)
         return box
@@ -631,7 +632,7 @@ class DockView:
         if event.button == 1 and box in self._meta:
             self._press = {"box": box, "x": event.x_root, "y": event.y_root, "t": time.monotonic(),
                            "dragging": False, "target": None, "after": False}
-        elif event.button == 2 and self._meta.get(box, {}).get("kind") == "tab":
+        elif event.button == 2 and self._meta.get(box, {}).get("closable"):
             self._middle = box  # closed on release, as in the browser's tab strip
             return True
         elif event.button == 3 and self._meta.get(box, {}).get("menu"):
@@ -846,15 +847,17 @@ class DockView:
                 rows.append(self._label("No browser windows", "sp-empty", wrap=True))
                 continue
             spaces = workspaces(state) if offers_workspaces(info, state) else []
+            can = {feature for feature in ("close_tab", "pin_tab", "containers") if supports(info, feature)}
             if spaces:
                 rows.append(self._workspace_row(conn, colour, spaces, window, ordered_containers(state)))
             for container, tabs in groups:
                 key = (browser, container["cookieStoreId"])
                 folded = key in self.collapsed
-                rows.append(self._section(container, tabs, key, folded, conn, colour, state, window["id"]))
+                rows.append(self._section(container, tabs, key, folded, conn, colour, state, window["id"], can))
                 if not folded:
                     rows.extend(
-                        self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour, spaces) for tab in tabs
+                        self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour, spaces, can)
+                        for tab in tabs
                     )
         self._replace_rows(rows or [self._label("No browser windows", "sp-empty", wrap=True)])
 
@@ -875,7 +878,7 @@ class DockView:
         row.get_style_context().add_class("sp-bhead")
         return row
 
-    def _section(self, container, tabs, key, folded, conn, browser_colour, state, window_id):
+    def _section(self, container, tabs, key, folded, conn, browser_colour, state, window_id, can=()):
         colour = container.get("colorCode") or DEFAULT_ACCENT
         icon = ICONS.get(container.get("icon"), "●")
         name = GLib.markup_escape_text(container["name"])
@@ -907,7 +910,8 @@ class DockView:
         return self._row(
             box, "section", cid, None, conn, browser_colour, (lambda: self._toggle(key)) if tabs else (lambda: None),
             draggable=cid != NO_CONTAINER and cid in known,
-            menu=self._container_menu(conn, container, state) if cid == NO_CONTAINER or cid in known else None,
+            menu=(self._container_menu(conn, container, state)
+                  if "containers" in can and (cid == NO_CONTAINER or cid in known) else None),
         )
 
     def _container_menu(self, conn, container, state):
@@ -947,9 +951,10 @@ class DockView:
         self._last = None
         self._rebuild()
 
-    def _tab_row(self, tab, window_id, group, conn, colour, spaces=()):
+    def _tab_row(self, tab, window_id, group, conn, colour, spaces=(), can=()):
         """A tab: its site icon (optional), the title, an unread badge, a pin if pinned, and a ✕ that shows while
-        the row is hovered. Middle-click closes it too; right-click pins, moves (to another workspace) or closes."""
+        the row is hovered. Middle-click closes it too; right-click pins, moves (to another workspace) or closes.
+        `can`: what the extension handles, of "close_tab" and "pin_tab"; the rest is not offered."""
         label = self._label(tab_label(tab), "sp-tab")
         label.set_tooltip_text("\n".join(filter(None, (tab.get("title"), tab.get("url")))))
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -970,24 +975,28 @@ class DockView:
             mark = self._label("📌", "sp-pinmark")
             mark.set_tooltip_text("Pinned: shows in every workspace" if len(spaces) > 1 else "Pinned")
             box.pack_start(mark, False, False, 0)
-        close = self._button("✕", "Close tab (or middle-click it)", Gtk.Button)
-        close.get_style_context().add_class("sp-close")
-        close.connect("clicked", lambda _b: self._close_tab(conn, tab["id"]))
-        box.pack_end(close, False, False, 0)
-        self._close_buttons.append((tab["id"], close))
-        menu = [("Unpin tab" if pinned else "Pin tab",
-                 lambda: self._command(conn, {"type": "pin_tab", "tabId": tab["id"], "pinned": not pinned}))]
+        if "close_tab" in can:
+            close = self._button("✕", "Close tab (or middle-click it)", Gtk.Button)
+            close.get_style_context().add_class("sp-close")
+            close.connect("clicked", lambda _b: self._close_tab(conn, tab["id"]))
+            box.pack_end(close, False, False, 0)
+            self._close_buttons.append((tab["id"], close))
+        groups = []  # the menu's parts, with a line between them
+        if "pin_tab" in can:
+            groups.append([("Unpin tab" if pinned else "Pin tab",
+                            lambda: self._command(conn, {"type": "pin_tab", "tabId": tab["id"], "pinned": not pinned}))])
         if len(spaces) > 1 and not pinned:  # (a pinned tab shows in every workspace)
-            menu.append((None, None))
-            menu += [
+            groups.append([
                 (f"Move to {workspace_label(ws)}", lambda ws_id=ws["id"]: self._command(
                     conn, {"type": "move_tab_to_workspace", "tabId": tab["id"], "workspaceId": ws_id}))
                 for ws in spaces if ws["id"] != tab.get("workspaceId")
-            ]
-        menu += [(None, None), ("Close tab", lambda: self._close_tab(conn, tab["id"]))]
+            ])
+        if "close_tab" in can:
+            groups.append([("Close tab", lambda: self._close_tab(conn, tab["id"]))])
+        menu = [item for i, group in enumerate(groups) for item in ([(None, None)] if i else []) + group] or None
         return self._row(
             box, "tab", tab["id"], group, conn, colour, lambda: self.on_activate(conn, tab["id"], window_id),
-            active=bool(tab.get("active")), pinned=pinned, menu=menu,
+            active=bool(tab.get("active")), pinned=pinned, menu=menu, closable="close_tab" in can,
         )
 
     def _close_tab(self, conn, tab_id):

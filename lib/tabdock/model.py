@@ -60,6 +60,12 @@ def workspace_label(ws):
     return f'{ws["icon"]} {ws["name"]}' if ws.get("icon") else ws["name"]
 
 
+def supports(info, feature):
+    """Whether the browser's extension handles `feature` ("close_tab", "pin_tab", "containers"): it lists them in its
+    hello. An older one lists none, and the panel then offers only what it can do, never a button that does nothing."""
+    return feature in (info.get("features") or ())
+
+
 def offers_workspaces(info, state):
     """Whether the panel shows workspaces for this browser. Not in Zen, which has workspaces of its own
     (the extension then never hides a tab: nothing there starts using them)."""

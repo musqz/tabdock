@@ -33,7 +33,8 @@ STATE = {
         }
     ],
 }
-INFO = {"browser": "Firefox", "version": "156.0", "browserPid": 1}
+INFO = {"browser": "Firefox", "version": "156.0", "browserPid": 1, "features": ["close_tab", "pin_tab", "containers"]}
+OLD_INFO = {"browser": "Firefox", "version": "156.0", "browserPid": 1}  # an extension from before the features list
 
 
 def label_of(row):
@@ -1371,6 +1372,20 @@ class DockViewTest(unittest.TestCase):
         self.assertTrue(hovered())  # onto the ✕, which is inside the row
         crossing(Gdk.EventType.LEAVE_NOTIFY, "leave-notify-event", Gdk.NotifyType.NONLINEAR)
         self.assertFalse(hovered())
+
+    def test_an_older_extension_gets_no_close_pin_or_container_editing_it_could_not_do(self):
+        view = self.make()
+        view.show([(object(), OLD_INFO, STATE)])
+        self.assertEqual(view._close_buttons, [])  # no ✕
+        self.assertIsNone(view._meta[self.row(view, "tab", 10)]["menu"])  # nothing to pin, move or close
+        self.assertIsNone(view._meta[self.row(view, "section", "firefox-container-1")]["menu"])
+        row = self.row(view, "tab", 10)
+        button(row, Gdk.EventType.BUTTON_PRESS, "button-press-event", which=2)
+        button(row, Gdk.EventType.BUTTON_RELEASE, "button-release-event", which=2)
+        self.assertEqual(self.commands, [])  # a middle click closes nothing either
+        view.show([(object(), OLD_INFO, self.WS_STATE)])  # with workspaces: moving is still offered
+        self.right_click(self.row(view, "tab", 2))
+        self.assertEqual(self.labels(view), ["Move to Default", "Move to Play"])
 
     def test_a_middle_click_closes_the_tab_it_was_released_on(self):
         view = self.make()

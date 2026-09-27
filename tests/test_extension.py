@@ -69,6 +69,12 @@ class ManifestTest(unittest.TestCase):
         self.assertIn('"next-workspace"', background)
         self.assertIn('"previous-workspace"', background)
 
+    def test_the_features_the_extension_announces_are_the_ones_the_panel_offers(self):
+        background = read(os.path.join(EXT, "background.js"))
+        announced = json.loads(background.split("const FEATURES = ", 1)[1].split(";", 1)[0])
+        dock = read(os.path.join(ROOT, "lib", "tabdock", "dock.py"))
+        self.assertIn(f'for feature in {tuple(announced)!r} if supports(info, feature)'.replace("'", '"'), dock)
+
     def test_background_script_exists(self):
         for rel in self.manifest["background"]["scripts"]:
             self.assertTrue(os.path.isfile(os.path.join(EXT, rel)), rel)

@@ -9,6 +9,8 @@
 const HOST = "openbox_sidepanel";
 const RECONNECT_MS = 3000; // only needed if the relay process itself died
 const DEBOUNCE_MS = 50;
+// What this extension does beyond what every version did, told to the panel in "hello": it offers only those.
+const FEATURES = ["close_tab", "pin_tab", "containers"];
 
 let port = null;
 let panelUp = false; // relay has a panel connected (set by resync, cleared by panel_disconnected)
@@ -534,7 +536,7 @@ async function resync() {
     lastFocusedWindowId = (await browser.windows.getLastFocused()).id;
   }
   panelUp = true;
-  send({ type: "hello", browser: info.name, version: info.version });
+  send({ type: "hello", browser: info.name, version: info.version, features: FEATURES });
   send(await snapshot());
 }
 

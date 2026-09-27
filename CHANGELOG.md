@@ -32,7 +32,9 @@
   in real Firefox 156 (`tests/e2e_firefox.py`: pin, unpin and close through the panel, and the window surviving
   that last-tab close with the pref at Firefox's default) and under a real Openbox (`tests/e2e_x11.py`: the
   hovered row's background and its `✕` drawn, other rows' `✕` not, a click on it and a middle click closing,
-  the browser keeping the focus).
+  the browser keeping the focus). The panel offers closing, pinning and editing containers only when the
+  browser's extension says it handles them (`features` in its hello), so with an older extension there is no `✕`
+  or menu item that would do nothing.
 
 - Workspaces, more like Zen's: each can have an **icon** and a **colour** (right-click its chip: *Icon* offers a
   few and *Other…* takes any emoji; *Colour* the colours containers have), shown on its chip; a **container for

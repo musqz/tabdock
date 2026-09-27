@@ -122,7 +122,8 @@ class FakeExtension:
         self.sock.connect(path)
         self.sock.setblocking(False)
         self.buf = b""
-        self.send({"type": "hello", "browser": browser, "version": "1", "browserPid": pid})
+        self.send({"type": "hello", "browser": browser, "version": "1", "browserPid": pid,
+                   "features": ["close_tab", "pin_tab", "containers"]})
         self.state = (
             {
                 "type": "state",
