@@ -24,7 +24,7 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("GdkX11", "3.0")
 from gi.repository import Gdk, GdkX11, GLib, Gtk, Pango  # noqa: E402,F401
 
-from . import favicons, geometry  # noqa: E402
+from . import config, favicons, geometry  # noqa: E402
 from .autohide import Autohide  # noqa: E402
 from .model import (  # noqa: E402
     DARK_TEXT,
@@ -35,6 +35,7 @@ from .model import (  # noqa: E402
     accent,
     accents,
     browser_label,
+    browser_theme_key,
     colour_name,
     edits_workspaces,
     removal_text,
@@ -239,6 +240,11 @@ class DockView:
         self.browser_name = Gtk.Label(label="", xalign=0)
         self.browser_name.set_ellipsize(Pango.EllipsizeMode.END)  # the header never makes the panel wider than `width`
         self.browser_name.get_style_context().add_class("sp-browser")
+        self._current_source = None  # (conn, info) of the one browser shown, for the name's right-click menu
+        self.browser_name_box = Gtk.EventBox()
+        self.browser_name_box.add(self.browser_name)
+        self.browser_name_box.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+        self.browser_name_box.connect("button-press-event", self._on_browser_name_press)
         self.quit_btn = self._button("✕", "Quit tabdock", Gtk.Button)
         self.quit_btn.get_style_context().add_class("sp-quit")
         self.quit_btn.connect("clicked", lambda _b: on_quit())
@@ -255,7 +261,7 @@ class DockView:
         self.find_btn = self._button("🔍", "Find a tab by its title or address, in every workspace", Gtk.Button)
         self.find_btn.get_style_context().add_class("sp-pin")
         self.find_btn.connect("clicked", lambda _b: self._find())
-        header.pack_start(self.browser_name, True, True, 0)
+        header.pack_start(self.browser_name_box, True, True, 0)
         header.pack_end(self.quit_btn, False, False, 0)  # rightmost
         header.pack_end(self.flip_btn, False, False, 0)
         header.pack_end(self.pin_btn, False, False, 0)
@@ -323,9 +329,11 @@ class DockView:
             conn, info, _state = self.sources[0]
             self.browser_name.set_text(self._name(conn, info))
             self.browser_name.set_tooltip_text(browser_label(info))
+            self._current_source = (conn, info)
         else:
             self.browser_name.set_text("All browsers")
             self.browser_name.set_tooltip_text(None)
+            self._current_source = None
         # only the strip and the header wear it: no rebuild
         self._set_accent(accent(focus, self._colours) if focus else self._colours["other"])
         snapshot = (self.sources, frozenset(self.collapsed), mode, tuple(choices))
@@ -345,6 +353,7 @@ class DockView:
         self._ws_buttons = []
         self._set_chips(mode, choices)
         self.browser_name.set_text("")
+        self._current_source = None
         self._set_accent(self._colours["other"])
         self._replace_rows([self._label(waiting_text(), "sp-empty", wrap=True)])
 
@@ -1191,6 +1200,38 @@ class DockView:
             return False  # a left click is the button's own "clicked"
         self._popup(menu, event)
         return True
+
+    def _on_browser_name_press(self, _box, event):
+        if event.button != 3 or self._current_source is None:
+            return False  # not a right click, or nothing single shown to colour ("All browsers")
+        conn, info = self._current_source
+        self._popup([("Set colour…", lambda: self._pick_colour(browser_theme_key(info), self._name(conn, info)))], event)
+        return True
+
+    def _pick_colour(self, key, title):
+        """A [theme] colour for `key` ("firefox", "other", ...), picked with a full colour chooser."""
+        chooser = Gtk.ColorChooserWidget()
+        chooser.set_use_alpha(False)
+        chooser.set_property("show-editor", True)
+        rgba = Gdk.RGBA()
+        rgba.parse(self._colours[key])
+        chooser.set_rgba(rgba)
+
+        def answer(accepted):
+            if not accepted:
+                return
+            picked = chooser.get_rgba()
+            value = "#{:02x}{:02x}{:02x}".format(
+                round(picked.red * 255), round(picked.green * 255), round(picked.blue * 255)
+            )
+            config.set_theme_colour(key, value)
+            self.reconfigure({**self.cfg, "theme": {**self.cfg.get("theme", {}), key: value}})
+            self._rebuild()  # reconfigure() alone only restyles what a following show() rebuilds
+            if self._current_source is not None:
+                self._set_accent(self._colours[key])
+
+        self._small_window(f"{title} colour", chooser, "Set", answer)
+        self._dialog_chooser = chooser
 
     def _popup(self, items, event):
         """A context menu (see _menu_of). The panel stays open while it is up."""

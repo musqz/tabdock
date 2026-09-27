@@ -81,6 +81,33 @@ def _theme(theme):
     return colours
 
 
+_THEME_HEADER_RE = re.compile(r"^\[theme\]\s*$", re.MULTILINE)
+
+
+def set_theme_colour(key, value, path=None):
+    """Sets `key = "value"` in the [theme] section of the config file on disk (uncommenting or adding the
+    line if needed), leaving every other line -- comments included -- untouched."""
+    path = path or config_path()
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except FileNotFoundError:
+        text = ""
+    new_line = f'{key} = "{value}"'
+    header = _THEME_HEADER_RE.search(text)
+    if header is None:
+        body = text.rstrip("\n")
+        text = f"{body}\n\n[theme]\n{new_line}\n" if body else f"[theme]\n{new_line}\n"
+    else:
+        head, body = text[: header.end()], text[header.end() :]
+        line_re = re.compile(rf'^[ \t]*#?[ \t]*{re.escape(key)}\b[ \t]*=.*$', re.MULTILINE)
+        body = line_re.sub(new_line, body, count=1) if line_re.search(body) else f"\n{new_line}{body}"
+        text = head + body
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(path + ".tmp", path)
+
+
 def load(path=None):
     """Defaults overlaid with config_path() (if present)."""
     try:

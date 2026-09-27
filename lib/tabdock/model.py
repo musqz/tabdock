@@ -201,11 +201,16 @@ def accents(theme=None):
             for key, colour in {**ACCENTS, "other": DEFAULT_ACCENT}.items()}
 
 
+def browser_theme_key(info):
+    """Which [theme] key (config.THEME_KEYS) a browser's own colour lives under, or "other" for one
+    ACCENTS does not know."""
+    name = (info.get("browser") or "").lower()
+    return next((key for key in ACCENTS if key in name), "other")
+
+
 def accent(info, colours=None):
     """Colour identifying a browser, so the active one is recognisable at a glance. `colours`: accents()."""
-    colours = colours or accents()
-    name = (info.get("browser") or "").lower()
-    return next((c for key, c in colours.items() if key != "other" and key in name), colours["other"])
+    return (colours or accents())[browser_theme_key(info)]
 
 
 def _luminance(colour):

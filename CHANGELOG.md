@@ -22,6 +22,11 @@
 - A `config.toml` that fails to parse now shows the offending line along with the TOML error, not just its
   line and column. Only the panel changed: a panel restart is enough, no new signing.
 
+- Right-click the browser's name in the header to pick its `[theme]` colour with a colour chooser, instead
+  of editing `config.toml` by hand. It applies at once and is written to the config file in place, every
+  other line (comments included) left untouched. Only the panel changed: a panel restart is enough, no new
+  signing.
+
 ## 0.4.0
 
 Sign this version's extension and install it in each browser (docs/RELEASE.md): it asks for three new
