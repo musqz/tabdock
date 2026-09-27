@@ -12,7 +12,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 from tabdock import config  # noqa: E402
 from tabdock.autohide import Autohide  # noqa: E402
 from tabdock.geometry import TRIGGER_PX, dock_rect, outer_monitor, strut  # noqa: E402
-from tabdock.model import accent, accents, ancestors, detect_browser, match_browser, on_accent, owns_window  # noqa: E402
+from tabdock.model import (  # noqa: E402
+    accent,
+    accents,
+    ancestors,
+    browser_theme_key,
+    detect_browser,
+    match_browser,
+    on_accent,
+    owns_window,
+)
 
 
 class ConfigTest(unittest.TestCase):
@@ -109,6 +118,39 @@ class ConfigTest(unittest.TestCase):
         ):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 config.validate(bad)
+
+    def test_set_theme_colour_keeps_every_other_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "c.toml")
+            with open(path, "w") as f:
+                f.write('side = "right"\n\n# comment above [theme]\n[theme]\n# accent = "#4c9aff"\nfirefox = "#111111"\n')
+            config.set_theme_colour("firefox", "#4c9aff", path)  # replaces an existing active line in place
+            config.set_theme_colour("other", "#8f9bb3", path)  # adds a key that was never there
+            with open(path) as f:
+                text = f.read()
+            self.assertIn('side = "right"\n\n# comment above [theme]\n[theme]\n', text)  # everything above kept
+            self.assertIn('# accent = "#4c9aff"', text)  # an unrelated commented line is untouched
+            self.assertIn('firefox = "#4c9aff"', text)
+            self.assertIn('other = "#8f9bb3"', text)
+            self.assertEqual(config.load(path)["theme"], {"firefox": "#4c9aff", "other": "#8f9bb3"})
+
+    def test_set_theme_colour_uncomments_an_example_and_creates_a_missing_section(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "c.toml")
+            with open(path, "w") as f:
+                f.write('side = "right"\n[theme]\n# waterfox = "#2ec4b6"\n')
+            config.set_theme_colour("waterfox", "#111111", path)
+            self.assertEqual(config.load(path)["theme"], {"waterfox": "#111111"})
+
+            path2 = os.path.join(tmp, "c2.toml")
+            with open(path2, "w") as f:
+                f.write('side = "right"\n')  # no [theme] section at all yet
+            config.set_theme_colour("floorp", "#e5b93a", path2)
+            self.assertEqual(config.load(path2)["theme"], {"floorp": "#e5b93a"})
+
+            path3 = os.path.join(tmp, "c3.toml")  # the file does not exist yet either
+            config.set_theme_colour("zen", "#9d7cd8", path3)
+            self.assertEqual(config.load(path3)["theme"], {"zen": "#9d7cd8"})
 
     def test_an_option_written_below_theme_says_where_it_belongs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -388,6 +430,12 @@ class MatchTest(unittest.TestCase):
         browsers = [name for _key, name in KNOWN_BROWSERS]
         self.assertEqual(len({accent({"browser": b}) for b in browsers}), len(browsers))
         self.assertNotIn(accent({"browser": "Floorp"}), ("#8f9bb3", accent({"browser": "Firefox"})))
+
+    def test_browser_theme_key(self):
+        self.assertEqual(browser_theme_key({"browser": "Firefox"}), "firefox")
+        self.assertEqual(browser_theme_key({"browser": "LibreWolf"}), "librewolf")
+        self.assertEqual(browser_theme_key({"browser": "Mystery"}), "other")
+        self.assertEqual(browser_theme_key({}), "other")
 
     def test_theme_colours(self):
         self.assertEqual(accents(), accents({}))

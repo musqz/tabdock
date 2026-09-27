@@ -229,6 +229,29 @@ class DockViewTest(unittest.TestCase):
         # (as GTK prints the rules back, so they were parsed): white text on a browser band in that colour too
         self.assertIn(".acc-1e3a8a.sp-bhead .sp-bandlabel {\n  color: rgb(255,255,255);", view._per_browser.to_string())
 
+    def test_right_click_on_the_header_name_sets_its_theme_colour(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        self.right_click(view.browser_name_box)
+        self.assertEqual(self.labels(view), ["Set colour…"])
+        with mock.patch("tabdock.dock.config.set_theme_colour") as set_theme_colour:
+            self.menu_items(view)["Set colour…"].activate()
+            self.assertEqual(view._dialog.get_title(), "Firefox colour")
+            rgba = Gdk.RGBA()
+            rgba.parse("#4c9aff")
+            view._dialog_chooser.set_rgba(rgba)
+            view._dialog_ok.clicked()
+        set_theme_colour.assert_called_once_with("firefox", "#4c9aff")
+        self.assertEqual(view.cfg["theme"]["firefox"], "#4c9aff")
+        self.assertIn("#4c9aff", view._css_data)  # applied at once, like a reload (see reconfigure)
+
+    def test_right_click_on_the_header_name_does_nothing_for_all_browsers(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE), (object(), {**INFO, "browser": "Zen"}, STATE)])
+        self.assertEqual(view.browser_name.get_text(), "All browsers")
+        self.right_click(view.browser_name_box)
+        self.assertIsNone(view._menu)
+
     def test_a_reload_applies_new_theme_colours(self):
         view = self.make()
         conn = object()
