@@ -114,7 +114,11 @@ from that state, self-healing like the full snapshots. The active tab can't be h
 its active tab's workspace (picking a hidden tab from "List all tabs" switches). Nothing is stored or hidden until
 a second workspace exists, and the panel offers none in Zen (its own workspaces), so neither is ever touched.
 Panel: workspace chips above the tabs (click switches, right-click renames/removes, `+` asks for a name in a small
-window that takes the keyboard, which the dock windows never do); right-click a tab to move it.
+window that takes the keyboard, which the dock windows never do); right-click a tab to move it. Each workspace can
+have an icon, a colour (the container colours) and a container for its new tabs: a new-tab-page tab in no container
+is reopened in it (a tab cannot change containers), tabs the panel opens in a given container are left alone.
+Keyboard shortcuts are the extension's `commands` (Ctrl+Alt+PageDown/PageUp, Ctrl+Alt+1…9; Ctrl+Alt+arrows are
+Openbox's desktop keys), changeable in `about:addons`.
 Firefox's native tab groups (`tabGroups`) don't hide each other, so they don't behave like Zen workspaces;
 optional display of them stays open.
 
@@ -155,7 +159,9 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
 - **M4 workspaces (done, unreleased):** exclusive, via `tabs.hide()`, verified with the real-browser test
   (`tests/e2e_firefox.py`: create, switch, move, rename, pin/unpin, last tab, remove, extension and browser
   restart, each checked against Firefox's own tab strip) and under Openbox (`tests/e2e_x11.py`: the chips, the
-  right-click menu, the name window). Still open: optional native tab-group display, keyboard shortcuts.
+  right-click menu, the name window). Since then: an icon, a colour and a container per workspace, and keyboard
+  shortcuts (also verified in real Firefox 156, the shortcuts pressed as real keys, and under Openbox). Still open:
+  optional native tab-group display.
 - **M5 more browsers (done, pulled forward):** verified with `tests/e2e_firefox.py --firefox <browser>` on
   Firefox, Zen, FireDragon (`firedragon-bin`), Waterfox (`waterfox-bin`) and LibreWolf (`librewolf`), all
   native packages. Every one reads `~/.mozilla/native-messaging-hosts`, so the single manifest from

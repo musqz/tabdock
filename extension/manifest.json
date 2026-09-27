@@ -23,5 +23,18 @@
   "background": {
     "scripts": ["background.js"],
     "persistent": true
+  },
+  "commands": {
+    "next-workspace": { "suggested_key": { "default": "Ctrl+Alt+PageDown" }, "description": "Next workspace" },
+    "previous-workspace": { "suggested_key": { "default": "Ctrl+Alt+PageUp" }, "description": "Previous workspace" },
+    "workspace-1": { "suggested_key": { "default": "Ctrl+Alt+1" }, "description": "Workspace 1" },
+    "workspace-2": { "suggested_key": { "default": "Ctrl+Alt+2" }, "description": "Workspace 2" },
+    "workspace-3": { "suggested_key": { "default": "Ctrl+Alt+3" }, "description": "Workspace 3" },
+    "workspace-4": { "suggested_key": { "default": "Ctrl+Alt+4" }, "description": "Workspace 4" },
+    "workspace-5": { "suggested_key": { "default": "Ctrl+Alt+5" }, "description": "Workspace 5" },
+    "workspace-6": { "suggested_key": { "default": "Ctrl+Alt+6" }, "description": "Workspace 6" },
+    "workspace-7": { "suggested_key": { "default": "Ctrl+Alt+7" }, "description": "Workspace 7" },
+    "workspace-8": { "suggested_key": { "default": "Ctrl+Alt+8" }, "description": "Workspace 8" },
+    "workspace-9": { "suggested_key": { "default": "Ctrl+Alt+9" }, "description": "Workspace 9" }
   }
 }

@@ -344,6 +344,22 @@ class PanelTest(unittest.TestCase):
             self.panel.on_stdin_line(junk)
         self.assertEqual(len(self.ff.sent), 5)  # malformed lines are ignored
 
+    def test_debug_console_edits_a_workspace_and_opens_a_tab_in_a_container(self):
+        spaces = [{"id": "default", "name": "Default"}, {"id": "ws-1", "name": "Work"}]
+        self.panel.on_message(self.ff, {**state(TAB), "workspaces": spaces})
+        for line in ("wsicon ws-1 💼", "wscolor ws-1 blue", "wscontainer ws-1 firefox-container-1", "wsicon ws-1",
+                     "newtab firefox-default"):
+            self.panel.on_stdin_line(line)
+        edit = {"type": "edit_workspace", "workspaceId": "ws-1"}
+        self.assertEqual(self.ff.sent, [
+            {**edit, "icon": "💼"}, {**edit, "color": "blue"}, {**edit, "cookieStoreId": "firefox-container-1"},
+            {**edit, "icon": None},  # without a value: none
+            {"type": "new_tab", "cookieStoreId": "firefox-default", "windowId": 1},
+        ])
+        for junk in ("wsicon", "wscolor ws-1 blue green", "newtab", "newtab a b"):
+            self.panel.on_stdin_line(junk)
+        self.assertEqual(len(self.ff.sent), 5)  # malformed lines are ignored
+
     def test_debug_console_offers_no_workspaces_in_zen_or_without_them(self):
         self.panel.on_stdin_line("wsnew Work")  # this extension sent no workspaces
         self.panel.follow(ZEN_XID)

@@ -54,6 +54,21 @@ class ManifestTest(unittest.TestCase):
         for size, rel in self.manifest["icons"].items():
             self.assertEqual(png_size(os.path.join(EXT, rel)), (int(size), int(size)), rel)
 
+    def test_workspace_shortcuts_are_changeable_keys_that_do_not_collide(self):
+        commands = self.manifest["commands"]
+        self.assertEqual(list(commands), ["next-workspace", "previous-workspace", *(f"workspace-{n}" for n in range(1, 10))])
+        keys = [c["suggested_key"]["default"] for c in commands.values()]
+        self.assertEqual(len(set(keys)), len(keys))
+        for key in keys:
+            # Ctrl+Alt+arrows switch desktops in Openbox's default rc.xml, so they would never reach the browser
+            self.assertTrue(key.startswith("Ctrl+Alt+"), key)
+            self.assertNotIn(key.split("+")[-1], ("Left", "Right", "Up", "Down"))
+        self.assertTrue(all(c["description"] for c in commands.values()))  # what about:addons lists them by
+        background = read(os.path.join(EXT, "background.js"))
+        self.assertIn('/^workspace-([1-9])$/', background)  # the names the extension answers to
+        self.assertIn('"next-workspace"', background)
+        self.assertIn('"previous-workspace"', background)
+
     def test_background_script_exists(self):
         for rel in self.manifest["background"]["scripts"]:
             self.assertTrue(os.path.isfile(os.path.join(EXT, rel)), rel)

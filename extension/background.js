@@ -51,7 +51,12 @@ function serial(fn) {
 const WS_KEY = "workspace"; // the session value on tabs and windows
 const DEFAULT_WS = { id: "default", name: "Default" };
 const NAME_MAX = 64;
-let workspaces = null; // [{id, name}] once in use; null: never used in this profile
+const ICON_MAX = 8; // characters: one emoji, even a composed one (a flag, a family), or a few letters
+const COLORS = ["blue", "turquoise", "green", "yellow", "orange", "red", "pink", "purple", "toolbar"]; // as containers
+// The new-tab page: a tab opened on it in no container (Ctrl+T, the tab strip's +) is what a workspace's own
+// container takes over. Links, restored pages and tabs in a container keep the container they came with.
+const NEW_TAB_URLS = ["about:newtab", "about:home"];
+let workspaces = null; // [{id, name, icon?, color?, cookieStoreId?}] once in use; null: never used in this profile
 const tabWs = new Map(); // tabId -> workspace id (the session values, cached)
 const winWs = new Map(); // windowId -> the workspace it shows
 let lastWs = null; // what the window focused last shows: a new window starts there
@@ -62,6 +67,26 @@ function known(id) {
 
 function cleanName(name) {
   return typeof name === "string" ? name.trim().slice(0, NAME_MAX) : "";
+}
+
+function cleanIcon(icon) {
+  return typeof icon === "string" ? [...icon.trim()].slice(0, ICON_MAX).join("") : "";
+}
+
+function workspaceOf(id) {
+  return workspaces === null ? null : workspaces.find((w) => w.id === id) || null;
+}
+
+// The container a workspace opens its new tabs in, while it still exists (null: none).
+async function containerOf(id) {
+  const store = (workspaceOf(id) || {}).cookieStoreId;
+  if (!store) return null;
+  try {
+    await browser.contextualIdentities.get(store);
+    return store;
+  } catch (e) {
+    return null; // removed since (forgetContainer drops it for good)
+  }
 }
 
 async function loadWorkspaces() {
@@ -180,12 +205,26 @@ async function focusWorkspace(windowId, id) {
     if (target === null || tab.lastAccessed > target.lastAccessed) target = tab;
   }
   if (target === null) {
-    const tab = await browser.tabs.create({ windowId, active: true });
+    const tab = await newTab(windowId, id);
     await assign(tab.id, id);
     return;
   }
   if (target.hidden) await browser.tabs.show(target.id);
   await browser.tabs.update(target.id, { active: true });
+}
+
+// A new, active tab for workspace `id`, in its container if it has one (and the window can hold one: a
+// private window cannot).
+async function newTab(windowId, id) {
+  const store = await containerOf(id);
+  if (store !== null) {
+    try {
+      return await browser.tabs.create({ windowId, active: true, cookieStoreId: store });
+    } catch (e) {
+      // a private window
+    }
+  }
+  return browser.tabs.create({ windowId, active: true });
 }
 
 async function switchWorkspace(windowId, id) {
@@ -223,6 +262,37 @@ async function renameWorkspace(id, name) {
   await saveWorkspaces();
 }
 
+// Its icon, colour and container, each only when `change` names it; an empty or unknown value clears it.
+async function editWorkspace(id, change) {
+  if (!(id === DEFAULT_WS.id || known(id))) return;
+  await startUsing();
+  const ws = workspaceOf(id);
+  if (!ws) return;
+  const set = (key, value) => {
+    if (value) ws[key] = value;
+    else delete ws[key];
+  };
+  if ("icon" in change) set("icon", cleanIcon(change.icon));
+  if ("color" in change) set("color", COLORS.includes(change.color) ? change.color : "");
+  if ("cookieStoreId" in change) {
+    let store = typeof change.cookieStoreId === "string" ? change.cookieStoreId : "";
+    try {
+      if (store) await browser.contextualIdentities.get(store);
+    } catch (e) {
+      store = ""; // not a container (any more)
+    }
+    set("cookieStoreId", store);
+  }
+  await saveWorkspaces();
+}
+
+// A container was removed: the workspaces that opened their new tabs in it open them in none again.
+async function forgetContainer(store) {
+  if (workspaces === null || !workspaces.some((w) => w.cookieStoreId === store)) return;
+  for (const ws of workspaces) if (ws.cookieStoreId === store) delete ws.cookieStoreId;
+  await saveWorkspaces();
+}
+
 // Nothing is closed: the tabs of a removed workspace, and the windows that showed it, go to its
 // neighbour in the list. The last workspace stays.
 async function removeWorkspace(id) {
@@ -250,6 +320,23 @@ async function moveToWorkspace(tabId, id) {
   await reconcile(tab.windowId);
 }
 
+// The keyboard shortcuts (manifest "commands", changeable in about:addons): the next or previous workspace,
+// round the list, or the Nth.
+async function onShortcut(name) {
+  if (workspaces === null) return; // one workspace: nowhere to go
+  const windowId = (await browser.windows.getLastFocused()).id;
+  const shown = await windowWs(windowId);
+  const at = workspaces.findIndex((w) => w.id === shown);
+  const count = workspaces.length;
+  const nth = /^workspace-([1-9])$/.exec(name);
+  let to;
+  if (name === "next-workspace") to = (at + 1) % count;
+  else if (name === "previous-workspace") to = (at - 1 + count) % count;
+  else if (nth) to = Number(nth[1]) - 1;
+  if (to === undefined || to >= count || to === at) return;
+  await switchWorkspace(windowId, workspaces[to].id);
+}
+
 // A tab left the window (closed, or dragged to another window). If it was the last one of the
 // workspace the window shows, the browser has to pick one from another workspace: keep this one
 // instead, with a new tab.
@@ -266,13 +353,43 @@ async function tabLeft(windowId) {
 }
 
 async function onTabCreated(tab) {
-  if (workspaces === null) return;
-  await tabWsOf(tab);
+  if (workspaces === null) {
+    explicit.delete(tab.id);
+    return;
+  }
+  const id = await tabWsOf(tab);
+  if (await intoContainer(tab, id)) return;
   await reconcile(tab.windowId); // a tab reopened into another workspace (undo close) goes back there
+}
+
+// Tabs the panel opened in a container it was asked for ("No container" included): never taken over.
+const explicit = new Set();
+
+// A new tab on the new-tab page in no container, in a workspace with a container of its own, is reopened in
+// that container, where the workspace opens its tabs (a tab cannot change its container). True if it was.
+async function intoContainer(tab, id) {
+  if (explicit.delete(tab.id) || tab.incognito || tab.pinned || tab.cookieStoreId !== "firefox-default") return false;
+  if (!NEW_TAB_URLS.includes(tab.url)) return false;
+  const store = await containerOf(id);
+  if (store === null) return false;
+  let fresh;
+  try {
+    fresh = await browser.tabs.create({ windowId: tab.windowId, index: tab.index, active: tab.active, cookieStoreId: store });
+  } catch (e) {
+    return false;
+  }
+  await assign(fresh.id, id);
+  try {
+    await browser.tabs.remove(tab.id);
+  } catch (e) {
+    // closed meanwhile
+  }
+  return true;
 }
 
 async function onTabRemoved(tabId, info) {
   tabWs.delete(tabId);
+  explicit.delete(tabId);
   if (!info.isWindowClosing) await tabLeft(info.windowId);
 }
 
@@ -315,7 +432,13 @@ async function snapshot() {
       colorCode: c.colorCode,
       icon: c.icon,
     })),
-    workspaces: list.map((w) => ({ id: w.id, name: w.name })),
+    workspaces: list.map((w) => ({
+      id: w.id,
+      name: w.name,
+      icon: w.icon || null,
+      color: w.color || null,
+      cookieStoreId: w.cookieStoreId || null,
+    })),
     windows: windows.map((w) => {
       const shown = winWs.get(w.id) || list[0].id;
       return {
@@ -390,7 +513,8 @@ async function onCommand(msg) {
         await browser.windows.update(msg.windowId, { focused: true });
         break;
       case "new_tab":
-        await browser.tabs.create({ cookieStoreId: msg.cookieStoreId, windowId: msg.windowId });
+        // in the container asked for, even "No container" in a workspace that has one of its own
+        explicit.add((await browser.tabs.create({ cookieStoreId: msg.cookieStoreId, windowId: msg.windowId })).id);
         break;
       case "switch_workspace":
         if (Number.isInteger(msg.windowId)) await switchWorkspace(msg.windowId, msg.workspaceId);
@@ -402,6 +526,10 @@ async function onCommand(msg) {
         break;
       case "rename_workspace":
         await renameWorkspace(msg.workspaceId, msg.name);
+        push();
+        break;
+      case "edit_workspace":
+        await editWorkspace(msg.workspaceId, msg);
         push();
         break;
       case "remove_workspace":
@@ -477,8 +605,11 @@ browser.windows.onFocusChanged.addListener((id) => {
 if (browser.contextualIdentities) {
   browser.contextualIdentities.onCreated.addListener(push);
   browser.contextualIdentities.onUpdated.addListener(push);
-  browser.contextualIdentities.onRemoved.addListener(push);
+  browser.contextualIdentities.onRemoved.addListener((info) =>
+    track(() => forgetContainer(info.contextualIdentity.cookieStoreId)),
+  );
 }
+browser.commands.onCommand.addListener((name) => track(() => onShortcut(name)));
 
 serial(loadWorkspaces).catch((e) => console.error("tabdock: loading workspaces failed", e));
 connect();

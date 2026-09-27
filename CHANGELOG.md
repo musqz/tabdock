@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Workspaces, more like Zen's: each can have an **icon** and a **colour** (right-click its chip: *Icon* offers a
+  few and *Other…* takes any emoji; *Colour* the colours containers have), shown on its chip; a **container for
+  its new tabs** (*New tabs in*): while it shows, a new tab (Ctrl+T, the tab strip's `+`) opens in that container.
+  Firefox cannot move a tab into a container, so the extension reopens the new tab there at once. Links keep
+  their page's container, the panel's own `+` on a container section opens exactly there, and a removed
+  container is simply cleared. And **keyboard shortcuts**: Ctrl+Alt+PageDown / PageUp for the next / previous
+  workspace, Ctrl+Alt+1 … 9 for the Nth, changeable in `about:addons` → *Manage Extension Shortcuts* (not
+  Ctrl+Alt+arrows, which Openbox's default configuration uses to switch desktops). The extension changed, with
+  no new permission, so this is part of the next signed extension (docs/RELEASE.md); with the current one the
+  panel offers only rename and remove, as before. Tested in real Firefox 156 (`tests/e2e_firefox.py`: icon and
+  colour kept across a browser restart, Ctrl+T reopened in the workspace's container, the panel's no-container
+  tab left alone, a removed container cleared, an empty workspace's new tab in its container, and the shortcuts
+  pressed as real keys) and under a real Openbox (`tests/e2e_x11.py`: the colour picked in the chip's submenu
+  by keyboard while the browser keeps the focus, then drawn under the chip).
+
 - Workspaces, Zen-style: each browser window shows one workspace, and the tabs of the others are hidden, in
   Firefox's own tab strip too (`tabs.hide`). Chips above the tabs switch (back to the tab you used last there),
   `+` makes a new one (a small window asks for its name: the dock never takes the keyboard, that window does),

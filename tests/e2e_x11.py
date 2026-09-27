@@ -10,8 +10,8 @@ Checks: dock type + strip geometry, no strut while autohiding, hover expand/coll
 a tab reaches the browser without stealing focus, the strip colour follows the active browser,
 raising the browser when clicking while another app is active, dragging to reorder, the chips
 and the all-browsers list (folding, raising the right browser), workspaces (switch, the right-click
-menu, naming a new one in a window that takes the keyboard), pin -> strut, side switch, and
-follow=hide.
+menu, naming a new one in a window that takes the keyboard, a colour from the chip's submenu), pin ->
+strut, side switch, and follow=hide.
 
     python3 tests/e2e_x11.py [--shots DIR]
 """
@@ -462,9 +462,10 @@ def main():
             return wait_for(lambda: next((r for r in of_kind("workspace") if r["group"] == name), None), f"chip {name}")
 
         in_work = ("ws-1", "ws-1", "default", "ws-1")  # tabs 1-4: Work shows 1, 2 and 4; Default has 3
-        ff.send({**ff.state, "workspaces": [{"id": "default", "name": "Default"}, {"id": "ws-1", "name": "Work"}],
-                 "windows": [{**ff.state["windows"][0], "workspaceId": "ws-1", "tabs": [
-                     {**t, "workspaceId": ws} for t, ws in zip(ff.state["windows"][0]["tabs"], in_work)]}]})
+        ws_state = {**ff.state, "workspaces": [{"id": "default", "name": "Default"}, {"id": "ws-1", "name": "Work"}],
+                    "windows": [{**ff.state["windows"][0], "workspaceId": "ws-1", "tabs": [
+                        {**t, "workspaceId": ws} for t, ws in zip(ff.state["windows"][0]["tabs"], in_work)]}]}
+        ff.send(ws_state)
         run("xdotool", "windowactivate", "--sync", str(ff_win))
         expand()
         wait_for(lambda: count("workspace") == 3 and count("tab") == 3, "chips Default, Work and +, and Work's 3 tabs")
@@ -495,6 +496,31 @@ def main():
         assert received(ff, "new_workspace") == [{"type": "new_workspace", "windowId": 1, "name": "Deep work"}]
         wait_for(lambda: int(run("xdotool", "getactivewindow").stdout) == ff_win, "the keyboard back in the browser")
         ok("workspaces: + asks for a name in a window of its own, then gives the keyboard back to the browser")
+
+        spaces = [{"id": "default", "name": "Default", "icon": None, "color": None, "cookieStoreId": None},
+                  {"id": "ws-1", "name": "Work", "icon": None, "color": None, "cookieStoreId": None}]
+        ff.send({**ws_state, "workspaces": spaces})  # an extension that keeps an icon, colour and container
+        wait_for(lambda: int(run("xdotool", "getactivewindow").stdout) == ff_win, "the browser active")
+        expand()
+        chip = workspace_chip("Work")
+        run("xdotool", "mousemove", str(chip["x"] + chip["w"] // 2), str(chip["y"] + chip["h"] // 2))
+        time.sleep(0.3)
+        run("xdotool", "click", "3")
+        time.sleep(0.6)
+        assert panel_mapped(), "the panel closed under the chip's menu"
+        screenshot(os.path.join(shots, "workspace-chip-menu.png"))
+        # Rename…, Icon, Colour: into its submenu, past None, to Blue
+        run("xdotool", "key", "Down", "Down", "Down", "Right", "Down", "Return")
+        edits = received(ff, "edit_workspace")
+        assert edits == [{"type": "edit_workspace", "workspaceId": "ws-1", "color": "blue"}], edits
+        assert int(run("xdotool", "getactivewindow").stdout) == ff_win, "the menu took the focus from the browser"
+        ff.send({**ws_state, "workspaces": [spaces[0], {**spaces[1], "icon": "💼", "color": "blue"}]})
+        chip = workspace_chip("💼 Work")
+        time.sleep(0.3)
+        screenshot(os.path.join(shots, "workspace-chip-colour.png"))
+        bottom = [pixel(chip["x"] + chip["w"] // 2, chip["y"] + chip["h"] - dy, shots) for dy in (1, 2, 3)]
+        assert "37ADFF" in bottom, f"no blue bar under the chip of the workspace shown: {bottom}"
+        ok("workspaces: a colour picked in the chip's submenu (the browser keeps the keyboard), worn with its icon")
         ff.send(ff.state)  # the browser without workspaces again, for the steps below
         collapse()
 
