@@ -26,11 +26,21 @@ class PkgbuildTest(unittest.TestCase):
         self.pkgdir = os.path.join(tmp.name, "pkg")
         os.makedirs(self.srcdir)
 
-    def sources(self, version=VERSION, signed=True):
-        """What makepkg leaves in $srcdir: the unpacked tag tarball (this checkout) and the release .xpi."""
+    def sources(self, version=VERSION, signed=True, stale=False):
+        """What makepkg leaves in $srcdir: the unpacked tag tarball (this checkout) and the release .xpi,
+        built by packaging/build-extension.sh and "signed" by adding Mozilla's signature file to it."""
         os.symlink(ROOT, os.path.join(self.srcdir, f"tabdock-{version}"))
-        with zipfile.ZipFile(os.path.join(self.srcdir, f"tabdock-{version}.xpi"), "w") as z:
-            z.writestr("manifest.json", "{}")
+        built = os.path.join(self.srcdir, "built")
+        subprocess.run([os.path.join(ROOT, "packaging", "build-extension.sh")], env={**os.environ, "OUT_DIR": built},
+                       check=True, capture_output=True)
+        [name] = os.listdir(built)
+        with zipfile.ZipFile(os.path.join(built, name)) as unsigned, \
+                zipfile.ZipFile(os.path.join(self.srcdir, f"tabdock-{version}.xpi"), "w") as z:
+            for item in unsigned.namelist():
+                data = unsigned.read(item)
+                if stale and item == "background.js":
+                    data += b"\n// signed from older code\n"
+                z.writestr(item, data)
             if signed:
                 z.writestr("META-INF/mozilla.rsa", "signature")
 
@@ -54,6 +64,14 @@ class PkgbuildTest(unittest.TestCase):
         done = self.run_function("prepare")
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("not signed", done.stderr)
+
+    def test_prepare_refuses_an_extension_signed_from_other_code(self):
+        # 0.3.0 was signed before the new-tab button reached background.js; its .xpi must not ship with 0.3.0's sources
+        self.sources(stale=True)
+        done = self.run_function("prepare")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("differs from extension/", done.stderr)
+        self.assertIn("background.js", done.stderr)
 
     def test_prepare_refuses_sources_whose_version_differs(self):
         self.sources(version="9.9.9")

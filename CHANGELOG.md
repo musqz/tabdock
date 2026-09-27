@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
+
+- The extension signed as 0.3.0 was signed before the `+` new-tab button reached the extension, so in the browser
+  that button did nothing. 0.3.1 is the same extension with it, under a new version number because Mozilla signs
+  each version only once: sign and install it in each browser (docs/RELEASE.md). From now on the Arch package
+  refuses a signed extension that differs from the extension in its own sources.
 
 - An Arch package: `packaging/PKGBUILD` builds a release from its `v<version>` tag and installs it system-wide
   (`/usr/share/tabdock`, `/usr/bin/sidepanel`, the menu entry, and the native-messaging manifest in

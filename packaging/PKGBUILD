@@ -5,7 +5,7 @@
 # once per version (docs/RELEASE.md, "Releasing a version") and installed to
 # /usr/share/tabdock/tabdock.xpi for every user.
 pkgname=tabdock
-pkgver=0.3.0
+pkgver=0.3.1
 pkgrel=1
 pkgdesc="Autohiding X11 side panel with the tabs and containers of Firefox-family browsers"
 arch=('any')
@@ -28,12 +28,22 @@ prepare() {
         echo "VERSION in the v$pkgver sources says $version" >&2
         return 1
     fi
-    # the same test as packaging/sign-extension.sh: Mozilla's signature is inside the file
-    python3 -c 'import sys, zipfile; sys.exit("META-INF/mozilla.rsa" not in zipfile.ZipFile(sys.argv[1]).namelist())' \
-        "$srcdir/$pkgname-$pkgver.xpi" || {
-        echo "$pkgname-$pkgver.xpi from the release is not signed by Mozilla" >&2
-        return 1
-    }
+    # the release's .xpi must be this version's extension, signed: Mozilla's signature inside (the same
+    # test as packaging/sign-extension.sh) and every other file identical to extension/ in these sources
+    python3 - "$srcdir/$pkgname-$pkgver.xpi" extension <<'EOF' || return 1
+import os, sys, zipfile
+xpi, src = sys.argv[1:3]
+name = os.path.basename(xpi)
+with zipfile.ZipFile(xpi) as z:
+    files = [n for n in z.namelist() if not n.endswith("/")]
+    if "META-INF/mozilla.rsa" not in files:
+        sys.exit(f"{name} from the release is not signed by Mozilla")
+    differ = [n for n in files if not n.startswith("META-INF/")
+              and (not os.path.isfile(os.path.join(src, n)) or z.read(n) != open(os.path.join(src, n), "rb").read())]
+if differ:
+    sys.exit(f"{name} from the release differs from extension/ in these sources ({', '.join(differ)}): it was "
+             "signed from other code. Sign this version's extension (a version already signed needs a new one).")
+EOF
 }
 
 package() {
