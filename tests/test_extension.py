@@ -39,7 +39,9 @@ class ManifestTest(unittest.TestCase):
     def test_permissions_stay_minimal(self):
         self.assertEqual(
             sorted(self.manifest["permissions"]),
-            ["contextualIdentities", "cookies", "nativeMessaging", "storage", "tabs"],  # storage: the container order
+            # storage: the container order and the workspaces; tabHide: a workspace hides the others' tabs;
+            # sessions: which workspace a tab is in, and which one a window shows, across browser restarts
+            ["contextualIdentities", "cookies", "nativeMessaging", "sessions", "storage", "tabHide", "tabs"],
         )
 
     def test_amo_requirements(self):

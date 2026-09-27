@@ -19,7 +19,7 @@
       "strict_min_version": "142.0"
     }
   },
-  "permissions": ["tabs", "cookies", "contextualIdentities", "nativeMessaging", "storage"],
+  "permissions": ["tabs", "cookies", "contextualIdentities", "nativeMessaging", "storage", "tabHide", "sessions"],
   "background": {
     "scripts": ["background.js"],
     "persistent": true

@@ -104,13 +104,19 @@ before or after the browser; the extension reconnects with backoff.
 - Click tab -> `activate_tab` + raise/focus the browser window (extension `windows.update`
   `focused:true`; fallback `wmctrl -ia <xid>` if Openbox declines focus).
 
-### Workspaces (M4, after the container panel works)
-Firefox has no native workspaces. Recommended: exclusive workspaces implemented in the extension with
-`tabs.hide()`. Each workspace is a named set of tabs (state in `storage.local`, tab membership via
-`sessions.setTabValue`); switching hides the others and restores the last active tab. Firefox's native
-tab groups (`tabGroups` API, `tabs.group()`, permission `tabGroups`) exist and can be shown as
-sub-sections; they don't hide other groups, so they don't behave like Zen workspaces. Check the exact
-minimum version on Firefox 156 during M4.
+### Workspaces (M4, as built)
+Firefox has no native workspaces, so they are exclusive workspaces in the extension with `tabs.hide()`
+(permissions `tabHide`, `sessions`). The list lives in `storage.local`; which workspace a tab is in and which one a
+window shows live in the session (`sessions.setTabValue` / `setWindowValue`), so they survive restarts although
+ids change. Each window shows one workspace; switching activates its tab used last and hides the others. All
+workspace bookkeeping runs one event at a time (a promise queue), and one `reconcile(window)` hides and shows
+from that state, self-healing like the full snapshots. The active tab can't be hidden, so a window always shows
+its active tab's workspace (picking a hidden tab from "List all tabs" switches). Nothing is stored or hidden until
+a second workspace exists, and the panel offers none in Zen (its own workspaces), so neither is ever touched.
+Panel: workspace chips above the tabs (click switches, right-click renames/removes, `+` asks for a name in a small
+window that takes the keyboard, which the dock windows never do); right-click a tab to move it.
+Firefox's native tab groups (`tabGroups`) don't hide each other, so they don't behave like Zen workspaces;
+optional display of them stays open.
 
 ## Repo layout (agreed before commit 1, per global CLAUDE.md)
 
@@ -146,7 +152,10 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
   (`tabs.create({cookieStoreId})`). Still open: close, pin, container create/rename/recolor/
   delete from the panel, "reopen in container" (Firefox cannot change a tab's container, so it reopens the
   tab and loses its history), search box.
-- **M4 workspaces** via `tabs.hide()`; optional native tab-group display.
+- **M4 workspaces (done, unreleased):** exclusive, via `tabs.hide()`, verified with the real-browser test
+  (`tests/e2e_firefox.py`: create, switch, move, rename, pin/unpin, last tab, remove, extension and browser
+  restart, each checked against Firefox's own tab strip) and under Openbox (`tests/e2e_x11.py`: the chips, the
+  right-click menu, the name window). Still open: optional native tab-group display, keyboard shortcuts.
 - **M5 more browsers (done, pulled forward):** verified with `tests/e2e_firefox.py --firefox <browser>` on
   Firefox, Zen, FireDragon (`firedragon-bin`), Waterfox (`waterfox-bin`) and LibreWolf (`librewolf`), all
   native packages. Every one reads `~/.mozilla/native-messaging-hosts`, so the single manifest from
@@ -167,6 +176,11 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
    maximised window. Keep the strip at 3 px and prefer outer monitor edges (see Context).
 5. **Firefox still shows its own tab strip:** the panel replaces it visually only if the user hides the
    strip (userChrome.css snippet documented in `docs/`; not shipped as an install step).
+6. **Closing a workspace's last tab closes the window:** Firefox ignores hidden tabs when deciding whether a tab
+   is the window's last (`Tabbrowser.#isLastTabInWindow`), so with `browser.tabs.closeWindowWithLastTab = true`
+   (the default) the window goes, and the other workspaces' tabs with it (restorable from recently closed
+   windows). An extension can't read or change that pref or stop the close; the README asks workspace users to
+   set it to `false`, and Firefox then leaves a new tab in the workspace.
 
 ## Verification
 

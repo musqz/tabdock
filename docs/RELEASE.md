@@ -68,15 +68,19 @@ AMO rejects a version number it has already signed, so bump `VERSION` and `exten
 for every new signature (a test checks they agree).
 
 What the permissions are for: `nativeMessaging` (talk to the local helper), `tabs` (list, activate and move
-tabs), `contextualIdentities` and `cookies` (list containers; Firefox requires `cookies` for that API), and
-`storage` (remember the order you gave your container sections, per browser profile). The manifest declares
-that no data is collected, and nothing leaves your computer.
+tabs), `contextualIdentities` and `cookies` (list containers; Firefox requires `cookies` for that API),
+`storage` (remember the order you gave your container sections and your workspaces, per browser profile),
+`tabHide` (a workspace hides the other workspaces' tabs) and `sessions` (remember, across browser restarts,
+which workspace each tab is in and which one each window shows). The manifest declares that no data is
+collected, and nothing leaves your computer.
 
-**A new version needs a new signature.** Version 0.3.0 added the `storage` permission and the reorder
-commands, so it must be signed again (the same command as above, and Mozilla rejects a version number it has
-already signed) and installed in each browser over the old one. Firefox may ask you to approve the new
-permission when it updates. Until then the old extension keeps working, but dragging in the panel does
-nothing in the browser.
+**A new version needs a new signature.** Workspaces (after 0.3.1) add the `tabHide` and `sessions`
+permissions and the workspace commands, so the next version needs a new signing and Firefox asks you to
+approve the two permissions when you install it; until then the panel works as before, without workspaces.
+Version 0.3.0 added the `storage` permission and the reorder commands, so it must be signed again (the
+same command as above, and Mozilla rejects a version number it has already signed) and installed in each
+browser over the old one. Firefox may ask you to approve the new permission when it updates. Until then
+the old extension keeps working, but dragging in the panel does nothing in the browser.
 
 *Optional, later:* the **listed** channel publishes it on addons.mozilla.org: a manual review, then
 automatic updates for everyone. It is desktop-only (uncheck Android) and the description must explain that
@@ -141,12 +145,17 @@ checks this), the tag is `v` + `VERSION`, and the package refuses sources whose 
 2. Sign the extension from that `main`: `packaging/sign-extension.sh`. Sign last, after every change to
    `extension/`: the signed file must match the tagged sources exactly (the PKGBUILD checks this), and a
    version, once signed, cannot be signed again, so a later change to `extension/` needs a new version.
-3. Tag the release commit and push the tag:
+3. Tag `main` once the bump is merged, and push the tag. Take the version from `VERSION` rather than typing
+   it: tagging before the bump is merged then asks for the previous version's tag, which already exists, so
+   `git tag` refuses instead of tagging sources that still say the old version (v0.3.1 was first tagged
+   that way, one merge too early).
 
    ```bash
-   git tag -a v0.3.1 -m "tabdock 0.3.1" && git push origin v0.3.1
+   git switch main && git pull && v=$(<VERSION)
+   git tag -a "v$v" -m "tabdock $v" && git push origin "v$v"
    ```
 4. On GitHub, **Releases -> Draft a new release**, pick the tag, and attach the signed file from
-   `web-ext-artifacts/`, renamed to `tabdock-0.3.1.xpi` (the PKGBUILD downloads it by that name).
+   `web-ext-artifacts/`, renamed to `tabdock-0.3.1.xpi` (the PKGBUILD downloads it by that name, so a
+   release without it cannot be packaged).
 5. In `packaging/PKGBUILD` set `pkgver` (and `pkgrel=1`), run `updpkgsums`, then `makepkg -si` to try it.
    For the AUR, also `makepkg --printsrcinfo > .SRCINFO`.

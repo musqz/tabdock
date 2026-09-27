@@ -9,8 +9,9 @@ xdotool, xprop, xwininfo and ImageMagick (`magick`).
 Checks: dock type + strip geometry, no strut while autohiding, hover expand/collapse, click on
 a tab reaches the browser without stealing focus, the strip colour follows the active browser,
 raising the browser when clicking while another app is active, dragging to reorder, the chips
-and the all-browsers list (folding, raising the right browser), pin -> strut, side switch,
-and follow=hide.
+and the all-browsers list (folding, raising the right browser), workspaces (switch, the right-click
+menu, naming a new one in a window that takes the keyboard), pin -> strut, side switch, and
+follow=hide.
 
     python3 tests/e2e_x11.py [--shots DIR]
 """
@@ -113,7 +114,7 @@ class FakeExtension:
         self.sock.setblocking(False)
         self.buf = b""
         self.send({"type": "hello", "browser": browser, "version": "1", "browserPid": pid})
-        self.send(
+        self.state = (
             {
                 "type": "state",
                 "focusedWindowId": 1,
@@ -134,6 +135,7 @@ class FakeExtension:
                 ],
             }
         )
+        self.send(self.state)
 
     def send(self, obj):
         self.sock.sendall(json.dumps(obj).encode() + b"\n")
@@ -246,14 +248,26 @@ def main():
         ok("hover expands to the configured width (no strut), leaving collapses it")
 
         # -- clicking a tab reaches the browser; focus is not stolen from it -------------------
+        def layout():
+            with open(layout_dump) as f:
+                return {(r["kind"], r["id"]): r for r in json.load(f)}
+
+        def settled_layout():
+            """The row positions once the expanded panel has been laid out (header taller than nothing)."""
+            try:
+                rows = layout()
+                return rows if rows[("section", "firefox-default")]["y"] > 10 else None
+            except (OSError, ValueError, KeyError):
+                return None
+
         def click_a_tab():
-            for y in range(70, 260, 8):
-                run("xdotool", "mousemove", "120", str(y), "click", "1")
-                time.sleep(0.15)
-                got = [m for m in ff.received() if m.get("type") == "activate_tab"]
-                if got:
-                    return got
-            return []
+            # where the rows really are (the layout dump), not a guess that depends on fonts and theme
+            tab = wait_for(settled_layout, "row positions of the expanded panel")[("tab", 3)]
+            run("xdotool", "mousemove", str(tab["x"] + 60), str(int(tab["y"] + tab["h"] / 2)))
+            time.sleep(0.3)  # like a hand: a tooltip from a row passed over goes away before the click
+            run("xdotool", "click", "1")
+            time.sleep(0.4)
+            return [m for m in ff.received() if m.get("type") == "activate_tab"]
 
         expand()
         got = click_a_tab()
@@ -275,18 +289,6 @@ def main():
         collapse()
 
         # -- reordering with a real pointer: drag container sections and tabs -------------------------
-        def layout():
-            with open(layout_dump) as f:
-                return {(r["kind"], r["id"]): r for r in json.load(f)}
-
-        def settled_layout():
-            """The row positions once the expanded panel has been laid out (header taller than nothing)."""
-            try:
-                rows = layout()
-                return rows if rows[("section", "firefox-default")]["y"] > 10 else None
-            except (OSError, ValueError, KeyError):
-                return None
-
         def messages(kind):
             time.sleep(0.4)
             return [m for m in ff.received() if m.get("type") == kind]
@@ -450,6 +452,50 @@ def main():
         write_cfg(side="left", width=WIDTH)
         wait_for(lambda: count("browser") == 0, "back to the browser in use")
         libre_proc.terminate()
+        collapse()
+
+        # -- workspaces: a chip switches, a right click moves a tab, "+" asks for a name ------------------
+        def active_name():
+            return run("xdotool", "getactivewindow", "getwindowname").stdout.strip()
+
+        def workspace_chip(name):
+            return wait_for(lambda: next((r for r in of_kind("workspace") if r["group"] == name), None), f"chip {name}")
+
+        in_work = ("ws-1", "ws-1", "default", "ws-1")  # tabs 1-4: Work shows 1, 2 and 4; Default has 3
+        ff.send({**ff.state, "workspaces": [{"id": "default", "name": "Default"}, {"id": "ws-1", "name": "Work"}],
+                 "windows": [{**ff.state["windows"][0], "workspaceId": "ws-1", "tabs": [
+                     {**t, "workspaceId": ws} for t, ws in zip(ff.state["windows"][0]["tabs"], in_work)]}]})
+        run("xdotool", "windowactivate", "--sync", str(ff_win))
+        expand()
+        wait_for(lambda: count("workspace") == 3 and count("tab") == 3, "chips Default, Work and +, and Work's 3 tabs")
+        screenshot(os.path.join(shots, "workspaces.png"))
+        ff.received()
+        click_row(workspace_chip("Default"))
+        assert received(ff, "switch_workspace") == [{"type": "switch_workspace", "windowId": 1, "workspaceId": "default"}]
+        ok("workspaces: chips above the tabs, only the shown workspace's tabs listed, a click switches")
+
+        row = next(r for r in of_kind("tab") if r["id"] == 2)
+        run("xdotool", "mousemove", str(row["x"] + 60), str(row["y"] + row["h"] // 2))
+        time.sleep(0.3)
+        run("xdotool", "click", "3")
+        time.sleep(0.6)  # longer than the close delay: the menu keeps the panel open
+        assert panel_mapped(), "the panel closed under its own menu"
+        screenshot(os.path.join(shots, "workspace-menu.png"))
+        run("xdotool", "key", "Down", "Return")  # the menu has the keyboard: its first (only) item
+        moved = received(ff, "move_tab_to_workspace")
+        assert moved == [{"type": "move_tab_to_workspace", "tabId": 2, "workspaceId": "default"}], moved
+        assert int(run("xdotool", "getactivewindow").stdout) == ff_win, "the menu took the focus from the browser"
+        ok("workspaces: a right click on a tab offers the other workspace and moves it there")
+
+        click_row(workspace_chip("+"))
+        wait_for(lambda: active_name() == "New workspace", "the name window, with the keyboard")
+        screenshot(os.path.join(shots, "workspace-name.png"))
+        run("xdotool", "type", "--delay", "30", "Deep work")  # the proposed name is selected: typing replaces it
+        run("xdotool", "key", "Return")
+        assert received(ff, "new_workspace") == [{"type": "new_workspace", "windowId": 1, "name": "Deep work"}]
+        wait_for(lambda: int(run("xdotool", "getactivewindow").stdout) == ff_win, "the keyboard back in the browser")
+        ok("workspaces: + asks for a name in a window of its own, then gives the keyboard back to the browser")
+        ff.send(ff.state)  # the browser without workspaces again, for the steps below
         collapse()
 
         # -- pin -> strut on the outer edge; unpin removes it -----------------------------------

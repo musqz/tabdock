@@ -11,7 +11,16 @@ from gi.repository import Gio, GioUnix, GLib, GLibUnix  # noqa: E402
 
 from . import config  # noqa: E402
 from .ipc import Server  # noqa: E402
-from .model import accent, choice_labels, detect_browser, match_browser, owns_window, window_of_tab  # noqa: E402
+from .model import (  # noqa: E402
+    accent,
+    choice_labels,
+    detect_browser,
+    focused_window,
+    match_browser,
+    offers_workspaces,
+    owns_window,
+    window_of_tab,
+)
 from .ui import ConsoleView  # noqa: E402
 
 
@@ -126,18 +135,38 @@ class Panel:
 
     def on_stdin_line(self, line):
         """--debug console, to drive the reverse path without a GUI:
-        'activate <tabId>', 'move <tabId> <index>', 'order <cookieStoreId>,<cookieStoreId>,...'."""
+        'activate <tabId>', 'move <tabId> <index>', 'order <cookieStoreId>,<cookieStoreId>,...', and for
+        workspaces (the focused window's; ids as the console prints them, in braces) 'ws <id>',
+        'wsnew <name>', 'wsrename <id> <name>', 'wsrm <id>', 'wsmove <tabId> <id>'."""
         parts = line.split()
         if not parts or self.current not in self.states:
             return
+        state = self.states[self.current]
         if len(parts) == 2 and parts[0] == "activate" and parts[1].isdigit():
-            window_id = window_of_tab(self.states[self.current], int(parts[1]))
+            window_id = window_of_tab(state, int(parts[1]))
             if window_id is not None:
                 self.activate_tab(self.current, int(parts[1]), window_id)
         elif len(parts) == 3 and parts[0] == "move" and parts[1].isdigit() and parts[2].isdigit():
             self.command(self.current, {"type": "move_tab", "tabId": int(parts[1]), "index": int(parts[2])})
         elif len(parts) == 2 and parts[0] == "order":
             self.command(self.current, {"type": "set_container_order", "order": parts[1].split(",")})
+        elif parts[0].startswith("ws") and offers_workspaces(self.browsers[self.current], state):
+            self._workspace_line(line, focused_window(state))
+
+    def _workspace_line(self, line, window):
+        verb, _, rest = line.strip().partition(" ")
+        args = rest.split()
+        if verb == "ws" and len(args) == 1 and window:
+            self.command(self.current, {"type": "switch_workspace", "windowId": window["id"], "workspaceId": args[0]})
+        elif verb == "wsnew" and window:
+            self.command(self.current, {"type": "new_workspace", "windowId": window["id"], "name": rest.strip()})
+        elif verb == "wsrename" and len(args) >= 2:
+            ws_id, name = rest.split(None, 1)
+            self.command(self.current, {"type": "rename_workspace", "workspaceId": ws_id, "name": name.strip()})
+        elif verb == "wsrm" and len(args) == 1:
+            self.command(self.current, {"type": "remove_workspace", "workspaceId": args[0]})
+        elif verb == "wsmove" and len(args) == 2 and args[0].isdigit():
+            self.command(self.current, {"type": "move_tab_to_workspace", "tabId": int(args[0]), "workspaceId": args[1]})
 
     def _shown(self):
         """The browsers to list: all of them, the one chosen, or the one in use. Only those that have
