@@ -6,7 +6,8 @@ untouched. It exercises what ships: install.sh puts the program into the scratch
 panel runs from that installed copy; packaging/build-extension.sh builds the .xpi, which is
 installed as a temporary add-on through Marionette. Then, against a real `tabdock --debug`:
   browser -> panel : tabs appear, new tabs show up, panel restart triggers a resync
-  panel -> browser : `activate <id>` switches the active tab, tabs move, containers reorder
+  panel -> browser : `activate <id>` switches the active tab, tabs move, containers reorder, a tab is
+                     pinned, unpinned and closed
   workspaces       : create, switch, move a tab, rename, close a workspace's last tab, remove, and an
                      extension restart, each checked against the browser's own tab strip too
                      (skipped in Zen, which has workspaces of its own); an icon and a colour, a container
@@ -337,6 +338,21 @@ def main():
         eventually(lambda: section_order(last_snapshot(out.text)) == wanted, f"the container order {wanted}")
         print(f"OK set_container_order: {by_id[last_id]} now precedes {by_id[first_id]}, stored by the extension")
 
+        home_handle = m.call("WebDriver:GetWindowHandle")["value"]
+        handle = m.call("WebDriver:NewWindow", {"type": "tab", "focus": False})["handle"]
+        m.call("WebDriver:SwitchToWindow", {"handle": handle})
+        m.call("WebDriver:Navigate", {"url": "data:text/html,<title>pin-me</title>"})
+        m.call("WebDriver:SwitchToWindow", {"handle": home_handle})  # (the tab to close must not be Marionette's)
+        eventually(lambda: "pin-me" in listed(last_snapshot(out.text)), "pin-me listed")
+        pin_me = listed(last_snapshot(out.text))["pin-me"][0]
+        say(panel, f"pin {pin_me}")
+        eventually(lambda: m.strip()["pin-me"][1], "pin-me pinned in the browser")
+        say(panel, f"unpin {pin_me}")
+        eventually(lambda: not m.strip()["pin-me"][1], "pin-me unpinned")
+        say(panel, f"close {pin_me}")
+        eventually(lambda: "pin-me" not in m.strip() and "pin-me" not in listed(last_snapshot(out.text)), "pin-me gone")
+        print("OK pin_tab, close_tab: the panel pins, unpins and closes a tab in the browser")
+
         panel.terminate()
         panel.wait(timeout=TIMEOUT)
         panel, out = start_panel(env)
@@ -440,6 +456,18 @@ def check_workspaces(m, panel, out, restart):
     eventually(lambda: m.visible() == ["New Tab"], "only Scratch's new tab visible in the browser")
     eventually(lambda: section_tabs(snap()).get(store) == ["New Tab"], "that new tab in Scratch's container")
     print("OK closing a workspace's last tab keeps the workspace, with a new tab (in its container, if it has one)")
+
+    # Firefox's default: closing a window's last visible tab closes the window, the hidden tabs with it
+    m.chrome('Services.prefs.setBoolPref("browser.tabs.closeWindowWithLastTab", true)')
+    hidden = sorted(title for title, is_hidden, _p, _s in m.tab_rows() if is_hidden)
+    only = next(iter(listed(snap()).values()))[0]
+    say(panel, f"close {only}")
+    eventually(lambda: len(listed(snap())) == 1 and next(iter(listed(snap()).values()))[0] != only,
+               "Scratch's tab closed by the panel, and a new one in its place")
+    assert sorted(title for title, is_hidden, _p, _s in m.tab_rows() if is_hidden) == hidden, "the window kept its tabs"
+    assert shown_workspace(snap()) == ("Scratch", scratch), shown_workspace(snap())
+    m.chrome('Services.prefs.setBoolPref("browser.tabs.closeWindowWithLastTab", false)')
+    print("OK closing a workspace's only tab from the panel keeps the window, whatever closeWindowWithLastTab says")
 
     say(panel, f"wsrm {scratch}")
     eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "its neighbour shown after the removal")

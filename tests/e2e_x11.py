@@ -8,7 +8,8 @@ xdotool, xprop, xwininfo and ImageMagick (`magick`).
 
 Checks: dock type + strip geometry, no strut while autohiding, hover expand/collapse, click on
 a tab reaches the browser without stealing focus, the strip colour follows the active browser,
-raising the browser when clicking while another app is active, dragging to reorder, the chips
+raising the browser when clicking while another app is active, dragging to reorder, closing a tab
+(its ✕, a middle click), the chips
 and the all-browsers list (folding, raising the right browser), workspaces (switch, the right-click
 menu, naming a new one in a window that takes the keyboard, a colour from the chip's submenu), pin ->
 strut, side switch, and follow=hide.
@@ -98,6 +99,14 @@ def has_strut(wid):
 
 def screenshot(path):
     run("magick", "import", "-display", DISPLAY, "-window", "root", path)
+
+
+def colours(x, y, w, h, shots):
+    """The distinct colours (hex) in a rectangle of the screen."""
+    png = os.path.join(shots, "probe.png")
+    screenshot(png)
+    out = run("magick", png, "-crop", f"{w}x{h}+{x}+{y}", "+repage", "-unique-colors", "-depth", "8", "txt:-").stdout
+    return {c.upper() for c in re.findall(r"#([0-9A-Fa-f]{6})", out)}
 
 
 def pixel(x, y, shots):
@@ -349,6 +358,33 @@ def main():
         got = messages("activate_tab")
         assert got and got[-1]["tabId"] == 3, got
         ok("a plain click still activates a tab after all the dragging")
+
+        # closing a tab: the ✕ a hovered tab shows, and a middle click, as in the browser's tab strip
+        rows = wait_for(settled_layout, "row positions with the close buttons")
+        tab, cross = rows[("tab", 3)], rows[("close", 2)]
+        run("xdotool", "mousemove", str(tab["x"] + 60), str(int(tab["y"] + tab["h"] / 2)))
+        time.sleep(0.4)
+        screenshot(os.path.join(shots, "row-hover.png"))
+        assert pixel(tab["x"] + 8, tab["y"] + 2, shots) == "2A2E38", "the tab under the pointer is not highlighted"
+        other, mine = rows[("close", 2)], rows[("close", 3)]
+        assert colours(other["x"], other["y"], other["w"], other["h"], shots) == {"1B1D23"}, "another tab's ✕ shows"
+        assert len(colours(mine["x"], mine["y"], mine["w"], mine["h"], shots)) > 1, "no ✕ on the hovered tab"
+        run("xdotool", "mousemove", str(cross["x"] + cross["w"] // 2), str(cross["y"] + cross["h"] // 2))
+        time.sleep(0.3)
+        screenshot(os.path.join(shots, "close-hover.png"))
+        run("xdotool", "click", "1")
+        time.sleep(0.4)
+        got = ff.received()
+        assert [m for m in got if m["type"] == "close_tab"] == [{"type": "close_tab", "tabId": 2}], got
+        assert not [m for m in got if m["type"] == "activate_tab"], "the ✕ also activated the tab"
+        tab = rows[("tab", 3)]
+        run("xdotool", "mousemove", str(tab["x"] + 60), str(int(tab["y"] + tab["h"] / 2)))
+        time.sleep(0.3)
+        run("xdotool", "click", "2")
+        got = messages("close_tab")
+        assert got == [{"type": "close_tab", "tabId": 3}], got
+        assert int(run("xdotool", "getactivewindow").stdout) == ff_win, "closing took the focus from the browser"
+        ok("close: the ✕ of a hovered tab and a middle click send close_tab, and the browser keeps the focus")
         collapse()
 
         # -- several browsers: chips choose what is listed, "all" gives each browser a foldable section -----
@@ -482,7 +518,7 @@ def main():
         time.sleep(0.6)  # longer than the close delay: the menu keeps the panel open
         assert panel_mapped(), "the panel closed under its own menu"
         screenshot(os.path.join(shots, "workspace-menu.png"))
-        run("xdotool", "key", "Down", "Return")  # the menu has the keyboard: its first (only) item
+        run("xdotool", "key", "Down", "Down", "Return")  # the menu has the keyboard: past "Pin tab" to the move
         moved = received(ff, "move_tab_to_workspace")
         assert moved == [{"type": "move_tab_to_workspace", "tabId": 2, "workspaceId": "default"}], moved
         assert int(run("xdotool", "getactivewindow").stdout) == ff_win, "the menu took the focus from the browser"

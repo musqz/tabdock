@@ -86,6 +86,10 @@ button.sp-btn.sp-chip.selected {{ background-color: {accent}; border-color: {acc
 button.sp-btn.sp-ws {{ border-radius: 4px; padding: 1px 8px; }}
 button.sp-btn.sp-ws:hover {{ background-color: #2a2e38; color: #ffffff; }}
 button.sp-btn.sp-ws.selected {{ background-color: #2f3542; color: #fff; font-weight: bold; box-shadow: inset 0 -2px 0 0 {accent}; }}
+.sp-pinmark {{ font-size: 0.8em; }}
+button.sp-btn.sp-close {{ opacity: 0; padding: 0 4px; }}
+.sp-row:hover button.sp-btn.sp-close {{ opacity: 1; }}
+button.sp-btn.sp-close:hover {{ color: #ff6b6b; }}
 """
 
 
@@ -177,6 +181,8 @@ class DockView:
         self._choices = ()  # (conn, label, colour) of the chips built
         self._chip_buttons = []  # (key, button)
         self._ws_buttons = []  # (conn, workspace id or None for "+", button) of the rows built last
+        self._close_buttons = []  # (tab id, its ✕ button) of the rows built last
+        self._middle = None  # the row a middle button went down on: releasing it there closes that tab
         self._holds = set()  # why the panel must stay open whatever the pointer does: "drag", "menu", "name"
         self._menu = None  # the context menu up (kept referenced while it is shown)
         self._dialog = None  # the window asking for a workspace name, while it is up
@@ -567,7 +573,10 @@ class DockView:
         box = Gtk.EventBox()
         box.add_events(
             Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.BUTTON1_MOTION_MASK
+            | Gdk.EventMask.ENTER_NOTIFY_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK
         )
+        box.connect("enter-notify-event", self._on_row_enter)
+        box.connect("leave-notify-event", self._on_row_leave)
         box.connect("button-press-event", self._on_press)
         box.connect("motion-notify-event", self._on_motion)
         box.connect("button-release-event", self._on_release)
@@ -582,6 +591,21 @@ class DockView:
         }
         self._row_order.append(box)
         return box
+
+    # -- hovering rows ---------------------------------------------------------------
+
+    # An EventBox never marks itself hovered (a GtkButton does, for itself), so a row's :hover style, and the ✕ a
+    # hovered tab shows, need it set here. Moving onto the row's own ✕ is still being on the row.
+    @staticmethod
+    def _on_row_enter(box, _event):
+        box.set_state_flags(Gtk.StateFlags.PRELIGHT, False)
+        return False
+
+    @staticmethod
+    def _on_row_leave(box, event):
+        if event.detail != Gdk.NotifyType.INFERIOR:
+            box.unset_state_flags(Gtk.StateFlags.PRELIGHT)
+        return False
 
     # -- pressing, clicking and dragging rows ---------------------------------------
 
@@ -605,6 +629,9 @@ class DockView:
         if event.button == 1 and box in self._meta:
             self._press = {"box": box, "x": event.x_root, "y": event.y_root, "t": time.monotonic(),
                            "dragging": False, "target": None, "after": False}
+        elif event.button == 2 and self._meta.get(box, {}).get("kind") == "tab":
+            self._middle = box  # closed on release, as in the browser's tab strip
+            return True
         elif event.button == 3 and self._meta.get(box, {}).get("menu"):
             self._popup(self._meta[box]["menu"], event)
             return True
@@ -624,6 +651,11 @@ class DockView:
         return True
 
     def _on_release(self, box, event):
+        if event.button == 2:
+            middle, self._middle = self._middle, None
+            if middle is box and box in self._meta:  # released on the row it went down on
+                self._close_tab(self._meta[box]["conn"], self._meta[box]["id"])
+            return middle is not None
         p = self._press
         if event.button != 1 or p is None or p["box"] is not box:
             return False  # another button, or not our press: a button-1 press in progress carries on
@@ -761,6 +793,7 @@ class DockView:
         if self.chips.get_visible():
             rows += [spot(button, "chip", button.get_label()) for _key, button in self._chip_buttons]
         rows += [spot(button, "workspace", ws_id, button.get_label()) for _conn, ws_id, button in self._ws_buttons]
+        rows += [spot(button, "close", tab_id) for tab_id, button in self._close_buttons]
         with open(path + ".tmp", "w") as f:
             json.dump(rows, f)
         os.replace(path + ".tmp", path)
@@ -791,6 +824,7 @@ class DockView:
         self._redraw = False
         self._meta, self._row_order = {}, []
         self._ws_buttons = []
+        self._close_buttons = []
         self._waiting = {}  # the old rows are about to go: only the rows built below wait for an icon
         many = len(self.sources) > 1
         rows = []
@@ -879,10 +913,13 @@ class DockView:
         self._rebuild()
 
     def _tab_row(self, tab, window_id, group, conn, colour, spaces=()):
+        """A tab: its site icon (optional), the title, an unread badge, a pin if pinned, and a ✕ that shows while
+        the row is hovered. Middle-click closes it too; right-click pins, moves (to another workspace) or closes."""
         label = self._label(tab_label(tab), "sp-tab")
         label.set_tooltip_text("\n".join(filter(None, (tab.get("title"), tab.get("url")))))
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         box.get_style_context().add_class("sp-tabbox")
+        pinned = bool(tab.get("pinned"))
         if self.cfg["icons"]:
             image = Gtk.Image()
             image.set_size_request(favicons.ICON_PX, favicons.ICON_PX)  # the room is kept until the icon arrives
@@ -894,17 +931,32 @@ class DockView:
             badge_label = self._label(badge, "sp-badge")
             badge_label.set_tooltip_text(f"{badge} unread, from the tab's title")
             box.pack_start(badge_label, False, False, 0)
-        menu = None
-        if len(spaces) > 1 and not tab.get("pinned"):  # (a pinned tab shows in every workspace)
-            menu = [
+        if pinned:  # after the title, so every title starts in the same place
+            mark = self._label("📌", "sp-pinmark")
+            mark.set_tooltip_text("Pinned: shows in every workspace" if len(spaces) > 1 else "Pinned")
+            box.pack_start(mark, False, False, 0)
+        close = self._button("✕", "Close tab (or middle-click it)", Gtk.Button)
+        close.get_style_context().add_class("sp-close")
+        close.connect("clicked", lambda _b: self._close_tab(conn, tab["id"]))
+        box.pack_end(close, False, False, 0)
+        self._close_buttons.append((tab["id"], close))
+        menu = [("Unpin tab" if pinned else "Pin tab",
+                 lambda: self._command(conn, {"type": "pin_tab", "tabId": tab["id"], "pinned": not pinned}))]
+        if len(spaces) > 1 and not pinned:  # (a pinned tab shows in every workspace)
+            menu.append((None, None))
+            menu += [
                 (f"Move to {workspace_label(ws)}", lambda ws_id=ws["id"]: self._command(
                     conn, {"type": "move_tab_to_workspace", "tabId": tab["id"], "workspaceId": ws_id}))
                 for ws in spaces if ws["id"] != tab.get("workspaceId")
             ]
+        menu += [(None, None), ("Close tab", lambda: self._close_tab(conn, tab["id"]))]
         return self._row(
             box, "tab", tab["id"], group, conn, colour, lambda: self.on_activate(conn, tab["id"], window_id),
-            active=bool(tab.get("active")), pinned=bool(tab.get("pinned")), menu=menu,
+            active=bool(tab.get("active")), pinned=pinned, menu=menu,
         )
+
+    def _close_tab(self, conn, tab_id):
+        self._command(conn, {"type": "close_tab", "tabId": tab_id})
 
     # -- workspaces ------------------------------------------------------------------------
 
@@ -1015,9 +1067,13 @@ class DockView:
 
     def _menu_of(self, items):
         """A menu of (label, action) or (label, action, chosen) items. An action is a callable, a list of items
-        (a submenu), or None (shown greyed out); `chosen` marks the current choice among a submenu's items."""
+        (a submenu), or None (shown greyed out); `chosen` marks the current choice among a submenu's items. A
+        None label is a separator."""
         menu = Gtk.Menu()
         for label, action, *chosen in items:
+            if label is None:
+                menu.append(Gtk.SeparatorMenuItem())
+                continue
             if chosen:
                 item = Gtk.CheckMenuItem(label=label)
                 item.set_draw_as_radio(True)

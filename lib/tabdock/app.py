@@ -139,8 +139,8 @@ class Panel:
     def on_stdin_line(self, line):
         """--debug console, to drive the reverse path without a GUI:
         'activate <tabId>', 'move <tabId> <index>', 'order <cookieStoreId>,<cookieStoreId>,...',
-        'newtab <cookieStoreId>' (the "+" of a container section), and for
-        workspaces (the focused window's; ids as the console prints them, in braces) 'ws <id>',
+        'newtab <cookieStoreId>' (the "+" of a container section), 'close <tabId>', 'pin <tabId>',
+        'unpin <tabId>', and for workspaces (the focused window's; ids as the console prints them, in braces) 'ws <id>',
         'wsnew <name>', 'wsrename <id> <name>', 'wsrm <id>', 'wsmove <tabId> <id>', and 'wsicon <id> [icon]',
         'wscolor <id> [colour]', 'wscontainer <id> [cookieStoreId]' (without the last word: none)."""
         parts = line.split()
@@ -155,6 +155,10 @@ class Panel:
             self.command(self.current, {"type": "move_tab", "tabId": int(parts[1]), "index": int(parts[2])})
         elif len(parts) == 2 and parts[0] == "order":
             self.command(self.current, {"type": "set_container_order", "order": parts[1].split(",")})
+        elif len(parts) == 2 and parts[0] == "close" and parts[1].isdigit():
+            self.command(self.current, {"type": "close_tab", "tabId": int(parts[1])})
+        elif len(parts) == 2 and parts[0] in ("pin", "unpin") and parts[1].isdigit():
+            self.command(self.current, {"type": "pin_tab", "tabId": int(parts[1]), "pinned": parts[0] == "pin"})
         elif len(parts) == 2 and parts[0] == "newtab" and focused_window(state):
             self.command(self.current, {"type": "new_tab", "cookieStoreId": parts[1], "windowId": focused_window(state)["id"]})
         elif parts[0].startswith("ws") and offers_workspaces(self.browsers[self.current], state):

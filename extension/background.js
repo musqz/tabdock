@@ -320,6 +320,22 @@ async function moveToWorkspace(tabId, id) {
   await reconcile(tab.windowId);
 }
 
+// Close a tab the panel was asked to close. While workspaces are in use, never the window with it: when the
+// tab is the only one the window shows, the rest are other workspaces' hidden tabs, and Firefox would close the
+// window and all of those with it (browser.tabs.closeWindowWithLastTab). The workspace gets a new tab first.
+async function closeTab(tabId) {
+  const tab = await getTab(tabId);
+  if (tab === null) return;
+  if (workspaces !== null && !tab.hidden) {
+    const tabs = await browser.tabs.query({ windowId: tab.windowId });
+    if (tabs.some((t) => t.hidden) && tabs.every((t) => t.id === tab.id || t.hidden)) {
+      const shown = await windowWs(tab.windowId);
+      await assign((await newTab(tab.windowId, shown)).id, shown);
+    }
+  }
+  await browser.tabs.remove(tabId);
+}
+
 // The keyboard shortcuts (manifest "commands", changeable in about:addons): the next or previous workspace,
 // round the list, or the Nth.
 async function onShortcut(name) {
@@ -511,6 +527,13 @@ async function onCommand(msg) {
       case "activate_tab":
         await browser.tabs.update(msg.tabId, { active: true });
         await browser.windows.update(msg.windowId, { focused: true });
+        break;
+      case "close_tab":
+        if (Number.isInteger(msg.tabId)) await closeTab(msg.tabId);
+        break;
+      case "pin_tab":
+        // tabs.onUpdated reports it; an unpinned tab joins the workspace its window shows
+        if (Number.isInteger(msg.tabId)) await browser.tabs.update(msg.tabId, { pinned: msg.pinned === true });
         break;
       case "new_tab":
         // in the container asked for, even "No container" in a workspace that has one of its own

@@ -360,6 +360,15 @@ class PanelTest(unittest.TestCase):
             self.panel.on_stdin_line(junk)
         self.assertEqual(len(self.ff.sent), 5)  # malformed lines are ignored
 
+    def test_debug_console_closes_pins_and_unpins(self):
+        for line in ("close 7", "pin 7", "unpin 7", "close x", "pin", "unpin 7 8"):
+            self.panel.on_stdin_line(line)
+        self.assertEqual(self.ff.sent, [
+            {"type": "close_tab", "tabId": 7},
+            {"type": "pin_tab", "tabId": 7, "pinned": True},
+            {"type": "pin_tab", "tabId": 7, "pinned": False},
+        ])  # (the malformed lines are ignored)
+
     def test_debug_console_offers_no_workspaces_in_zen_or_without_them(self):
         self.panel.on_stdin_line("wsnew Work")  # this extension sent no workspaces
         self.panel.follow(ZEN_XID)

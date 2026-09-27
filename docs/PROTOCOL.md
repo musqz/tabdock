@@ -45,6 +45,8 @@ offers no workspaces in Zen (it has its own) or from an older extension (no `wor
 | `resync`       | (none) | sent by the relay on panel connect; extension replies `hello` + `state` and starts pushing snapshots |
 | `panel_disconnected` | (none) | sent by the relay when the panel goes away; extension stops pushing snapshots until the next `resync` |
 | `activate_tab` | `tabId`, `windowId` | activates the tab and focuses its window |
+| `close_tab` | `tabId` | closes the tab (`tabs.remove`). With workspaces in use, when it is the only tab its window shows (every other one hidden), the window's workspace gets a new tab first, so Firefox does not close the window and the other workspaces' tabs with it (`browser.tabs.closeWindowWithLastTab`) |
+| `pin_tab` | `tabId`, `pinned` | pins (`true`) or unpins the tab; a pinned tab shows in every workspace, an unpinned one joins the workspace its window shows |
 | `move_tab` | `tabId`, `index` | `tabs.move`: `index` is the tab's final position in its window (it leaves its old place first, so moving forward lands one earlier than the target's index); the resulting `tabs.onMoved` triggers a new `state` |
 | `set_container_order` | `order[]` (cookieStoreIds) | stores the order of the panel's container sections and pushes a new `state`; the panel also shows it at once without waiting |
 | `new_tab` | `cookieStoreId`, `windowId` | `tabs.create` in that container and window (the `+` on a container section), even "No container" in a workspace with a container of its own; the resulting `tabs.onCreated` triggers a new `state` |
@@ -65,4 +67,4 @@ like `switch_workspace`, with no message from the panel. A tab dragged to anothe
 window joins that window's workspace, and an unpinned tab the workspace it was unpinned in. A new window shows
 the workspace of the window focused before it.
 
-Later milestones add `close_tab`, `pin_tab`, `focus_window` and `container_*`.
+Later milestones add `focus_window` and `container_*`.

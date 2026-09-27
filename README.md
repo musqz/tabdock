@@ -6,8 +6,8 @@ FireDragon, Waterfox, LibreWolf; native installs, no Chromium/Blink, no Flatpak/
 sidebar (containers, workspaces, autohide) everywhere.
 
 Status: **0.3.1, installable.** Autohiding dock on the left/right edge, real install, signed extension,
-autostart, drag to reorder, new tab per container. Since 0.3.1, not yet released: Zen-style workspaces (they need
-the next signed extension). The rest of two-way editing (close, pin, edit containers) is next — see
+autostart, drag to reorder, new tab per container. Since 0.3.1, not yet released: Zen-style workspaces, and
+closing and pinning tabs from the panel (they need the next signed extension). Editing containers is next — see
 [docs/PLAN.md](docs/PLAN.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ```
@@ -21,6 +21,9 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/tabdock-nmhost  
 - **Open:** the header names the active browser; below it, one collapsible section per container
   (colour, icon, name, tab count) with its tabs, site icons optional (see Site icons). Click a tab to
   activate it.
+- **Close and pin:** a hovered tab shows a `✕`; middle-click closes a tab too, as in the browser's tab strip.
+  Right-click a tab to pin or unpin it, or close it. Pinned tabs wear a 📌. With workspaces in use, closing a
+  workspace's only tab from the panel leaves the window open (see Workspaces).
 - **Drag to reorder:** container sections and tabs within their own container. Order is remembered per
   browser profile (Firefox can't reorder containers itself). "No container" always stays first.
 - **Workspaces:** chips above the tabs; each browser window shows one workspace and the others' tabs are
@@ -138,7 +141,8 @@ workspace with `+`: until then no tab is ever hidden, and your existing tabs bec
 - Firefox tells you once that an extension is hiding tabs, and still lists hidden tabs under "List all
   tabs" (the `⌄` at the end of the tab strip). Picking one from there switches to its workspace.
 
-**Set `browser.tabs.closeWindowWithLastTab` to `false`** in `about:config` if you use workspaces. Firefox
+**Set `browser.tabs.closeWindowWithLastTab` to `false`** in `about:config` if you use workspaces. (Closing a tab
+from the panel is always safe: when it is the only one the window shows, the workspace gets a new tab first.) Firefox
 does not count hidden tabs when it decides whether a tab is the window's last: with the default `true`,
 closing the last tab of a workspace closes the whole window, and the other workspaces' tabs with it (they
 come back with History → Recently Closed Windows, or Restore Previous Session if it was the last window). With

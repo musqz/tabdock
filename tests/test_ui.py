@@ -517,7 +517,9 @@ class DockViewTest(unittest.TestCase):
         return next(c for c in box.get_children() if isinstance(c, Gtk.Image))
 
     def tab_widgets(self, view, tab_id):
-        return [type(c) for c in self.row(view, "tab", tab_id).get_child().get_children()]
+        """What a tab row shows, left to right, apart from the ✕ every row ends with (see its own tests)."""
+        return [type(c) for c in self.row(view, "tab", tab_id).get_child().get_children()
+                if not c.get_style_context().has_class("sp-close")]
 
     def has_icon(self, view, *tab_ids):
         return all(self.tab_image(view, i).get_pixbuf() is not None for i in tab_ids)
@@ -574,7 +576,7 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(self.tab_widgets(view, 10), [Gtk.Label, Gtk.Label])
         row = self.row(view, "tab", 10).get_child()
         self.assertEqual(label_of(row).get_text(), "plain")
-        self.assertEqual(row.get_children()[-1].get_text(), "3")
+        self.assertEqual(row.get_children()[-2].get_text(), "3")  # last before the ✕
 
     def test_an_icon_and_a_badge_together_keep_the_title_first_among_labels(self):
         view = self.make(icons=True)
@@ -585,7 +587,7 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(self.tab_widgets(view, 10), [Gtk.Image, Gtk.Label, Gtk.Label])
         row = self.row(view, "tab", 10).get_child()
         self.assertEqual(label_of(row).get_text(), "plain")
-        self.assertEqual(row.get_children()[-1].get_text(), "3")
+        self.assertEqual(row.get_children()[-2].get_text(), "3")  # last before the ✕
 
     def test_a_tab_without_an_unread_count_has_no_badge(self):
         view = self.make()
@@ -1201,17 +1203,20 @@ class DockViewTest(unittest.TestCase):
         conn = object()
         view.show([(conn, INFO, self.WS_STATE)])
         self.right_click(self.row(view, "tab", 2))
-        self.assertEqual(list(self.menu_items(view)), ["Move to Default", "Move to Play"])  # not where it is
+        self.assertEqual([label for label in self.menu_items(view) if label.startswith("Move")],
+                         ["Move to Default", "Move to Play"])  # not where it is
         self.menu_items(view)["Move to Play"].activate()
         self.assertEqual(self.commands, [{"type": "move_tab_to_workspace", "tabId": 2, "workspaceId": "ws-2"}])
         self.assertEqual(self.activated, [])  # a right click is not a click
 
     def test_a_pinned_tab_or_a_single_workspace_offers_no_move(self):
         view = self.make()
+        moves = lambda tab_id: [label for label, _action in view._meta[self.row(view, "tab", tab_id)]["menu"]  # noqa: E731
+                                if label and label.startswith("Move")]
         view.show([(object(), INFO, self.WS_STATE)])
-        self.assertIsNone(view._meta[self.row(view, "tab", 3)]["menu"])  # pinned: in every workspace already
+        self.assertEqual(moves(3), [])  # pinned: in every workspace already
         view.show([(object(), INFO, {**STATE, "workspaces": [{"id": "default", "name": "Default"}]})])
-        self.assertIsNone(view._meta[self.row(view, "tab", 10)]["menu"])
+        self.assertEqual(moves(10), [])
 
     def test_the_menu_lets_go_of_the_panel_when_it_closes(self):
         view = self.make()
@@ -1256,6 +1261,89 @@ class DockViewTest(unittest.TestCase):
                 rows = json.load(f)
         self.assertEqual([(r["id"], r["group"]) for r in rows if r["kind"] == "workspace"],
                          [("default", "Default"), ("ws-1", "Work"), ("ws-2", "Play"), (None, "+")])
+        self.assertEqual([r["id"] for r in rows if r["kind"] == "close"], [2, 3])  # each listed tab's ✕
+
+    # -- closing and pinning tabs --------------------------------------------------------------------
+
+    def close_button(self, view, tab_id):
+        return next(b for i, b in view._close_buttons if i == tab_id)
+
+    def test_every_tab_has_a_close_button_that_shows_on_hover(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, STATE)])
+        close = self.close_button(view, 10)
+        self.assertTrue(close.get_style_context().has_class("sp-close"))  # (hidden until the row is hovered)
+        self.assertIn(close, self.row(view, "tab", 10).get_child().get_children())
+        close.clicked()
+        self.assertEqual(self.commands, [{"type": "close_tab", "tabId": 10}])
+        self.assertEqual(self.command_conns, [conn])
+        self.assertEqual(self.activated, [])  # closing is not also a click on the tab
+
+    def test_a_row_is_hovered_while_the_pointer_is_on_it_or_on_its_close_button(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        row = self.row(view, "tab", 10)
+        hovered = lambda: bool(row.get_state_flags() & Gtk.StateFlags.PRELIGHT)  # noqa: E731
+
+        def crossing(kind, signal, detail):
+            event = Gdk.Event.new(kind)
+            event.detail = detail
+            row.emit(signal, event)
+
+        self.assertFalse(hovered())
+        crossing(Gdk.EventType.ENTER_NOTIFY, "enter-notify-event", Gdk.NotifyType.NONLINEAR)
+        self.assertTrue(hovered())  # what shows its hover background and its ✕
+        crossing(Gdk.EventType.LEAVE_NOTIFY, "leave-notify-event", Gdk.NotifyType.INFERIOR)
+        self.assertTrue(hovered())  # onto the ✕, which is inside the row
+        crossing(Gdk.EventType.LEAVE_NOTIFY, "leave-notify-event", Gdk.NotifyType.NONLINEAR)
+        self.assertFalse(hovered())
+
+    def test_a_middle_click_closes_the_tab_it_was_released_on(self):
+        view = self.make()
+        view.show([(object(), INFO, DRAG_STATE)])
+        middle = lambda widget, kind, signal: button(widget, kind, signal, which=2)  # noqa: E731
+        row = self.row(view, "tab", 1)
+        middle(row, Gdk.EventType.BUTTON_PRESS, "button-press-event")
+        middle(row, Gdk.EventType.BUTTON_RELEASE, "button-release-event")
+        self.assertEqual(self.commands, [{"type": "close_tab", "tabId": 1}])
+        middle(row, Gdk.EventType.BUTTON_PRESS, "button-press-event")
+        middle(self.row(view, "tab", 2), Gdk.EventType.BUTTON_RELEASE, "button-release-event")  # moved off it
+        self.assertEqual(len(self.commands), 1)  # as in the browser: let go elsewhere and nothing closes
+        self.assertEqual(self.activated, [])
+        middle(self.row(view, "section", "firefox-default"), Gdk.EventType.BUTTON_PRESS, "button-press-event")
+        middle(self.row(view, "section", "firefox-default"), Gdk.EventType.BUTTON_RELEASE, "button-release-event")
+        self.assertEqual(len(self.commands), 1)  # only tabs close
+
+    def test_right_click_on_a_tab_pins_or_unpins_and_closes_it(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        self.right_click(self.row(view, "tab", 2))
+        labels = [item.get_label() for item in view._menu.get_children()]
+        self.assertEqual([labels[0], labels[-1]], ["Pin tab", "Close tab"])  # pin first, close last, as Firefox
+        self.assertEqual(sum(isinstance(i, Gtk.SeparatorMenuItem) for i in view._menu.get_children()), 2)
+        self.menu_items(view)["Pin tab"].activate()
+        self.right_click(self.row(view, "tab", 3))  # pinned
+        self.menu_items(view)["Unpin tab"].activate()
+        self.menu_items(view)["Close tab"].activate()
+        self.assertEqual(self.commands, [
+            {"type": "pin_tab", "tabId": 2, "pinned": True},
+            {"type": "pin_tab", "tabId": 3, "pinned": False},
+            {"type": "close_tab", "tabId": 3},
+        ])
+
+    def test_a_pinned_tab_wears_a_pin(self):
+        view = self.make()
+        pin = lambda tab_id: next((c for c in self.row(view, "tab", tab_id).get_child().get_children()  # noqa: E731
+                                   if c.get_style_context().has_class("sp-pinmark")), None)
+        view.show([(object(), INFO, self.WS_STATE)])
+        self.assertEqual(pin(3).get_text(), "📌")
+        self.assertEqual(pin(3).get_tooltip_text(), "Pinned: shows in every workspace")
+        self.assertIsNone(pin(2))
+        one = {**self.WS_STATE, "workspaces": [{"id": "default", "name": "Default"}]}
+        view.show([(object(), INFO, one)])
+        self.assertEqual(pin(3).get_tooltip_text(), "Pinned")
+        self.assertEqual(label_of(self.row(view, "tab", 3).get_child()).get_text(), "music")  # the title stays the title
 
     def test_quitting_closes_the_name_window(self):
         view = self.make()
