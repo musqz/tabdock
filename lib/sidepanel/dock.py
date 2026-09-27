@@ -38,6 +38,7 @@ from .model import (  # noqa: E402
     tab_badge,
     tab_label,
     tab_move_index,
+    waiting_text,
 )
 
 CSS = """
@@ -274,7 +275,7 @@ class DockView:
         self._set_chips(mode, choices)
         self.browser_name.set_text("")
         self._set_accent(DEFAULT_ACCENT)
-        self._replace_rows([self._label("Waiting for a browser with the Sidepanel extension", "sp-empty", wrap=True)])
+        self._replace_rows([self._label(waiting_text(), "sp-empty", wrap=True)])
 
     def set_hidden(self, hidden):
         if hidden == self.hidden:

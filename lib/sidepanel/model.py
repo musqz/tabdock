@@ -207,6 +207,19 @@ def tab_badge(tab):
     return m.group(1) if m and int(m.group(1).rstrip("+")) != 0 else None
 
 
+# The Arch package ships the signed extension next to VERSION, two levels above this package
+# (packaging/PKGBUILD); a checkout or an install.sh install has none there.
+PACKAGED_XPI = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tabdock.xpi"))
+
+
+def waiting_text(xpi=PACKAGED_XPI):
+    """What the panel says while no browser is connected: with the packaged extension, where to find it."""
+    text = "Waiting for a browser with the Sidepanel extension"
+    if not os.path.isfile(xpi):
+        return text
+    return f"{text}.\n\nInstall it once in each browser: about:addons → gear icon → Install Add-on From File… → {xpi}"
+
+
 def format_state(info, state):
     win = focused_window(state)
     head = f'== {browser_label(info)}' + (f' window {win["id"]}' if win else " (no windows)") + " =="

@@ -6,7 +6,8 @@
   (`/usr/share/tabdock`, `/usr/bin/sidepanel`, the menu entry, and the native-messaging manifest in
   `/usr/lib/mozilla/native-messaging-hosts`), with the signed extension, taken from the GitHub release, at
   `/usr/share/tabdock/tabdock.xpi`. Releases are tagged `v` + `VERSION` from 0.2.0 on; docs/RELEASE.md has the
-  steps.
+  steps. Until a browser connects, the packaged panel says where that extension is and how to install it, and
+  the README's Install section says the same.
 
 ## 0.3.0
 
