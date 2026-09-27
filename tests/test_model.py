@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
@@ -12,6 +13,7 @@ from sidepanel.model import (  # noqa: E402
     tab_badge,
     tab_label,
     tab_move_index,
+    waiting_text,
     window_of_tab,
 )
 
@@ -144,6 +146,16 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(text.splitlines()[0], "== Firefox 156.0 (pid 42) window 2 ==")
         self.assertIn(" * plain [10]", text)
         self.assertIn("[Work] (0)", text)
+
+    def test_waiting_text_without_a_packaged_extension(self):
+        self.assertEqual(waiting_text("/nonexistent/tabdock.xpi"), "Waiting for a browser with the Sidepanel extension")
+
+    def test_waiting_text_says_where_the_packaged_extension_is(self):
+        with tempfile.NamedTemporaryFile(suffix=".xpi") as xpi:
+            text = waiting_text(xpi.name)
+        self.assertTrue(text.startswith("Waiting for a browser with the Sidepanel extension"))
+        self.assertIn("about:addons", text)
+        self.assertTrue(text.endswith(xpi.name))
 
 
 if __name__ == "__main__":

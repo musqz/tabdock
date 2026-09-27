@@ -76,6 +76,16 @@ class PkgbuildTest(unittest.TestCase):
         self.assertEqual(shipped, expected)
         self.assertTrue(os.path.isfile(self.path("/usr/share/licenses/tabdock/LICENSE")))
 
+    def test_the_packaged_panel_names_the_packaged_extension(self):
+        self.sources()
+        self.assertEqual(self.run_function("package").returncode, 0)
+        lib = os.path.join(self.path(SHARE), "lib")
+        ran = subprocess.run(["python3", "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
+                              "from sidepanel.model import waiting_text; print(waiting_text())", lib],
+                             capture_output=True, text=True, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        self.assertEqual(ran.returncode, 0, ran.stderr)
+        self.assertTrue(ran.stdout.strip().endswith(self.path(f"{SHARE}/tabdock.xpi")))
+
     def test_manifest_points_at_the_packaged_relay(self):
         self.sources()
         self.assertEqual(self.run_function("package").returncode, 0)

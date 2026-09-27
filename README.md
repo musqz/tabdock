@@ -48,6 +48,12 @@ every way to start the panel: [docs/RELEASE.md](docs/RELEASE.md).
 panel starts with the browser (`start_with_browser`), from the "Sidepanel" menu entry, or an autostart
 line / keybinding.
 
+**Arch Linux:** `cd packaging && makepkg -si` installs the latest release system-wide instead, with the
+extension already signed. Install that extension once in each browser: `about:addons` -> gear icon ->
+"Install Add-on From File..." -> `/usr/share/tabdock/tabdock.xpi` (the panel shows this path too, until a
+browser connects). Use the package or `./install.sh`, not both: the per-user manifest `install.sh` writes
+overrides the package's.
+
 ## Development
 
 Run from the checkout with `./sidepanel` (`--debug` for a console view, no GUI). To try the extension
