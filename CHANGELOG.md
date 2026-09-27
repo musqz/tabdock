@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Firefox's own tab groups show in the panel: a grouped tab wears its group's name, in the group's colour, after
+  its title (hover it for the full name). The extension reports them (`tabGroups`, a new permission, asked for
+  with the next signed extension along with the workspaces' ones). Tested in real Firefox 156: a tab grouped and
+  ungrouped in the browser is reported both ways.
+
 - Find a tab: a 🔍 in the header opens a small window beside the panel (it takes the keyboard, which the dock never
   does). Typing narrows the list at once to the tabs whose title or address holds every word, in any case, from
   every workspace of the window, a match from another workspace saying which one it is in; Enter goes to the

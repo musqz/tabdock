@@ -72,8 +72,9 @@ for every new signature (a test checks they agree).
 What the permissions are for: `nativeMessaging` (talk to the local helper), `tabs` (list, activate and move
 tabs), `contextualIdentities` and `cookies` (list containers; Firefox requires `cookies` for that API),
 `storage` (remember the order you gave your container sections and your workspaces, per browser profile),
-`tabHide` (a workspace hides the other workspaces' tabs) and `sessions` (remember, across browser restarts,
-which workspace each tab is in and which one each window shows). The manifest declares that no data is
+`tabHide` (a workspace hides the other workspaces' tabs), `sessions` (remember, across browser restarts,
+which workspace each tab is in and which one each window shows) and `tabGroups` (show the names and colours of
+Firefox's own tab groups next to their tabs). The manifest declares that no data is
 collected, and nothing leaves your computer.
 
 **A new version needs a new signature.** Workspaces (after 0.3.1) add the `tabHide` and `sessions`

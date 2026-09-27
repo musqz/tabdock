@@ -15,10 +15,12 @@ directions, with two additions: it sends `resync` to the extension whenever the 
 | type    | fields | notes |
 |---------|--------|-------|
 | `hello` | `browser`, `version`, `features`, `browserPid` (added by relay) | sent on every resync, before `state`. `browser` is what `getBrowserInfo()` reports, which is unreliable (Zen says "Firefox"), so the panel names the browser from `/proc/<browserPid>/exe` and only falls back to this. `features` lists what the extension handles beyond what every version did (`close_tab`, `pin_tab`, `containers`, `reopen_in_container`): the panel offers only those, so an older extension (no `features`) never gets a `✕` or a menu item that does nothing |
-| `state` | `focusedWindowId`, `containerOrder[]`, `containers[]`, `workspaces[]`, `windows[]` | full snapshot, debounced 50 ms after any change |
+| `state` | `focusedWindowId`, `containerOrder[]`, `containers[]`, `groups[]`, `workspaces[]`, `windows[]` | full snapshot, debounced 50 ms after any change |
 
 `containers[]`: `{cookieStoreId, name, color, colorCode, icon}`.
-`windows[]`: `{id, focused, workspaceId, tabs[]}`; `tabs[]`: `{id, index, title, url, favIconUrl, cookieStoreId, active, pinned, audible, discarded, hidden, workspaceId}`.
+`windows[]`: `{id, focused, workspaceId, tabs[]}`; `tabs[]`: `{id, index, title, url, favIconUrl, cookieStoreId, active, pinned, audible, discarded, hidden, groupId, workspaceId}`.
+`groups[]`: Firefox's own tab groups, `{id, title, color, collapsed}` (`tabGroups.query`); a tab's `groupId` is
+one of them, or `null`. Only shown: the panel changes no group.
 `focusedWindowId` is the last browser window that had focus (it keeps its value while another app is active).
 Tabs without a container have `cookieStoreId: "firefox-default"`.
 `containerOrder` is the user's own order of the container sections: cookieStoreIds, kept by the extension
@@ -71,4 +73,4 @@ like `switch_workspace`, with no message from the panel. A tab dragged to anothe
 window joins that window's workspace, and an unpinned tab the workspace it was unpinned in. A new window shows
 the workspace of the window focused before it.
 
-A later milestone adds `focus_window`.
+(`focus_window`, once planned, is not needed: `activate_tab` focuses the tab's window.)

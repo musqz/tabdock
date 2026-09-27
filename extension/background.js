@@ -489,11 +489,18 @@ async function snapshot() {
     // containers disabled (privacy.userContext.enabled = false)
   }
   await loadOrder();
+  let groups = [];
+  try {
+    groups = browser.tabGroups ? await browser.tabGroups.query({}) : []; // Firefox's own tab groups, shown as they are
+  } catch (e) {
+    // a browser without them
+  }
   const list = workspaces || [DEFAULT_WS];
   return {
     type: "state",
     focusedWindowId: lastFocusedWindowId,
     containerOrder,
+    groups: groups.map((g) => ({ id: g.id, title: g.title || "", color: g.color, collapsed: g.collapsed })),
     containers: containers.map((c) => ({
       cookieStoreId: c.cookieStoreId,
       name: c.name,
@@ -526,6 +533,7 @@ async function snapshot() {
           audible: t.audible,
           discarded: t.discarded,
           hidden: t.hidden,
+          groupId: t.groupId === undefined || t.groupId === -1 ? null : t.groupId,
           workspaceId: tabWs.get(t.id) || shown,
         })),
       };
@@ -676,7 +684,7 @@ browser.tabs.onActivated.addListener((info) => track(() => reconcile(info.window
 browser.tabs.onAttached.addListener((tabId, info) => track(() => onTabAttached(tabId, info)));
 browser.tabs.onDetached.addListener((tabId, info) => track(() => tabLeft(info.oldWindowId)));
 browser.tabs.onUpdated.addListener(push, {
-  properties: ["title", "favIconUrl", "pinned", "audible", "discarded", "url", "hidden"],
+  properties: ["title", "favIconUrl", "pinned", "audible", "discarded", "url", "hidden", "groupId"],
 });
 browser.tabs.onUpdated.addListener(
   (tabId, change) => {
@@ -700,6 +708,9 @@ if (browser.contextualIdentities) {
   browser.contextualIdentities.onRemoved.addListener((info) =>
     track(() => forgetContainer(info.contextualIdentity.cookieStoreId)),
   );
+}
+if (browser.tabGroups) {
+  for (const event of ["onCreated", "onUpdated", "onRemoved", "onMoved"]) browser.tabGroups[event].addListener(push);
 }
 browser.commands.onCommand.addListener((name) => track(() => onShortcut(name)));
 

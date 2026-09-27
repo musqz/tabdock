@@ -48,6 +48,19 @@ def colour_name(color):
     return "Grey" if color == "toolbar" else color.capitalize()  # "toolbar": Firefox's grey
 
 
+# Firefox's tab group colours, near what its tab strip draws for them.
+GROUP_COLORS = {
+    "blue": "#3f8cf2", "purple": "#a15fe8", "cyan": "#0cb8c7", "orange": "#f07a1a", "yellow": "#e0b000",
+    "pink": "#e553b3", "green": "#3fae48", "gray": "#8f8f9d", "grey": "#8f8f9d", "red": "#e24650",
+}
+
+
+def tab_group(state, tab):
+    """The Firefox tab group `tab` is in ({id, title, color, collapsed}), or None."""
+    gid = tab.get("groupId")
+    return next((g for g in state.get("groups") or [] if g["id"] == gid), None) if gid is not None else None
+
+
 def removal_text(name, tabs):
     """What the panel asks before removing a container that has `tabs` open tabs (in any window or workspace)."""
     closes = "It has no open tabs" if not tabs else f"Its {tabs} open tab{'s' * (tabs != 1)} will close"
@@ -310,6 +323,9 @@ def format_state(info, state):
         mark = "*" if win and ws["id"] == win.get("workspaceId") else " "
         extra = "".join(f" {key}={ws[key]}" for key in ("icon", "color", "cookieStoreId") if ws.get(key))
         lines.append(f'workspace{mark} {ws["name"]} {{{ws["id"]}}}{extra}')
+    for group in state.get("groups") or []:  # "tabgroup Title (color): 3,7", the tab ids in it
+        ids = ",".join(str(t["id"]) for t in (win or {}).get("tabs", []) if t.get("groupId") == group["id"])
+        lines.append(f'tabgroup {group["title"] or "(unnamed)"} ({group["color"]}): {ids}')
     for container, tabs in group_tabs(state):
         lines.append(f'[{container["name"]}] ({len(tabs)}) {container["cookieStoreId"]}')  # the id: for `order`
         for tab in tabs:

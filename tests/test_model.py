@@ -18,6 +18,7 @@ from tabdock.model import (  # noqa: E402
     removal_text,
     reopenable,
     reordered,
+    tab_group,
     supports,
     tab_badge,
     tab_label,
@@ -218,6 +219,15 @@ class ModelTest(unittest.TestCase):
         self.assertIn("Its 1 open tab will close,", removal_text("Bank", 1))
         self.assertIn("Its 3 open tabs will close,", removal_text("Bank", 3))
         self.assertIn("deletes its cookies", removal_text("Bank", 3))
+
+    def test_tab_groups_are_looked_up_and_listed_on_the_console(self):
+        tabs = [{**tab(10, "plain", active=True), "groupId": 5}, tab(11, "mail")]
+        state = {"focusedWindowId": 2, "groups": [{"id": 5, "title": "Trip", "color": "red", "collapsed": False}],
+                 "windows": [{"id": 2, "tabs": tabs}]}
+        self.assertEqual(tab_group(state, tabs[0])["title"], "Trip")
+        self.assertIsNone(tab_group(state, tabs[1]))
+        self.assertIsNone(tab_group(STATE, {"id": 1, "groupId": 5}))  # an extension that reports no groups
+        self.assertIn("tabgroup Trip (red): 10", format_state({"browser": "Firefox", "version": "1"}, state))
 
     def test_a_search_matches_every_word_in_the_title_or_address(self):
         tab = {"title": "Quarterly Report", "url": "https://docs.example/q3"}

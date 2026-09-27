@@ -38,6 +38,8 @@ from .model import (  # noqa: E402
     edits_workspaces,
     removal_text,
     reopenable,
+    tab_group,
+    GROUP_COLORS,
     supports,
     focused_window,
     group_tabs,
@@ -93,6 +95,7 @@ button.sp-btn.sp-ws:hover {{ background-color: #2a2e38; color: #ffffff; }}
 button.sp-btn.sp-ws.selected {{ background-color: #2f3542; color: #fff; font-weight: bold; box-shadow: inset 0 -2px 0 0 {accent}; }}
 .sp-pinmark {{ font-size: 0.8em; }}
 .sp-where {{ color: #7d8594; font-size: 0.85em; }}
+.sp-group {{ font-size: 0.85em; font-weight: bold; }}
 button.sp-btn.sp-close {{ opacity: 0; padding: 0 4px; }}
 .sp-row:hover button.sp-btn.sp-close {{ opacity: 1; }}
 button.sp-btn.sp-close:hover {{ color: #ff6b6b; }}
@@ -191,6 +194,7 @@ class DockView:
         self._close_buttons = []  # (tab id, its ✕ button) of the rows built last
         self._query = ""  # what the find window has typed: only the tabs that match are listed, from every workspace
         self._first_match = None  # (conn, tab id, window id) of the first tab listed while finding
+        self._state = {}  # the state of the browser whose rows are being built
         self._middle = None  # the row a middle button went down on: releasing it there closes that tab
         self._holds = set()  # why the panel must stay open whatever the pointer does: "drag", "menu", "dialog"
         self._menu = None  # the context menu up (kept referenced while it is shown)
@@ -850,6 +854,7 @@ class DockView:
             browser = info.get("browserPid") or info.get("browser")
             colour = accent(info)
             window = focused_window(state)
+            self._state = state  # (what a tab row looks its group up in)
             groups = group_tabs(state, every_workspace=finding)  # the focused window's tabs, in the workspace it shows
             if finding:  # only what matches, and only the sections that hold some of it
                 groups = [(c, [t for t in tabs if matches(t, self._query)]) for c, tabs in groups]
@@ -999,6 +1004,14 @@ class DockView:
             where = next((ws for ws in spaces if ws["id"] == tab.get("workspaceId")), None)
             if where is not None:
                 box.pack_start(self._label(f"in {workspace_label(where)}", "sp-where"), False, False, 0)
+        firefox_group = tab_group(self._state, tab)  # (not `group`: that is the row's container)
+        if firefox_group is not None:  # Firefox's own tab group: its name, in its colour
+            title = firefox_group["title"]
+            tag = self._label(
+                f'<span foreground="{GROUP_COLORS.get(firefox_group["color"], DEFAULT_ACCENT)}">'
+                f'{GLib.markup_escape_text(title or "group")}</span>', "sp-group", markup=True)
+            tag.set_tooltip_text(f"In the tab group “{title}”" if title else "In an unnamed tab group")
+            box.pack_start(tag, False, False, 0)
         if pinned:  # after the title, so every title starts in the same place
             mark = self._label("📌", "sp-pinmark")
             mark.set_tooltip_text("Pinned: shows in every workspace" if len(spaces) > 1 else "Pinned")

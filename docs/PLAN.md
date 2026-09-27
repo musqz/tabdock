@@ -58,7 +58,9 @@ before or after the browser; the extension reconnects with backoff.
   Updated/Removed`. Full snapshots, not deltas: simplest, self-healing, and small even for hundreds of
   tabs. Deltas only if it ever proves slow.
 - Handle commands from the panel: `activate_tab`, `close_tab`, `new_tab {cookieStoreId?, windowId}`,
-  `move_tab`, `pin_tab`, `container_create/update/remove`, `focus_window`.
+  `move_tab`, `pin_tab`, `reopen_in_container`, `create/update/remove_container` (docs/PROTOCOL.md has them all).
+  `focus_window` was dropped: `activate_tab` focuses the tab's window, and the panel raises a browser window
+  itself over X11 when that one is not in use.
 - `windows.onFocusChanged` tells the panel which browser window is focused, so the panel never has to
   map individual X windows to browser windows (multi-window solved without title hacks).
 
@@ -119,8 +121,8 @@ have an icon, a colour (the container colours) and a container for its new tabs:
 is reopened in it (a tab cannot change containers), tabs the panel opens in a given container are left alone.
 Keyboard shortcuts are the extension's `commands` (Ctrl+Alt+PageDown/PageUp, Ctrl+Alt+1…9; Ctrl+Alt+arrows are
 Openbox's desktop keys), changeable in `about:addons`.
-Firefox's native tab groups (`tabGroups`) don't hide each other, so they don't behave like Zen workspaces;
-optional display of them stays open.
+Firefox's native tab groups (`tabGroups`) don't hide each other, so they don't behave like Zen workspaces; the
+panel shows them as they are: a grouped tab wears its group's name in the group's colour.
 
 ## Repo layout (agreed before commit 1, per global CLAUDE.md)
 
@@ -157,14 +159,15 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
   middle-click, and the tab's right-click menu; `tabs.remove`, `tabs.update({pinned})`), where closing a
   workspace's only visible tab never closes the window. Fourth slice done (unreleased): **edit containers**, a
   container section's right-click menu to create, rename, recolour, re-icon and remove one (removal asks first:
-  its tabs close and Firefox deletes its cookies). Still open: "reopen in container" (Firefox cannot change a
-  tab's container, so it reopens the tab and loses its history), search box.
+  its tabs close and Firefox deletes its cookies). Fifth slice done (unreleased): **reopen in container**
+  (Firefox cannot change a tab's container, so the page opens anew there and the original closes, its history
+  left behind) and a **search** (a find window beside the panel, over every workspace). M3 is complete.
 - **M4 workspaces (done, unreleased):** exclusive, via `tabs.hide()`, verified with the real-browser test
   (`tests/e2e_firefox.py`: create, switch, move, rename, pin/unpin, last tab, remove, extension and browser
   restart, each checked against Firefox's own tab strip) and under Openbox (`tests/e2e_x11.py`: the chips, the
   right-click menu, the name window). Since then: an icon, a colour and a container per workspace, and keyboard
   shortcuts (also verified in real Firefox 156, the shortcuts pressed as real keys, and under Openbox). Still open:
-  optional native tab-group display.
+  nothing: Firefox's own tab groups are shown too (each grouped tab wears its group's name in its colour).
 - **M5 more browsers (done, pulled forward):** verified with `tests/e2e_firefox.py --firefox <browser>` on
   Firefox, Zen, FireDragon (`firedragon-bin`), Waterfox (`waterfox-bin`) and LibreWolf (`librewolf`), all
   native packages. Every one reads `~/.mozilla/native-messaging-hosts`, so the single manifest from

@@ -1449,6 +1449,20 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(self.activated, [])
         self.assertEqual(self.listed_tabs(view), [10])  # everything again, the folded section folded again
 
+    def test_a_tab_in_a_firefox_tab_group_wears_the_groups_name_in_its_colour(self):
+        view = self.make()
+        tabs = [{**STATE["windows"][0]["tabs"][0], "groupId": 7}, STATE["windows"][0]["tabs"][1]]
+        state = {**STATE, "groups": [{"id": 7, "title": "Trip & co", "color": "blue", "collapsed": False}],
+                 "windows": [{"id": 2, "tabs": tabs}]}
+        view.show([(object(), INFO, state)])
+        tag = lambda tab_id: next((c for c in self.row(view, "tab", tab_id).get_child().get_children()  # noqa: E731
+                                   if c.get_style_context().has_class("sp-group")), None)
+        self.assertEqual(tag(10).get_text(), "Trip & co")
+        self.assertIn("#3f8cf2", tag(10).get_label())  # blue
+        self.assertEqual(tag(10).get_tooltip_text(), "In the tab group “Trip & co”")
+        self.assertIsNone(tag(11))
+        self.assertEqual(label_of(self.row(view, "tab", 10).get_child()).get_text(), "plain")  # the title stays first
+
     def test_a_middle_click_closes_the_tab_it_was_released_on(self):
         view = self.make()
         view.show([(object(), INFO, DRAG_STATE)])

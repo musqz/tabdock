@@ -420,6 +420,14 @@ def main():
         m.call("WebDriver:SwitchToWindow", {"handle": home_handle})
         print("OK reopen_in_container: a web page reopens, loaded, in another container, and the original is gone")
 
+        grouped = listed(last_snapshot(out.text))["marionette-tab"][0]
+        m.chrome("gBrowser.addTabGroup([gBrowser.tabs.find(t => t.label == 'marionette-tab')], "
+                 "{ label: 'e2e group', color: 'red' })")
+        eventually(lambda: f"tabgroup e2e group (red): {grouped}" in last_snapshot(out.text), "the tab group reported")
+        m.chrome("gBrowser.tabs.find(t => t.label == 'marionette-tab').group.ungroupTabs()")
+        eventually(lambda: "tabgroup " not in last_snapshot(out.text), "the tab group gone again")
+        print("OK Firefox's own tab groups: made and undone in the browser, reported with their tabs")
+
         panel.terminate()
         panel.wait(timeout=TIMEOUT)
         panel, out = start_panel(env)

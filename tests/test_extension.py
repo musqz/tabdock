@@ -42,7 +42,8 @@ class ManifestTest(unittest.TestCase):
             sorted(self.manifest["permissions"]),
             # storage: the container order and the workspaces; tabHide: a workspace hides the others' tabs;
             # sessions: which workspace a tab is in, and which one a window shows, across browser restarts
-            ["contextualIdentities", "cookies", "nativeMessaging", "sessions", "storage", "tabHide", "tabs"],
+            # tabGroups: the names and colours of Firefox's own tab groups, shown next to their tabs
+            ["contextualIdentities", "cookies", "nativeMessaging", "sessions", "storage", "tabGroups", "tabHide", "tabs"],
         )
 
     def test_amo_requirements(self):
