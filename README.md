@@ -35,4 +35,4 @@ signing steps, install locations and every way to start the panel: [docs/RELEASE
 
 <img width="320" height="1440" alt="Image" src="https://github.com/user-attachments/assets/14557b70-0a00-4510-99c8-65a62725c298" />
 
-<img width="320" height="1440" alt="Image" src="https://github.com/user-attachments/assets/d7ae7694-e9c7-4da3-9797-a997a611c256" />
+<img width="320" height="1440" alt="Image" src="https://github.com/user-attachments/assets/a7a5d1f0-794a-4a29-b622-d81934ae400d" />
