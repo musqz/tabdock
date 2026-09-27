@@ -9,7 +9,7 @@ xdotool, xprop, xwininfo and ImageMagick (`magick`).
 Checks: dock type + strip geometry, no strut while autohiding, hover expand/collapse, click on
 a tab reaches the browser without stealing focus, the strip colour follows the active browser,
 raising the browser when clicking while another app is active, dragging to reorder, closing a tab
-(its ✕, a middle click), the chips
+(its ✕, a middle click), a container's menu (rename, removal asked first), the chips
 and the all-browsers list (folding, raising the right browser), workspaces (switch, the right-click
 menu, naming a new one in a window that takes the keyboard, a colour from the chip's submenu), pin ->
 strut, side switch, and follow=hide.
@@ -385,6 +385,42 @@ def main():
         assert got == [{"type": "close_tab", "tabId": 3}], got
         assert int(run("xdotool", "getactivewindow").stdout) == ff_win, "closing took the focus from the browser"
         ok("close: the ✕ of a hovered tab and a middle click send close_tab, and the browser keeps the focus")
+
+        # a container's own menu: rename it in the name window, and removing asks first, Cancel being the default
+        def container_menu(*keys):
+            # where it is now: the sections dragged into another order earlier go back to the fake browser's order
+            # on any redraw, since it never stores an order
+            section = wait_for(settled_layout, "row positions")[("section", "firefox-container-1")]
+            run("xdotool", "mousemove", str(section["x"] + 60), str(int(section["y"] + section["h"] / 2)))
+            time.sleep(0.3)
+            run("xdotool", "click", "3")
+            time.sleep(0.6)
+            assert panel_mapped(), "the panel closed under the container's menu"
+            run("xdotool", "key", *keys)
+
+        def active_title():
+            return run("xdotool", "getactivewindow", "getwindowname").stdout.strip()
+
+        ff.received()
+        container_menu("Down", "Return")  # Rename…
+        wait_for(lambda: active_title() == "Rename container", "the rename window, with the keyboard")
+        run("xdotool", "type", "--delay", "30", "Private")
+        run("xdotool", "key", "Return")
+        got = messages("update_container")
+        assert got == [{"type": "update_container", "cookieStoreId": "firefox-container-1", "name": "Private"}], got
+        wait_for(lambda: int(run("xdotool", "getactivewindow").stdout) == ff_win, "the keyboard back in the browser")
+        container_menu("Up", "Return")  # Remove container…, the last item
+        wait_for(lambda: active_title() == "Remove container", "the window asking before the removal")
+        screenshot(os.path.join(shots, "remove-container.png"))
+        run("xdotool", "key", "Return")  # Cancel has the focus: a stray Enter removes nothing
+        wait_for(lambda: int(run("xdotool", "getactivewindow").stdout) == ff_win, "the keyboard back in the browser")
+        assert messages("remove_container") == [], "Enter removed the container"
+        container_menu("Up", "Return")
+        wait_for(lambda: active_title() == "Remove container", "the window asking before the removal, again")
+        run("xdotool", "key", "Tab", "Return")  # to Remove, then press it
+        got = messages("remove_container")
+        assert got == [{"type": "remove_container", "cookieStoreId": "firefox-container-1"}], got
+        ok("containers: a right click renames one in a window of its own; removing asks first, and Enter means Cancel")
         collapse()
 
         # -- several browsers: chips choose what is listed, "all" gives each browser a foldable section -----

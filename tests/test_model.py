@@ -14,6 +14,7 @@ from tabdock.model import (  # noqa: E402
     in_workspace,
     offers_workspaces,
     ordered_containers,
+    removal_text,
     reordered,
     tab_badge,
     tab_label,
@@ -208,6 +209,12 @@ class ModelTest(unittest.TestCase):
         self.assertFalse(edits_workspaces([{"id": "default", "name": "Default"}]))  # an extension with names only
         self.assertFalse(edits_workspaces([]))
         self.assertEqual((colour_name("blue"), colour_name("toolbar")), ("Blue", "Grey"))
+
+    def test_removal_text_counts_the_tabs_that_close_and_warns_about_the_cookies(self):
+        self.assertIn('"Bank"? It has no open tabs,', removal_text("Bank", 0))
+        self.assertIn("Its 1 open tab will close,", removal_text("Bank", 1))
+        self.assertIn("Its 3 open tabs will close,", removal_text("Bank", 3))
+        self.assertIn("deletes its cookies", removal_text("Bank", 3))
 
     def test_waiting_text_without_a_packaged_extension(self):
         self.assertEqual(waiting_text("/nonexistent/tabdock.xpi"), "Waiting for a browser with the Tabdock extension")

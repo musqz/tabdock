@@ -35,6 +35,7 @@ from .model import (  # noqa: E402
     browser_label,
     colour_name,
     edits_workspaces,
+    removal_text,
     focused_window,
     group_tabs,
     heir,
@@ -130,8 +131,9 @@ WS_CSS = "".join(
 ICONS = {
     "fingerprint": "☺", "briefcase": "💼", "dollar": "$", "cart": "🛒", "circle": "●",
     "gift": "🎁", "vacation": "🌴", "food": "🍴", "fruit": "🍎", "pet": "🐾",
-    "tree": "🌲", "chill": "❄",
+    "tree": "🌲", "chill": "❄", "fence": "🚧",
 }
+CONTAINER_ICONS = tuple(ICONS)  # the icons Firefox offers a container, in its order
 
 
 DRAG_THRESHOLD = 6  # px the pointer must travel with the button down before a click becomes a drag
@@ -183,7 +185,7 @@ class DockView:
         self._ws_buttons = []  # (conn, workspace id or None for "+", button) of the rows built last
         self._close_buttons = []  # (tab id, its ✕ button) of the rows built last
         self._middle = None  # the row a middle button went down on: releasing it there closes that tab
-        self._holds = set()  # why the panel must stay open whatever the pointer does: "drag", "menu", "name"
+        self._holds = set()  # why the panel must stay open whatever the pointer does: "drag", "menu", "dialog"
         self._menu = None  # the context menu up (kept referenced while it is shown)
         self._dialog = None  # the window asking for a workspace name, while it is up
         self.collapsed = set()  # (browser pid, cookieStoreId) of folded container sections; (pid, None) a folded browser
@@ -905,7 +907,40 @@ class DockView:
         return self._row(
             box, "section", cid, None, conn, browser_colour, (lambda: self._toggle(key)) if tabs else (lambda: None),
             draggable=cid != NO_CONTAINER and cid in known,
+            menu=self._container_menu(conn, container, state) if cid == NO_CONTAINER or cid in known else None,
         )
+
+    def _container_menu(self, conn, container, state):
+        """A right click on a container section: rename it, its colour and icon, a new container, and removing it
+        (after asking: its tabs close and Firefox deletes its cookies). "No container" offers only the new one."""
+        new = ("New container…", lambda: self._ask_name(
+            "New container", "", lambda name: self._command(conn, {"type": "create_container", "name": name})))
+        cid = container["cookieStoreId"]
+        if cid == NO_CONTAINER:
+            return [new]
+
+        def update(**change):
+            self._command(conn, {"type": "update_container", "cookieStoreId": cid, **change})
+
+        tabs = sum(t.get("cookieStoreId") == cid for w in state.get("windows") or [] for t in w["tabs"])
+        return [
+            ("Rename…", lambda: self._ask_name("Rename container", container["name"], lambda name: update(name=name))),
+            ("Colour", [
+                (Markup(f'<span foreground="{code}">●</span> {colour_name(name)}'), lambda name=name: update(color=name),
+                 container.get("color") == name)
+                for name, code in WS_COLORS.items()
+            ]),
+            ("Icon", [
+                (f"{ICONS[icon]} {icon.capitalize()}", lambda icon=icon: update(icon=icon), container.get("icon") == icon)
+                for icon in CONTAINER_ICONS
+            ]),
+            (None, None),
+            new,
+            (None, None),
+            ("Remove container…", lambda: self._confirm(
+                "Remove container", removal_text(container["name"], tabs), "Remove",
+                lambda: self._command(conn, {"type": "remove_container", "cookieStoreId": cid}))),
+        ]
 
     def _toggle(self, key):
         self.collapsed ^= {key}
@@ -1091,10 +1126,10 @@ class DockView:
             menu.append(item)
         return menu
 
-    def _ask_name(self, title, text, done, max_length=NAME_MAX):
-        """A small window to type a workspace name (or icon) in, then done(name). The dock windows never take
-        the keyboard focus (a click must not steal it from the browser); this one does. The panel stays open
-        while it is up."""
+    def _small_window(self, title, content, accept_label, answer, focus=None):
+        """A small window of its own: `content` above Cancel and `accept_label`. It takes the keyboard, which the dock
+        windows never do (a click must not steal it from the browser), and the panel stays open while it is up.
+        answer(accepted) is called once, as it goes; Escape or closing it is Cancel. Returns (finish, accept button)."""
         if self._dialog is not None:
             self._dialog.destroy()
         dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL, title=title)
@@ -1103,40 +1138,60 @@ class DockView:
         dialog.set_resizable(False)
         dialog.set_skip_taskbar_hint(True)
         dialog.set_position(Gtk.WindowPosition.MOUSE)
-        entry = Gtk.Entry(text=text)
-        entry.set_max_length(max_length)
-        entry.set_width_chars(24)
-        ok, cancel = Gtk.Button(label="OK"), Gtk.Button(label="Cancel")
+        ok, cancel = Gtk.Button(label=accept_label), Gtk.Button(label="Cancel")
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         buttons.pack_end(ok, False, False, 0)
         buttons.pack_end(cancel, False, False, 0)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         box.set_border_width(10)
-        box.pack_start(entry, False, False, 0)
+        box.pack_start(content, False, False, 0)
         box.pack_start(buttons, False, False, 0)
         dialog.add(box)
 
         def finish(accept):
             if self._dialog is not dialog:
                 return  # already answered
-            name = entry.get_text().strip()
             self._dialog = None
-            self._hold("name", False)
+            self._hold("dialog", False)
+            answer(accept)
             dialog.destroy()
-            if accept and name:
-                done(name)
 
-        entry.connect("activate", lambda _e: finish(True))
         ok.connect("clicked", lambda _b: finish(True))
         cancel.connect("clicked", lambda _b: finish(False))
         dialog.connect("key-press-event", lambda _w, e: e.keyval == Gdk.KEY_Escape and (finish(False) or True))
         dialog.connect("delete-event", lambda *_a: finish(False) or True)
         self._dialog = dialog
-        self._dialog_entry = entry
-        self._hold("name", True)
+        self._dialog_ok = ok
+        self._hold("dialog", True)
         box.show_all()
         dialog.show()
-        entry.grab_focus()  # the whole name selected: typing replaces it
+        (focus or cancel).grab_focus()
+        return finish, ok
+
+    def _ask_name(self, title, text, done, max_length=NAME_MAX):
+        """A small window to type a name (or a workspace icon) in, then done(name); an empty one is no answer."""
+        entry = Gtk.Entry(text=text)
+        entry.set_max_length(max_length)
+        entry.set_width_chars(24)
+
+        def answer(accepted):
+            name = entry.get_text().strip()
+            if accepted and name:
+                done(name)
+
+        finish, _ok = self._small_window(title, entry, "OK", answer, focus=entry)  # the whole text selected: typing replaces it
+        entry.connect("activate", lambda _e: finish(True))
+        self._dialog_entry = entry
+
+    def _confirm(self, title, text, action_label, done):
+        """Asks before what cannot be undone: done() only on `action_label`. Cancel has the keyboard, so a stray
+        Enter does not do it."""
+        label = Gtk.Label(label=text, xalign=0)
+        label.set_line_wrap(True)
+        label.set_max_width_chars(44)
+        _finish, ok = self._small_window(title, label, action_label, lambda accepted: accepted and done())
+        ok.get_style_context().add_class("destructive-action")
+        self._dialog_text = label
 
     @staticmethod
     def _icon_key(url):

@@ -6,8 +6,9 @@ FireDragon, Waterfox, LibreWolf; native installs, no Chromium/Blink, no Flatpak/
 sidebar (containers, workspaces, autohide) everywhere.
 
 Status: **0.3.1, installable.** Autohiding dock on the left/right edge, real install, signed extension,
-autostart, drag to reorder, new tab per container. Since 0.3.1, not yet released: Zen-style workspaces, and
-closing and pinning tabs from the panel (they need the next signed extension). Editing containers is next — see
+autostart, drag to reorder, new tab per container. Since 0.3.1, not yet released: Zen-style workspaces, closing
+and pinning tabs, and editing containers from the panel (they need the next signed extension). Next: moving a tab
+to another container and a search box — see
 [docs/PLAN.md](docs/PLAN.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ```
@@ -24,6 +25,9 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/tabdock-nmhost  
 - **Close and pin:** a hovered tab shows a `✕`; middle-click closes a tab too, as in the browser's tab strip.
   Right-click a tab to pin or unpin it, or close it. Pinned tabs wear a 📌. With workspaces in use, closing a
   workspace's only tab from the panel leaves the window open (see Workspaces).
+- **Edit containers:** right-click a container section to rename it, change its colour or icon, make a new
+  container, or remove it. Removing asks first, with Cancel as the default: its tabs close (in every window and
+  workspace) and Firefox deletes its cookies, which logs you out of the sites you used in it.
 - **Drag to reorder:** container sections and tabs within their own container. Order is remembered per
   browser profile (Firefox can't reorder containers itself). "No container" always stays first.
 - **Workspaces:** chips above the tabs; each browser window shows one workspace and the others' tabs are

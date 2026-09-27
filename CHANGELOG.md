@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Edit containers from the panel: right-click a container section to rename it, pick its colour or icon (Firefox's
+  own), make a new container (named in a small window; it gets a colour no container has yet), or remove it.
+  Removing asks first, with Cancel as the default so a stray Enter removes nothing, and says what goes: its tabs
+  close, in every window and workspace, and Firefox deletes its cookies, logging you out of the sites you used in
+  it. Its tabs close the way the panel closes one, so never with a window that holds other workspaces' hidden
+  tabs, and a workspace that opened its new tabs in it stops doing so first (or its replacement tab would open
+  right in the container being removed; the real-browser test fails that way when the order is swapped). "No
+  container" offers only a new container. Tested in real Firefox 156 (`tests/e2e_firefox.py`: made, renamed,
+  recoloured, re-iconed, and removed with its tab closed and its cookie gone; a workspace's container removed
+  while its only tab was in it) and under a real Openbox (`tests/e2e_x11.py`: renamed through the menu and the
+  name window; Enter in the removal window cancels, and only Remove removes).
+
 - Close and pin tabs from the panel. A hovered tab shows a `✕`, a middle click closes a tab (let go elsewhere
   and nothing closes, as in the browser), and a tab's right-click menu pins or unpins it and closes it, around
   the workspace moves. Pinned tabs wear a 📌, after the title so the titles still line up. Closing a

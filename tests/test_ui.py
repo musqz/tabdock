@@ -1263,6 +1263,79 @@ class DockViewTest(unittest.TestCase):
                          [("default", "Default"), ("ws-1", "Work"), ("ws-2", "Play"), (None, "+")])
         self.assertEqual([r["id"] for r in rows if r["kind"] == "close"], [2, 3])  # each listed tab's ✕
 
+    # -- editing containers --------------------------------------------------------------------------
+
+    def labels(self, view):
+        return [item.get_label() for item in view._menu.get_children() if not isinstance(item, Gtk.SeparatorMenuItem)]
+
+    def texts(self, view, label):
+        return {item.get_child().get_text(): item for item in self.menu_items(view)[label].get_submenu().get_children()}
+
+    def test_right_click_on_a_container_renames_recolours_and_reicons_it(self):
+        view = self.make()
+        conn = object()
+        state = {**STATE, "containers": [{**STATE["containers"][0], "color": "blue"}, STATE["containers"][1]]}
+        view.show([(conn, INFO, state)])
+        self.right_click(self.row(view, "section", "firefox-container-1"))
+        self.assertTrue(view.autohide.held)
+        self.assertEqual(self.labels(view), ["Rename…", "Colour", "Icon", "New container…", "Remove container…"])
+        self.assertTrue(self.texts(view, "Colour")["● Blue"].get_active())  # what it has now is marked
+        self.assertTrue(self.texts(view, "Icon")["☺ Fingerprint"].get_active())
+        self.assertEqual(len(self.texts(view, "Icon")), 13)  # every icon Firefox offers a container
+        self.assertEqual(self.commands, [])
+        self.texts(view, "Colour")["● Purple"].activate()
+        self.texts(view, "Icon")["🍎 Fruit"].activate()
+        self.menu_items(view)["Rename…"].activate()
+        self.assertEqual(view._dialog_entry.get_text(), "Personal & Co")
+        view._dialog_entry.set_text("Private")
+        view._dialog_entry.emit("activate")
+        update = {"type": "update_container", "cookieStoreId": "firefox-container-1"}
+        self.assertEqual(self.commands, [{**update, "color": "purple"}, {**update, "icon": "fruit"}, {**update, "name": "Private"}])
+        self.assertEqual(self.command_conns, [conn] * 3)
+
+    def test_a_new_container_is_named_in_a_window_of_its_own(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        self.right_click(self.row(view, "section", "firefox-default"))
+        self.assertEqual(self.labels(view), ["New container…"])  # "No container" itself cannot change
+        self.menu_items(view)["New container…"].activate()
+        self.assertEqual(view._dialog.get_title(), "New container")
+        self.assertEqual(view._dialog_entry.get_text(), "")
+        view._dialog_entry.set_text("  Travel ")
+        view._dialog_entry.emit("activate")
+        self.assertEqual(self.commands, [{"type": "create_container", "name": "Travel"}])
+
+    def test_removing_a_container_asks_first_and_says_what_goes(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])  # Personal & Co has one tab open
+        self.right_click(self.row(view, "section", "firefox-container-1"))
+        self.menu_items(view)["Remove container…"].activate()
+        view._menu.emit("deactivate")  # (a real menu closes when an item is picked)
+        text = view._dialog_text.get_text()
+        self.assertIn('"Personal & Co"', text)
+        self.assertIn("Its 1 open tab will close", text)
+        self.assertIn("cookies", text)
+        self.assertTrue(view._dialog_ok.get_style_context().has_class("destructive-action"))
+        self.assertEqual(view._dialog_ok.get_label(), "Remove")
+        self.assertTrue(view.autohide.held)
+        event = Gdk.Event.new(Gdk.EventType.KEY_PRESS)
+        event.keyval = Gdk.KEY_Escape
+        view._dialog.emit("key-press-event", event)  # thought better of it
+        self.assertEqual(self.commands, [])
+        self.assertIsNone(view._dialog)
+        self.assertFalse(view.autohide.held)
+        self.right_click(self.row(view, "section", "firefox-container-1"))
+        self.menu_items(view)["Remove container…"].activate()
+        view._dialog_ok.clicked()
+        self.assertEqual(self.commands, [{"type": "remove_container", "cookieStoreId": "firefox-container-1"}])
+
+    def test_a_store_the_browser_does_not_list_as_a_container_offers_no_menu(self):
+        view = self.make()
+        state = {**STATE, "windows": [{"id": 2, "tabs": [
+            {"id": 12, "title": "private", "cookieStoreId": "firefox-private", "active": True}]}]}
+        view.show([(object(), INFO, state)])
+        self.assertIsNone(view._meta[self.row(view, "section", "firefox-private")]["menu"])
+
     # -- closing and pinning tabs --------------------------------------------------------------------
 
     def close_button(self, view, tab_id):

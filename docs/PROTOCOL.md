@@ -46,6 +46,9 @@ offers no workspaces in Zen (it has its own) or from an older extension (no `wor
 | `panel_disconnected` | (none) | sent by the relay when the panel goes away; extension stops pushing snapshots until the next `resync` |
 | `activate_tab` | `tabId`, `windowId` | activates the tab and focuses its window |
 | `close_tab` | `tabId` | closes the tab (`tabs.remove`). With workspaces in use, when it is the only tab its window shows (every other one hidden), the window's workspace gets a new tab first, so Firefox does not close the window and the other workspaces' tabs with it (`browser.tabs.closeWindowWithLastTab`) |
+| `create_container` | `name`, and optionally `color`, `icon` | a new container; without a colour, the first container colour no container has yet, and the `circle` icon |
+| `update_container` | `cookieStoreId`, and any of `name`, `color`, `icon` | changes what it names; an empty name, or a colour or icon Firefox does not offer, is ignored |
+| `remove_container` | `cookieStoreId` | as Firefox's own settings do: its tabs close first (each as `close_tab` closes one, so never a window with other workspaces' hidden tabs), then the container goes and Firefox deletes its cookies. A workspace that opened its new tabs in it opens them in none from then on |
 | `pin_tab` | `tabId`, `pinned` | pins (`true`) or unpins the tab; a pinned tab shows in every workspace, an unpinned one joins the workspace its window shows |
 | `move_tab` | `tabId`, `index` | `tabs.move`: `index` is the tab's final position in its window (it leaves its old place first, so moving forward lands one earlier than the target's index); the resulting `tabs.onMoved` triggers a new `state` |
 | `set_container_order` | `order[]` (cookieStoreIds) | stores the order of the panel's container sections and pushes a new `state`; the panel also shows it at once without waiting |
@@ -67,4 +70,4 @@ like `switch_workspace`, with no message from the panel. A tab dragged to anothe
 window joins that window's workspace, and an unpinned tab the workspace it was unpinned in. A new window shows
 the workspace of the window focused before it.
 
-Later milestones add `focus_window` and `container_*`.
+A later milestone adds `focus_window`.

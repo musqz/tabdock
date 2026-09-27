@@ -48,6 +48,13 @@ def colour_name(color):
     return "Grey" if color == "toolbar" else color.capitalize()  # "toolbar": Firefox's grey
 
 
+def removal_text(name, tabs):
+    """What the panel asks before removing a container that has `tabs` open tabs (in any window or workspace)."""
+    closes = "It has no open tabs" if not tabs else f"Its {tabs} open tab{'s' * (tabs != 1)} will close"
+    return (f'Remove the container "{name}"? {closes}, and Firefox deletes its cookies, so you are logged out '
+            "of the sites you used in it. This cannot be undone.")
+
+
 def workspace_label(ws):
     """A workspace as its chip names it: the icon, when it has one, before the name."""
     return f'{ws["icon"]} {ws["name"]}' if ws.get("icon") else ws["name"]

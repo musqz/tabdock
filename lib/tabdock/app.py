@@ -25,6 +25,7 @@ from .ui import ConsoleView  # noqa: E402
 
 
 EDITS = {"wsicon": "icon", "wscolor": "color", "wscontainer": "cookieStoreId"}  # --debug verb -> what it sets
+CONTAINER_VERBS = {"cnew": None, "crm": None, "crename": "name", "ccolor": "color", "cicon": "icon"}
 
 
 class Panel:
@@ -140,7 +141,8 @@ class Panel:
         """--debug console, to drive the reverse path without a GUI:
         'activate <tabId>', 'move <tabId> <index>', 'order <cookieStoreId>,<cookieStoreId>,...',
         'newtab <cookieStoreId>' (the "+" of a container section), 'close <tabId>', 'pin <tabId>',
-        'unpin <tabId>', and for workspaces (the focused window's; ids as the console prints them, in braces) 'ws <id>',
+        'unpin <tabId>', for containers 'cnew <name>', 'crename <id> <name>', 'ccolor <id> <colour>', 'cicon <id> <icon>',
+        'crm <id>', and for workspaces (the focused window's; ids as the console prints them, in braces) 'ws <id>',
         'wsnew <name>', 'wsrename <id> <name>', 'wsrm <id>', 'wsmove <tabId> <id>', and 'wsicon <id> [icon]',
         'wscolor <id> [colour]', 'wscontainer <id> [cookieStoreId]' (without the last word: none)."""
         parts = line.split()
@@ -159,10 +161,23 @@ class Panel:
             self.command(self.current, {"type": "close_tab", "tabId": int(parts[1])})
         elif len(parts) == 2 and parts[0] in ("pin", "unpin") and parts[1].isdigit():
             self.command(self.current, {"type": "pin_tab", "tabId": int(parts[1]), "pinned": parts[0] == "pin"})
+        elif parts[0] in CONTAINER_VERBS:
+            self._container_line(line)
         elif len(parts) == 2 and parts[0] == "newtab" and focused_window(state):
             self.command(self.current, {"type": "new_tab", "cookieStoreId": parts[1], "windowId": focused_window(state)["id"]})
         elif parts[0].startswith("ws") and offers_workspaces(self.browsers[self.current], state):
             self._workspace_line(line, focused_window(state))
+
+    def _container_line(self, line):
+        verb, _, rest = line.strip().partition(" ")
+        cid, _, value = rest.strip().partition(" ")
+        value = value.strip()
+        if verb == "cnew" and rest.strip():
+            self.command(self.current, {"type": "create_container", "name": rest.strip()})
+        elif verb == "crm" and cid and not value:
+            self.command(self.current, {"type": "remove_container", "cookieStoreId": cid})
+        elif verb in CONTAINER_VERBS and verb not in ("cnew", "crm") and cid and value:
+            self.command(self.current, {"type": "update_container", "cookieStoreId": cid, CONTAINER_VERBS[verb]: value})
 
     def _workspace_line(self, line, window):
         verb, _, rest = line.strip().partition(" ")

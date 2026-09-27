@@ -336,6 +336,41 @@ async function closeTab(tabId) {
   await browser.tabs.remove(tabId);
 }
 
+// -- containers -----------------------------------------------------------------------------------
+
+const CONTAINER_ICONS = [
+  "fingerprint", "briefcase", "dollar", "cart", "circle", "gift", "vacation", "food", "fruit", "pet", "tree", "chill",
+  "fence",
+];
+
+// A new container: a colour no container has yet (while there is one), and the plain circle icon.
+async function createContainer(msg) {
+  const name = cleanName(msg.name);
+  if (!name) return;
+  const taken = new Set((await browser.contextualIdentities.query({})).map((c) => c.color));
+  const color = COLORS.includes(msg.color) ? msg.color : COLORS.find((c) => !taken.has(c)) || COLORS[0];
+  await browser.contextualIdentities.create({ name, color, icon: CONTAINER_ICONS.includes(msg.icon) ? msg.icon : "circle" });
+}
+
+// Its name, colour or icon, whichever the message names (and is valid).
+async function updateContainer(msg) {
+  const details = {};
+  if (cleanName(msg.name)) details.name = cleanName(msg.name);
+  if (COLORS.includes(msg.color)) details.color = msg.color;
+  if (CONTAINER_ICONS.includes(msg.icon)) details.icon = msg.icon;
+  if (Object.keys(details).length) await browser.contextualIdentities.update(msg.cookieStoreId, details);
+}
+
+// As Firefox's own settings do it: the container's tabs close first, then the container goes. The tabs close as
+// the panel closes one (closeTab), so never with a window that holds other workspaces' hidden tabs; a workspace
+// that opened its new tabs in this container stops first, or its replacement tab would open right in it.
+async function removeContainer(store) {
+  await browser.contextualIdentities.get(store); // (throws for what is not a container: nothing is closed)
+  await forgetContainer(store);
+  for (const tab of await browser.tabs.query({ cookieStoreId: store })) await closeTab(tab.id);
+  await browser.contextualIdentities.remove(store);
+}
+
 // The keyboard shortcuts (manifest "commands", changeable in about:addons): the next or previous workspace,
 // round the list, or the Nth.
 async function onShortcut(name) {
@@ -534,6 +569,15 @@ async function onCommand(msg) {
       case "pin_tab":
         // tabs.onUpdated reports it; an unpinned tab joins the workspace its window shows
         if (Number.isInteger(msg.tabId)) await browser.tabs.update(msg.tabId, { pinned: msg.pinned === true });
+        break;
+      case "create_container":
+        await createContainer(msg);
+        break;
+      case "update_container":
+        if (typeof msg.cookieStoreId === "string") await updateContainer(msg);
+        break;
+      case "remove_container":
+        if (typeof msg.cookieStoreId === "string") await removeContainer(msg.cookieStoreId);
         break;
       case "new_tab":
         // in the container asked for, even "No container" in a workspace that has one of its own

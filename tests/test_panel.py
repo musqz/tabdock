@@ -369,6 +369,20 @@ class PanelTest(unittest.TestCase):
             {"type": "pin_tab", "tabId": 7, "pinned": False},
         ])  # (the malformed lines are ignored)
 
+    def test_debug_console_edits_containers(self):
+        for line in ("cnew Travel plans", "crename firefox-container-1 Private life", "ccolor firefox-container-1 red",
+                     "cicon firefox-container-1 fruit", "crm firefox-container-1"):
+            self.panel.on_stdin_line(line)
+        update = {"type": "update_container", "cookieStoreId": "firefox-container-1"}
+        self.assertEqual(self.ff.sent, [
+            {"type": "create_container", "name": "Travel plans"},
+            {**update, "name": "Private life"}, {**update, "color": "red"}, {**update, "icon": "fruit"},
+            {"type": "remove_container", "cookieStoreId": "firefox-container-1"},
+        ])
+        for junk in ("cnew", "crename firefox-container-1", "ccolor", "crm", "crm a b"):
+            self.panel.on_stdin_line(junk)
+        self.assertEqual(len(self.ff.sent), 5)  # malformed lines are ignored
+
     def test_debug_console_offers_no_workspaces_in_zen_or_without_them(self):
         self.panel.on_stdin_line("wsnew Work")  # this extension sent no workspaces
         self.panel.follow(ZEN_XID)
