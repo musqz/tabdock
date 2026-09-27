@@ -6,6 +6,8 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from tabdock.model import (  # noqa: E402
+    colour_name,
+    edits_workspaces,
     format_state,
     group_tabs,
     heir,
@@ -18,6 +20,7 @@ from tabdock.model import (  # noqa: E402
     tab_move_index,
     waiting_text,
     window_of_tab,
+    workspace_label,
 )
 
 
@@ -189,6 +192,22 @@ class ModelTest(unittest.TestCase):
         lines = format_state({"browser": "Firefox", "version": "156.0"}, self.WS_STATE).splitlines()
         self.assertEqual(lines[1:3], ["workspace  Default {default}", "workspace* Work {ws-1}"])
         self.assertNotIn(" home [10]", lines)  # another workspace's tab is not listed
+
+    def test_format_state_adds_what_else_a_workspace_has(self):
+        spaces = [{"id": "default", "name": "Default", "icon": None, "color": None, "cookieStoreId": None},
+                  {"id": "ws-1", "name": "Work", "icon": "💼", "color": "blue", "cookieStoreId": "firefox-container-1"}]
+        lines = format_state({"browser": "Firefox", "version": "156.0"}, {**self.WS_STATE, "workspaces": spaces}).splitlines()
+        self.assertEqual(lines[1:3], ["workspace  Default {default}",
+                                      "workspace* Work {ws-1} icon=💼 color=blue cookieStoreId=firefox-container-1"])
+
+    def test_a_workspace_is_named_with_its_icon_and_only_newer_extensions_edit_one(self):
+        self.assertEqual(workspace_label({"name": "Work", "icon": "💼"}), "💼 Work")
+        self.assertEqual(workspace_label({"name": "Work", "icon": None}), "Work")
+        self.assertEqual(workspace_label({"name": "Work"}), "Work")
+        self.assertTrue(edits_workspaces([{"id": "default", "name": "Default", "icon": None}]))  # empty, but kept
+        self.assertFalse(edits_workspaces([{"id": "default", "name": "Default"}]))  # an extension with names only
+        self.assertFalse(edits_workspaces([]))
+        self.assertEqual((colour_name("blue"), colour_name("toolbar")), ("Blue", "Grey"))
 
     def test_waiting_text_without_a_packaged_extension(self):
         self.assertEqual(waiting_text("/nonexistent/tabdock.xpi"), "Waiting for a browser with the Tabdock extension")

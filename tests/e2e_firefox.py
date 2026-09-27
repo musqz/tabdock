@@ -9,7 +9,8 @@ installed as a temporary add-on through Marionette. Then, against a real `tabdoc
   panel -> browser : `activate <id>` switches the active tab, tabs move, containers reorder
   workspaces       : create, switch, move a tab, rename, close a workspace's last tab, remove, and an
                      extension restart, each checked against the browser's own tab strip too
-                     (skipped in Zen, which has workspaces of its own)
+                     (skipped in Zen, which has workspaces of its own); an icon and a colour, a container
+                     that Ctrl+T's new tab opens in, and the keyboard shortcuts, pressed for real
 
     python3 tests/e2e_firefox.py [--firefox /usr/bin/firefox]
 """
@@ -77,9 +78,32 @@ def section_order(snapshot):
     return [name for name, _ in sections(snapshot)]
 
 
+WS_LINE = r"^workspace(\*| ) (.+?) \{(\S+)\}((?: \S+=\S+)*)$"
+
+
 def workspace_lines(snapshot):
-    """[(shown, name, id)]; workspace lines read 'workspace* Name {id}', the star on the one the window shows."""
-    return [(star == "*", name, i) for star, name, i in re.findall(r"^workspace(\*| ) (.+) \{(\S+)\}$", snapshot, re.M)]
+    """[(shown, name, id)]; workspace lines read 'workspace* Name {id}', the star on the one the window shows,
+    and then what else it has ('icon=… color=… cookieStoreId=…')."""
+    return [(star == "*", name, i) for star, name, i, _extra in re.findall(WS_LINE, snapshot, re.M)]
+
+
+def workspace_extras(snapshot):
+    """{workspace id: {"icon": …, "color": …, "cookieStoreId": …}}, with only what each one has."""
+    return {i: dict(kv.split("=", 1) for kv in extra.split())
+            for _star, _name, i, extra in re.findall(WS_LINE, snapshot, re.M)}
+
+
+def section_tabs(snapshot):
+    """{cookieStoreId: [title, ...]} of the tabs the console lists, by container section."""
+    tabs, store = {}, None
+    for line in snapshot.splitlines():
+        head = re.match(r"^\[.+?\] \(\d+\) (\S+)$", line)
+        if head:
+            store = head.group(1)
+            tabs[store] = []
+        elif store is not None and re.match(r"^ [ *] .* \[\d+\]$", line):
+            tabs[store].append(re.sub(r" \[\d+\]$", "", line[3:]))
+    return tabs
 
 
 def shown_workspace(snapshot):
@@ -160,6 +184,18 @@ class Marionette:
 
     def visible(self):
         return sorted(title for title, hidden, _pinned, _selected in self.tab_rows() if not hidden)
+
+    def press(self, key):
+        """Ctrl+Alt+key, as real key events in the browser window (where extension shortcuts are handled)."""
+        held = ["\ue009", "\ue00a"]  # Control, Alt
+        steps = ([{"type": "keyDown", "value": k} for k in (*held, key)]
+                 + [{"type": "keyUp", "value": k} for k in (key, *reversed(held))])
+        self.call("Marionette:SetContext", {"value": "chrome"})
+        try:
+            self.call("WebDriver:PerformActions", {"actions": [{"type": "key", "id": "keyboard", "actions": steps}]})
+            self.call("WebDriver:ReleaseActions", {})
+        finally:
+            self.call("Marionette:SetContext", {"value": "content"})
 
 
 def free_port():
@@ -377,6 +413,8 @@ def check_workspaces(m, panel, out, restart):
     eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "the rename")
     print("OK wsrename")
 
+    check_workspace_extras(m, panel, out, work)
+
     m.chrome("gBrowser.pinTab(gBrowser.tabs.find(t => t.label == 'work-tab'))")
     say(panel, "ws default")
     eventually(lambda: shown_workspace(snap()) == ("Default", "default"), "Default shown")
@@ -393,11 +431,15 @@ def check_workspaces(m, panel, out, restart):
     scratch = shown_workspace(snap())[1]
     eventually(lambda: len(listed(snap())) == 1, "Scratch's one new tab")
     only = next(iter(listed(snap()).values()))[0]
+    store = next(i for _name, i in sections(snap()) if i != "firefox-default")
+    say(panel, f"wscontainer {scratch} {store}")  # its new tab then opens in this container
+    eventually(lambda: workspace_extras(snap()).get(scratch, {}).get("cookieStoreId") == store, "Scratch's container")
     m.chrome("gBrowser.removeTab(gBrowser.selectedTab)")
     eventually(lambda: shown_workspace(snap()) == ("Scratch", scratch) and len(listed(snap())) == 1
                and next(iter(listed(snap()).values()))[0] != only, "Scratch kept, with a new tab")
     eventually(lambda: m.visible() == ["New Tab"], "only Scratch's new tab visible in the browser")
-    print("OK closing a workspace's last tab keeps the workspace, with a new tab")
+    eventually(lambda: section_tabs(snap()).get(store) == ["New Tab"], "that new tab in Scratch's container")
+    print("OK closing a workspace's last tab keeps the workspace, with a new tab (in its container, if it has one)")
 
     say(panel, f"wsrm {scratch}")
     eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "its neighbour shown after the removal")
@@ -422,6 +464,7 @@ def check_workspaces(m, panel, out, restart):
     m = restart(m)
     out.wait_for(r"== \S+ .* window \d+ ==", since=mark)
     eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "the workspace after a browser restart")
+    assert workspace_extras(snap())[work] == {"icon": "💼", "color": "blue"}, workspace_extras(snap())
     eventually(lambda: set(listed(snap())) == listed_before, "the same tabs listed after a browser restart")
     eventually(lambda: sorted(m.tab_rows()) == before, "the same tabs hidden after a browser restart")
     print("OK browser restart: the same workspaces, the same tabs in each, the others hidden again")
@@ -430,6 +473,61 @@ def check_workspaces(m, panel, out, restart):
     eventually(lambda: workspace_lines(snap()) == [(True, "Default", "default")], "only Default left")
     eventually(lambda: not any(hidden for _t, hidden, _p, _s in m.tab_rows()), "every tab visible again")
     print("OK removing all but one workspace shows every tab again")
+
+
+def check_workspace_extras(m, panel, out, work):
+    """Work shows, next to Default. Its icon and colour; the container its new tabs open in; the shortcuts."""
+    snap = lambda: last_snapshot(out.text)  # noqa: E731
+    say(panel, f"wsicon {work} 💼")
+    say(panel, f"wscolor {work} blue")
+    eventually(lambda: workspace_extras(snap()).get(work) == {"icon": "💼", "color": "blue"}, "Work's icon and colour")
+    say(panel, f"wscolor {work} plaid")
+    eventually(lambda: workspace_extras(snap()).get(work) == {"icon": "💼"}, "a colour containers do not have: none")
+    say(panel, f"wscolor {work} blue")
+    eventually(lambda: workspace_extras(snap()).get(work) == {"icon": "💼", "color": "blue"}, "blue again")
+    print("OK wsicon, wscolor: kept by the extension and reported with the workspace; an unknown colour clears it")
+
+    store = next(i for _name, i in sections(snap()) if i != "firefox-default")  # this browser's first container
+    user_context = int(store.rsplit("-", 1)[1])
+    say(panel, f"wscontainer {work} {store}")
+    eventually(lambda: workspace_extras(snap()).get(work, {}).get("cookieStoreId") == store, "Work's container")
+    in_store, no_container = len(section_tabs(snap()).get(store, [])), len(section_tabs(snap())["firefox-default"])
+    m.chrome("BrowserCommands.openTab()")  # Ctrl+T: a new tab, in no container
+    eventually(lambda: len(section_tabs(snap()).get(store, [])) == in_store + 1, "Ctrl+T's tab listed in the container")
+    eventually(lambda: m.chrome("return gBrowser.selectedTab.userContextId") == user_context,
+               "the browser's selected tab is that container's")
+    assert len(section_tabs(snap())["firefox-default"]) == no_container, "the no-container original is gone"
+    print("OK wscontainer: a new tab (Ctrl+T) in a workspace with a container reopens in that container")
+
+    no_container = len(section_tabs(snap())["firefox-default"])
+    say(panel, "newtab firefox-default")  # the panel's "+" of "No container": asked for, so it stays there
+    eventually(lambda: len(section_tabs(snap())["firefox-default"]) == no_container + 1, "the panel's no-container tab")
+    time.sleep(1)
+    assert len(section_tabs(snap())["firefox-default"]) == no_container + 1, section_tabs(snap())
+    print("OK a tab the panel opens in no container stays there, whatever the workspace's container")
+
+    temp = m.chrome('return ContextualIdentityService.create("e2e-temp", "circle", "red").userContextId')
+    say(panel, f"wscontainer {work} firefox-container-{temp}")
+    eventually(lambda: workspace_extras(snap()).get(work, {}).get("cookieStoreId") == f"firefox-container-{temp}",
+               "Work's container, the temporary one")
+    m.chrome(f"ContextualIdentityService.remove({temp})")
+    eventually(lambda: "cookieStoreId" not in workspace_extras(snap()).get(work, {}), "a removed container forgotten")
+    print("OK a removed container is no longer a workspace's container")
+
+    default_tab = next(title for title, hidden, pinned, _s in m.tab_rows() if hidden and not pinned)
+    m.press("\ue00f")  # Ctrl+Alt+PageDown: the next workspace, round the list (Work is the last)
+    eventually(lambda: shown_workspace(snap()) == ("Default", "default"), "Ctrl+Alt+PageDown: Default")
+    eventually(lambda: not m.strip()[default_tab][0], "Default's tabs shown in the browser")
+    m.press("\ue00e")  # Ctrl+Alt+PageUp: the previous one, round the list
+    eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "Ctrl+Alt+PageUp: Work")
+    m.press("1")
+    eventually(lambda: shown_workspace(snap()) == ("Default", "default"), "Ctrl+Alt+1: Default")
+    m.press("2")
+    eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "Ctrl+Alt+2: Work")
+    m.press("3")  # there is no third workspace
+    time.sleep(1)
+    assert shown_workspace(snap()) == ("Deep work", work), shown_workspace(snap())
+    print("OK keyboard shortcuts: Ctrl+Alt+PageDown/PageUp go round the workspaces, Ctrl+Alt+N picks the Nth")
 
 
 def listed_or_hidden_id(m, out, title):

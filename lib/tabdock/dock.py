@@ -30,17 +30,22 @@ from .model import (  # noqa: E402
     ACCENTS,
     DEFAULT_ACCENT,
     NO_CONTAINER,
+    WS_COLORS,
     accent,
     browser_label,
+    colour_name,
+    edits_workspaces,
     focused_window,
     group_tabs,
     heir,
     offers_workspaces,
+    ordered_containers,
     reordered,
     tab_badge,
     tab_label,
     tab_move_index,
     waiting_text,
+    workspace_label,
     workspaces,
 )
 
@@ -104,6 +109,19 @@ BROWSER_CSS = "".join(
     for c in (*ACCENTS.values(), DEFAULT_ACCENT)
 )
 
+
+def ws_class(color):
+    return "ws-" + color
+
+
+# A workspace's own colour: a bar under its chip, and a full one when it is the workspace shown, where it
+# takes the place of the browser's colour (one class more specific than that rule, so it wins).
+WS_CSS = "".join(
+    f"button.sp-btn.sp-ws.ws-col.{ws_class(name)} {{ box-shadow: inset 0 -2px 0 0 alpha({c}, 0.55); }}"
+    f"button.sp-btn.sp-ws.ws-col.selected.{ws_class(name)} {{ box-shadow: inset 0 -3px 0 0 {c}; }}"
+    for name, c in WS_COLORS.items()
+)
+
 # Firefox container icon names -> a glyph (best effort; unknown names fall back to a dot)
 ICONS = {
     "fingerprint": "☺", "briefcase": "💼", "dollar": "$", "cart": "🛒", "circle": "●",
@@ -120,6 +138,13 @@ ICONS_PENDING_MAX = 64  # icon downloads queued or running at once
 NO_ICON = "No icon: "  # the start of what the empty icon slot says when hovered, followed by why
 NOT_DOWNLOADED = "it could not be downloaded (no network, or a problem at the site); it is tried again later"
 NAME_MAX = 64  # characters in a workspace name (the extension cuts longer ones too)
+ICON_MAX = 8  # characters in a workspace icon: one emoji, even a composed one, or a few letters (as the extension)
+# the icons a workspace's menu offers; "Other…" takes any
+WS_ICONS = ("🏠", "💼", "📚", "💻", "🎮", "🎵", "🛒", "✈", "🧪", "📰", "💬", "⭐")
+
+
+class Markup(str):
+    """A menu label in Pango markup (a coloured swatch), where a plain str is shown as it is."""
 
 
 def _schedule(ms, fn):
@@ -172,7 +197,7 @@ class DockView:
         )
         self._set_accent(DEFAULT_ACCENT)
         per_browser = Gtk.CssProvider()
-        per_browser.load_from_data(BROWSER_CSS.encode())
+        per_browser.load_from_data((BROWSER_CSS + WS_CSS).encode())
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), per_browser, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
@@ -786,7 +811,7 @@ class DockView:
                 continue
             spaces = workspaces(state) if offers_workspaces(info, state) else []
             if spaces:
-                rows.append(self._workspace_row(conn, colour, spaces, window))
+                rows.append(self._workspace_row(conn, colour, spaces, window, ordered_containers(state)))
             for container, tabs in groups:
                 key = (browser, container["cookieStoreId"])
                 folded = key in self.collapsed
@@ -872,7 +897,7 @@ class DockView:
         menu = None
         if len(spaces) > 1 and not tab.get("pinned"):  # (a pinned tab shows in every workspace)
             menu = [
-                (f"Move to {ws['name']}", lambda ws_id=ws["id"]: self._command(
+                (f"Move to {workspace_label(ws)}", lambda ws_id=ws["id"]: self._command(
                     conn, {"type": "move_tab_to_workspace", "tabId": tab["id"], "workspaceId": ws_id}))
                 for ws in spaces if ws["id"] != tab.get("workspaceId")
             ]
@@ -883,9 +908,10 @@ class DockView:
 
     # -- workspaces ------------------------------------------------------------------------
 
-    def _workspace_row(self, conn, colour, spaces, window):
+    def _workspace_row(self, conn, colour, spaces, window, containers=()):
         """The browser's workspaces as chips, the one the window shows marked: a click switches to one, a right
-        click renames or removes it, and "+" makes a new one (which the browser then switches to)."""
+        click changes or removes it, and "+" makes a new one (which the browser then switches to). A chip wears
+        the workspace's icon and colour."""
         row = Gtk.FlowBox()
         row.set_selection_mode(Gtk.SelectionMode.NONE)
         row.set_homogeneous(False)
@@ -893,18 +919,27 @@ class DockView:
         row.set_row_spacing(3)
         row.get_style_context().add_class("sp-wsrow")
         window_id = window["id"]
+        names = {c["cookieStoreId"]: c["name"] for c in containers}
         for ws in spaces:
-            button = self._button(ws["name"], f"Switch to {ws['name']}. Right-click to rename or remove it", Gtk.Button)
+            label = workspace_label(ws)
+            opens_in = names.get(ws.get("cookieStoreId"))
+            tooltip = f"Switch to {label}" + (f". New tabs open in {opens_in}" if opens_in else "")
+            button = self._button(label, tooltip + ". Right-click to change or remove it", Gtk.Button)
             button.get_child().set_ellipsize(Pango.EllipsizeMode.END)
             button.get_child().set_max_width_chars(18)
             ctx = button.get_style_context()
             ctx.add_class("sp-ws")
             ctx.add_class(acc_class(colour))
+            if ws.get("color") in WS_COLORS:
+                ctx.add_class("ws-col")
+                ctx.add_class(ws_class(ws["color"]))
             if ws["id"] == window.get("workspaceId"):
                 ctx.add_class("selected")
             button.connect("clicked", lambda _b, ws_id=ws["id"]: self._command(
                 conn, {"type": "switch_workspace", "windowId": window_id, "workspaceId": ws_id}))
-            button.connect("button-press-event", self._on_workspace_press, self._workspace_menu(conn, spaces, ws))
+            button.connect(
+                "button-press-event", self._on_workspace_press, self._workspace_menu(conn, spaces, ws, containers)
+            )
             row.add(button)
             self._ws_buttons.append((conn, ws["id"], button))
         new = self._button("+", "New workspace", Gtk.Button)
@@ -916,19 +951,50 @@ class DockView:
         self._ws_buttons.append((conn, None, new))
         return row
 
-    def _workspace_menu(self, conn, spaces, ws):
-        """Rename, and remove, which closes nothing: its tabs go to its neighbour (the last one stays)."""
+    def _workspace_menu(self, conn, spaces, ws, containers=()):
+        """Rename; its icon, colour and the container its new tabs open in (from an extension that keeps them);
+        and remove, which closes nothing: its tabs go to its neighbour (the last one stays)."""
         rename = lambda: self._ask_name(  # noqa: E731
             "Rename workspace", ws["name"],
             lambda name: self._command(conn, {"type": "rename_workspace", "workspaceId": ws["id"], "name": name}))
+        items = [("Rename…", rename)]
+        if edits_workspaces(spaces):
+            def edit(**change):
+                self._command(conn, {"type": "edit_workspace", "workspaceId": ws["id"], **change})
+
+            items.append(("Icon", self._icon_items(ws, edit)))
+            items.append(("Colour", [("None", lambda: edit(color=None), not ws.get("color"))] + [
+                (Markup(f'<span foreground="{code}">●</span> {colour_name(name)}'),
+                 lambda name=name: edit(color=name), ws.get("color") == name)
+                for name, code in WS_COLORS.items()
+            ]))
+            if containers:  # (none: containers are switched off in this browser)
+                items.append(("New tabs in", [("No container", lambda: edit(cookieStoreId=None),
+                                               not ws.get("cookieStoreId"))] + [
+                    (Markup(f'<span foreground="{c.get("colorCode") or DEFAULT_ACCENT}">▌</span> '
+                            f'{ICONS.get(c.get("icon"), "●")} {GLib.markup_escape_text(c["name"])}'),
+                     lambda cid=c["cookieStoreId"]: edit(cookieStoreId=cid), ws.get("cookieStoreId") == c["cookieStoreId"])
+                    for c in containers
+                ]))
         to = heir(spaces, ws["id"])
         if to is None:
-            return [("Rename…", rename), ("Remove (the last workspace stays)", None)]
-        return [
-            ("Rename…", rename),
-            (f"Remove (its tabs go to {to['name']})",
+            return items + [("Remove (the last workspace stays)", None)]
+        return items + [
+            (f"Remove (its tabs go to {workspace_label(to)})",
              lambda: self._command(conn, {"type": "remove_workspace", "workspaceId": ws["id"]})),
         ]
+
+    def _icon_items(self, ws, edit):
+        """None, a few icons, and "Other…" for any other one (an emoji typed or pasted, or a few letters)."""
+        current = ws.get("icon")
+        other = lambda: self._ask_name(  # noqa: E731
+            "Workspace icon", current or "", lambda icon: edit(icon=icon), max_length=ICON_MAX)
+        return (
+            [("None", lambda: edit(icon=None), not current)]
+            + [(icon, lambda icon=icon: edit(icon=icon), icon == current) for icon in WS_ICONS]
+            + [(f"Other ({current})…" if current and current not in WS_ICONS else "Other…", other,
+                bool(current) and current not in WS_ICONS)]
+        )
 
     def _on_workspace_press(self, _button, event, menu):
         if event.button != 3:
@@ -937,15 +1003,8 @@ class DockView:
         return True
 
     def _popup(self, items, event):
-        """A context menu of (label, action) items; an item without an action is shown but greyed out. The
-        panel stays open while it is up."""
-        menu = Gtk.Menu()
-        for label, action in items:
-            item = Gtk.MenuItem(label=label)
-            item.set_sensitive(action is not None)
-            if action is not None:
-                item.connect("activate", lambda _i, action=action: action())
-            menu.append(item)
+        """A context menu (see _menu_of). The panel stays open while it is up."""
+        menu = self._menu_of(items)
         menu.connect("deactivate", lambda _m: self._hold("menu", False))
         menu.show_all()
         self._menu = menu
@@ -954,9 +1013,31 @@ class DockView:
         if not menu.get_visible():  # it could not open: it must not keep the panel open either
             self._hold("menu", False)
 
-    def _ask_name(self, title, text, done):
-        """A small window to type a workspace name in, then done(name). The dock windows never take the
-        keyboard focus (a click must not steal it from the browser); this one does. The panel stays open
+    def _menu_of(self, items):
+        """A menu of (label, action) or (label, action, chosen) items. An action is a callable, a list of items
+        (a submenu), or None (shown greyed out); `chosen` marks the current choice among a submenu's items."""
+        menu = Gtk.Menu()
+        for label, action, *chosen in items:
+            if chosen:
+                item = Gtk.CheckMenuItem(label=label)
+                item.set_draw_as_radio(True)
+                item.set_active(chosen[0])  # before "activate" is connected: setting it emits that signal
+            else:
+                item = Gtk.MenuItem(label=label)
+            if isinstance(label, Markup):
+                item.get_child().set_markup(label)
+            if isinstance(action, list):
+                item.set_submenu(self._menu_of(action))
+            else:
+                item.set_sensitive(action is not None)
+                if action is not None:
+                    item.connect("activate", lambda _i, action=action: action())
+            menu.append(item)
+        return menu
+
+    def _ask_name(self, title, text, done, max_length=NAME_MAX):
+        """A small window to type a workspace name (or icon) in, then done(name). The dock windows never take
+        the keyboard focus (a click must not steal it from the browser); this one does. The panel stays open
         while it is up."""
         if self._dialog is not None:
             self._dialog.destroy()
@@ -967,7 +1048,7 @@ class DockView:
         dialog.set_skip_taskbar_hint(True)
         dialog.set_position(Gtk.WindowPosition.MOUSE)
         entry = Gtk.Entry(text=text)
-        entry.set_max_length(NAME_MAX)
+        entry.set_max_length(max_length)
         entry.set_width_chars(24)
         ok, cancel = Gtk.Button(label="OK"), Gtk.Button(label="Cancel")
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)

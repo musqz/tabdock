@@ -24,6 +24,9 @@ from .model import (  # noqa: E402
 from .ui import ConsoleView  # noqa: E402
 
 
+EDITS = {"wsicon": "icon", "wscolor": "color", "wscontainer": "cookieStoreId"}  # --debug verb -> what it sets
+
+
 class Panel:
     """Routes relay messages to the view, picks which browsers to show, and sends actions back."""
 
@@ -135,9 +138,11 @@ class Panel:
 
     def on_stdin_line(self, line):
         """--debug console, to drive the reverse path without a GUI:
-        'activate <tabId>', 'move <tabId> <index>', 'order <cookieStoreId>,<cookieStoreId>,...', and for
+        'activate <tabId>', 'move <tabId> <index>', 'order <cookieStoreId>,<cookieStoreId>,...',
+        'newtab <cookieStoreId>' (the "+" of a container section), and for
         workspaces (the focused window's; ids as the console prints them, in braces) 'ws <id>',
-        'wsnew <name>', 'wsrename <id> <name>', 'wsrm <id>', 'wsmove <tabId> <id>'."""
+        'wsnew <name>', 'wsrename <id> <name>', 'wsrm <id>', 'wsmove <tabId> <id>', and 'wsicon <id> [icon]',
+        'wscolor <id> [colour]', 'wscontainer <id> [cookieStoreId]' (without the last word: none)."""
         parts = line.split()
         if not parts or self.current not in self.states:
             return
@@ -150,6 +155,8 @@ class Panel:
             self.command(self.current, {"type": "move_tab", "tabId": int(parts[1]), "index": int(parts[2])})
         elif len(parts) == 2 and parts[0] == "order":
             self.command(self.current, {"type": "set_container_order", "order": parts[1].split(",")})
+        elif len(parts) == 2 and parts[0] == "newtab" and focused_window(state):
+            self.command(self.current, {"type": "new_tab", "cookieStoreId": parts[1], "windowId": focused_window(state)["id"]})
         elif parts[0].startswith("ws") and offers_workspaces(self.browsers[self.current], state):
             self._workspace_line(line, focused_window(state))
 
@@ -167,6 +174,9 @@ class Panel:
             self.command(self.current, {"type": "remove_workspace", "workspaceId": args[0]})
         elif verb == "wsmove" and len(args) == 2 and args[0].isdigit():
             self.command(self.current, {"type": "move_tab_to_workspace", "tabId": int(args[0]), "workspaceId": args[1]})
+        elif verb in EDITS and 1 <= len(args) <= 2:
+            value = args[1] if len(args) == 2 else None
+            self.command(self.current, {"type": "edit_workspace", "workspaceId": args[0], EDITS[verb]: value})
 
     def _shown(self):
         """The browsers to list: all of them, the one chosen, or the one in use. Only those that have

@@ -24,8 +24,9 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/tabdock-nmhost  
 - **Drag to reorder:** container sections and tabs within their own container. Order is remembered per
   browser profile (Firefox can't reorder containers itself). "No container" always stays first.
 - **Workspaces:** chips above the tabs; each browser window shows one workspace and the others' tabs are
-  hidden in the browser's own tab strip too. Click to switch, `+` for a new one, right-click to rename or
-  remove it, right-click a tab to move it to another. See Workspaces below.
+  hidden in the browser's own tab strip too. Click to switch, `+` for a new one, right-click to rename it,
+  give it an icon, a colour or a container for its new tabs, or remove it; right-click a tab to move it to
+  another; Ctrl+Alt+PageDown/PageUp and Ctrl+Alt+1…9 switch from the keyboard. See Workspaces below.
 - **Several browsers:** chips under the header choose what's listed — `auto` (current browser), one
   chip per browser, or `all` (every browser, foldable, its own colour band). Clicking a tab in another
   browser activates it and raises its window. `view = "all"` starts in that view.
@@ -119,6 +120,18 @@ workspace with `+`: until then no tab is ever hidden, and your existing tabs bec
   workspace you unpinned it in.
 - **Removing** a workspace closes nothing: its tabs move to the workspace next to it (the menu says which).
   The last workspace stays.
+- **Icon and colour:** right-click a chip → *Icon* (a few to pick from, or *Other…* for any emoji) and
+  *Colour* (the colours containers have). The chip shows the icon before the name and a bar in the colour.
+- **A container for its new tabs:** right-click a chip → *New tabs in* → a container. While that workspace
+  shows, a new tab (Ctrl+T, the `+` in the tab strip) opens in that container: Firefox cannot move a tab
+  into a container, so the extension reopens the new tab there at once. Links keep the container of the page
+  they come from, and the panel's own `+` on a container section opens exactly there ("No container"
+  included). Removing the container clears the choice; private windows cannot hold containers, so nothing
+  changes there.
+- **Keyboard:** Ctrl+Alt+PageDown / Ctrl+Alt+PageUp go to the next / previous workspace (round the list),
+  Ctrl+Alt+1 … 9 to the first … ninth. Change or clear them in `about:addons` → gear icon → *Manage Extension
+  Shortcuts*. (Not Ctrl+Alt+arrows: Openbox's default configuration switches desktops with those.) They do
+  nothing until there is a second workspace, and never in Zen, where you may want to clear them.
 - **Restarts:** workspaces, the tabs in each and what every window shows survive a browser restart
   (restoring the previous session). Disabling or removing the extension shows every hidden tab again.
 - **Zen** has workspaces of its own, so the panel offers none there, and the extension never hides a tab in it.

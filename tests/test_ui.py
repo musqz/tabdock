@@ -1118,6 +1118,84 @@ class DockViewTest(unittest.TestCase):
         self.right_click(self.ws_buttons(view)["Default"])
         self.assertFalse(self.menu_items(view)["Remove (the last workspace stays)"].get_sensitive())
 
+    EDIT_STATE = {  # an extension that keeps an icon, a colour and a container per workspace
+        **WS_STATE,
+        "containers": [
+            {"cookieStoreId": "firefox-container-1", "name": "Personal", "colorCode": "#37adff", "icon": "fingerprint"},
+            {"cookieStoreId": "firefox-container-2", "name": "Bank & Co", "colorCode": "#51cd00", "icon": "dollar"},
+        ],
+        "workspaces": [
+            {"id": "default", "name": "Default", "icon": None, "color": None, "cookieStoreId": None},
+            {"id": "ws-1", "name": "Work", "icon": "💼", "color": "blue", "cookieStoreId": "firefox-container-1"},
+            {"id": "ws-2", "name": "Play", "icon": None, "color": None, "cookieStoreId": None},
+        ],
+    }
+
+    def submenu(self, view, label):
+        """{the text an item shows (markup stripped): item} of one of the menu's submenus."""
+        return {item.get_child().get_text(): item for item in self.menu_items(view)[label].get_submenu().get_children()}
+
+    def test_a_workspace_chip_wears_its_icon_and_colour_and_names_its_container(self):
+        view = self.make()
+        view.show([(object(), INFO, self.EDIT_STATE)])
+        self.assertEqual(list(self.ws_buttons(view)), ["Default", "💼 Work", "Play", "+"])
+        work, play = self.ws_buttons(view)["💼 Work"], self.ws_buttons(view)["Play"]
+        self.assertTrue(work.get_style_context().has_class("ws-blue"))
+        self.assertFalse(play.get_style_context().has_class("ws-col"))
+        self.assertIn("New tabs open in Personal", work.get_tooltip_text())
+        self.assertNotIn("New tabs", play.get_tooltip_text())
+
+    def test_the_workspace_menu_sets_its_icon_colour_and_container(self):
+        view = self.make()
+        view.show([(object(), INFO, self.EDIT_STATE)])
+        self.right_click(self.ws_buttons(view)["Play"])
+        self.assertEqual(list(self.menu_items(view)),
+                         ["Rename…", "Icon", "Colour", "New tabs in", "Remove (its tabs go to 💼 Work)"])
+        self.assertEqual(self.commands, [])  # marking the current choices sends nothing
+        self.submenu(view, "Icon")["🎮"].activate()
+        self.submenu(view, "Colour")["● Green"].activate()
+        self.submenu(view, "New tabs in")["▌ $ Bank & Co"].activate()  # (markup-escaped, shown as it is)
+        edit = {"type": "edit_workspace", "workspaceId": "ws-2"}
+        self.assertEqual(self.commands, [
+            {**edit, "icon": "🎮"}, {**edit, "color": "green"}, {**edit, "cookieStoreId": "firefox-container-2"},
+        ])
+
+    def test_the_workspace_menu_marks_what_it_has_and_can_clear_it(self):
+        view = self.make()
+        view.show([(object(), INFO, self.EDIT_STATE)])
+        self.right_click(self.ws_buttons(view)["💼 Work"])
+        chosen = lambda label: [t for t, item in self.submenu(view, label).items() if item.get_active()]  # noqa: E731
+        self.assertEqual((chosen("Icon"), chosen("Colour"), chosen("New tabs in")), (["💼"], ["● Blue"], ["▌ ☺ Personal"]))
+        self.submenu(view, "Icon")["None"].activate()
+        self.submenu(view, "Colour")["None"].activate()
+        self.submenu(view, "New tabs in")["No container"].activate()
+        edit = {"type": "edit_workspace", "workspaceId": "ws-1"}
+        self.assertEqual(self.commands, [{**edit, "icon": None}, {**edit, "color": None}, {**edit, "cookieStoreId": None}])
+
+    def test_any_other_icon_can_be_typed(self):
+        view = self.make()
+        view.show([(object(), INFO, self.EDIT_STATE)])
+        self.right_click(self.ws_buttons(view)["Play"])
+        self.submenu(view, "Icon")["Other…"].activate()
+        self.assertEqual(view._dialog_entry.get_max_length(), 8)  # one emoji, even a composed one, or a few letters
+        view._dialog_entry.set_text("🦊")
+        view._dialog_entry.emit("activate")
+        self.assertEqual(self.commands, [{"type": "edit_workspace", "workspaceId": "ws-2", "icon": "🦊"}])
+        spaces = [{**ws, "icon": "🦊"} if ws["id"] == "ws-2" else ws for ws in self.EDIT_STATE["workspaces"]]
+        view.show([(object(), INFO, {**self.EDIT_STATE, "workspaces": spaces})])
+        self.right_click(self.ws_buttons(view)["🦊 Play"])
+        self.assertTrue(self.submenu(view, "Icon")["Other (🦊)…"].get_active())  # the typed one is the choice
+
+    def test_an_older_extension_or_no_containers_offer_less(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])  # workspaces with names only
+        self.right_click(self.ws_buttons(view)["Work"])
+        self.assertEqual(list(self.menu_items(view)), ["Rename…", "Remove (its tabs go to Default)"])
+        view.show([(object(), INFO, {**self.EDIT_STATE, "containers": []})])  # containers switched off
+        self.right_click(self.ws_buttons(view)["Play"])
+        self.assertNotIn("New tabs in", self.menu_items(view))
+        self.assertIn("Colour", self.menu_items(view))
+
     def test_right_click_on_a_tab_moves_it_to_another_workspace(self):
         view = self.make()
         conn = object()

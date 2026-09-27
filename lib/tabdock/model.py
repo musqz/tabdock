@@ -26,8 +26,31 @@ def window_of_tab(state, tab_id):
 
 
 def workspaces(state):
-    """[{id, name}] of the browser profile; empty from an extension older than workspaces."""
+    """[{id, name, icon, color, cookieStoreId}] of the browser profile; empty from an extension older than
+    workspaces, and only {id, name} from one older than the icon, colour and container."""
     return state.get("workspaces") or []
+
+
+def edits_workspaces(spaces):
+    """Whether the extension keeps an icon, a colour and a container for each workspace: it reports all three,
+    empty or not. An older one only knows names."""
+    return bool(spaces) and all("icon" in ws for ws in spaces)
+
+
+# Firefox's container colours, as its colorCode gives them: a workspace takes its colour from the same set.
+WS_COLORS = {
+    "blue": "#37adff", "turquoise": "#00c79a", "green": "#51cd00", "yellow": "#ffcb00", "orange": "#ff9f00",
+    "red": "#ff613d", "pink": "#ff4bda", "purple": "#af51f5", "toolbar": "#7c7c7d",
+}
+
+
+def colour_name(color):
+    return "Grey" if color == "toolbar" else color.capitalize()  # "toolbar": Firefox's grey
+
+
+def workspace_label(ws):
+    """A workspace as its chip names it: the icon, when it has one, before the name."""
+    return f'{ws["icon"]} {ws["name"]}' if ws.get("icon") else ws["name"]
 
 
 def offers_workspaces(info, state):
@@ -254,7 +277,8 @@ def format_state(info, state):
     lines = [head]
     for ws in workspaces(state):  # "workspace* Name {id}": the star marks the one the window shows
         mark = "*" if win and ws["id"] == win.get("workspaceId") else " "
-        lines.append(f'workspace{mark} {ws["name"]} {{{ws["id"]}}}')
+        extra = "".join(f" {key}={ws[key]}" for key in ("icon", "color", "cookieStoreId") if ws.get(key))
+        lines.append(f'workspace{mark} {ws["name"]} {{{ws["id"]}}}{extra}')
     for container, tabs in group_tabs(state):
         lines.append(f'[{container["name"]}] ({len(tabs)}) {container["cookieStoreId"]}')  # the id: for `order`
         for tab in tabs:

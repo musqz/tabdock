@@ -25,7 +25,11 @@ Tabs without a container have `cookieStoreId: "firefox-default"`.
 (per browser profile, in `storage.local`), because Firefox cannot reorder containers itself. Ids named there
 come first in that order (unknown ones are ignored); containers not named keep the browser's order after them.
 
-`workspaces[]`: `{id, name}` in the order they were made (per browser profile, in `storage.local`). A window's
+`workspaces[]`: `{id, name, icon, color, cookieStoreId}` in the order they were made (per browser profile, in
+`storage.local`); `icon` (an emoji or a few characters), `color` (one of the container colours: `blue`,
+`turquoise`, `green`, `yellow`, `orange`, `red`, `pink`, `purple`, `toolbar`) and `cookieStoreId` (the container
+its new tabs open in) are `null` when unset, and an extension older than them sends only `id` and `name` (the
+panel then offers no way to set them). A window's
 `workspaceId` is the workspace it shows; a tab's is the workspace it belongs to (both kept in the browser
 session, `sessions.setWindowValue` / `setTabValue`, so they survive a restart although ids change). The
 extension hides (`tabs.hide`) every tab of another workspace than its window's, and shows its own; pinned
@@ -43,15 +47,21 @@ offers no workspaces in Zen (it has its own) or from an older extension (no `wor
 | `activate_tab` | `tabId`, `windowId` | activates the tab and focuses its window |
 | `move_tab` | `tabId`, `index` | `tabs.move`: `index` is the tab's final position in its window (it leaves its old place first, so moving forward lands one earlier than the target's index); the resulting `tabs.onMoved` triggers a new `state` |
 | `set_container_order` | `order[]` (cookieStoreIds) | stores the order of the panel's container sections and pushes a new `state`; the panel also shows it at once without waiting |
-| `new_tab` | `cookieStoreId`, `windowId` | `tabs.create` in that container and window (the `+` on a container section); the resulting `tabs.onCreated` triggers a new `state` |
+| `new_tab` | `cookieStoreId`, `windowId` | `tabs.create` in that container and window (the `+` on a container section), even "No container" in a workspace with a container of its own; the resulting `tabs.onCreated` triggers a new `state` |
 | `switch_workspace` | `windowId`, `workspaceId` | the window shows that workspace: its tab used last becomes active (a new tab if it has none), the others' tabs are hidden |
 | `new_workspace` | `windowId`, `name` | adds a workspace (an empty name becomes "Workspace N") and switches the window to it, on a new tab |
 | `rename_workspace` | `workspaceId`, `name` | names are trimmed and cut at 64 characters; an empty one is ignored |
 | `remove_workspace` | `workspaceId` | closes nothing: its tabs, and the windows that showed it, go to its neighbour (the one before it, or after it if it was first). The last workspace stays |
+| `edit_workspace` | `workspaceId`, and any of `icon`, `color`, `cookieStoreId` | sets what it names; an empty, `null` or unknown value (a colour containers do not have, a container that does not exist) clears it. Icons are trimmed and cut at 8 characters |
 | `move_tab_to_workspace` | `tabId`, `workspaceId` | the tab joins that workspace; if it was the active tab of a window showing another one, the window stays and activates its own tab used last (a new tab if none) |
 
 A tab that is created (new tab, link, another window) joins the workspace its window shows, unless the session
-already knows its workspace (restored, or reopened after closing it: it goes back there). A tab dragged to another
+already knows its workspace (restored, or reopened after closing it: it goes back there). If that workspace has a
+container, a tab created on the new-tab page (`about:newtab`, `about:home`) in no container, and not asked for by
+the panel, is reopened in that container at the same place and the original closed, as is the new tab an empty
+workspace gets. A removed container is cleared from every workspace. The extension's keyboard shortcuts
+(`commands`: `next-workspace`, `previous-workspace`, `workspace-1` … `workspace-9`) switch the focused window
+like `switch_workspace`, with no message from the panel. A tab dragged to another
 window joins that window's workspace, and an unpinned tab the workspace it was unpinned in. A new window shows
 the workspace of the window focused before it.
 
