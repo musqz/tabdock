@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 - Site icons before the tab titles, and a toggle (the `icons` button in the header, `icons = true` in the
   config). **Off by default**, because the panel downloads the icons itself, from your own address and system
