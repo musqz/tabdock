@@ -33,6 +33,6 @@ signing steps, install locations and every way to start the panel: [docs/RELEASE
 - [docs/PROTOCOL.md](docs/PROTOCOL.md) — the panel/extension/relay wire protocol
 - [docs/PLAN.md](docs/PLAN.md) — design, milestones, repo layout
 
-<img width="320" height="1440" alt="Image" src="https://github.com/user-attachments/assets/14557b70-0a00-4510-99c8-65a62725c298" />
+<img width="320" height="1440" alt="Image" src="https://github.com/user-attachments/assets/764e92bf-bfef-45dd-8a08-6cd2d1bb4fdc" />
 
 <img width="320" height="1440" alt="Image" src="https://github.com/user-attachments/assets/a7a5d1f0-794a-4a29-b622-d81934ae400d" />
