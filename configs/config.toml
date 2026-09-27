@@ -63,6 +63,6 @@ pinned = false
 # line to change it; colours are written "#rrggbb" (or "#rgb"). On a dark accent the text turns white,
 # and the browser's name takes the usual text colour, so both stay readable.
 [theme]
-# accent = "#4c9aff"    every browser in this one colour
-# firefox = "#4c9aff"   one browser (also zen, firedragon, librewolf, waterfox, floorp): wins over accent
-# other = "#8f9bb3"     any other browser, and the strip while no browser is connected
+# accent = "#4c9aff"    # every browser in this one colour
+# firefox = "#4c9aff"   # one browser (also zen, firedragon, librewolf, waterfox, floorp): wins over accent
+# other = "#8f9bb3"     # any other browser, and the strip while no browser is connected

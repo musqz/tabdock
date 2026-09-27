@@ -1,5 +1,6 @@
 """Pure logic: config, geometry/strut, autohide state machine, browser matching."""
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -119,6 +120,20 @@ class ConfigTest(unittest.TestCase):
     def test_shipped_template_is_valid(self):
         template = os.path.join(os.path.dirname(__file__), "..", "configs", "config.toml")
         self.assertEqual(config.load(template), config.DEFAULTS)
+
+    def test_every_example_in_the_template_works_once_its_hash_is_taken_off(self):
+        """The template says to take the # off an example line: what is left must still be a valid config."""
+        template = os.path.join(os.path.dirname(__file__), "..", "configs", "config.toml")
+        with open(template) as f:
+            lines = f.read().split("\n")
+        examples = [i for i, line in enumerate(lines) if re.match(r"# [a-z_]+ = ", line)]
+        self.assertGreaterEqual(len(examples), 3)  # (the [theme] ones at least)
+        for i in examples:
+            with self.subTest(line=lines[i]), tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "config.toml")
+                with open(path, "w") as f:
+                    f.write("\n".join(lines[:i] + [lines[i][2:]] + lines[i + 1:]))
+                config.load(path)
 
 
 class GeometryTest(unittest.TestCase):
