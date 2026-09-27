@@ -104,8 +104,8 @@ class ConfigTest(unittest.TestCase):
 
     def test_theme(self):
         self.assertEqual(config.DEFAULTS["theme"], {})  # each browser keeps its own colour unless asked
-        cfg = config.validate({"theme": {"accent": "#4C9AFF", "firefox": "#0af", "other": "#123456"}})
-        self.assertEqual(cfg["theme"], {"accent": "#4c9aff", "firefox": "#00aaff", "other": "#123456"})
+        cfg = config.validate({"theme": {"accent": "#4C9AFF", "firefox": "#0af", "midori": "#8bc34a", "other": "#123456"}})
+        self.assertEqual(cfg["theme"], {"accent": "#4c9aff", "firefox": "#00aaff", "midori": "#8bc34a", "other": "#123456"})
         self.assertEqual(config.DEFAULTS["theme"], {})  # (validating one never changes the defaults)
         for bad in (
             {"theme": "blue"},  # a section, not a value

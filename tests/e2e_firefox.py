@@ -245,7 +245,7 @@ def main():
                 'user_pref("browser.shell.checkDefaultBrowser", false);\n'
                 'user_pref("datareporting.policy.dataSubmissionEnabled", false);\n'
                 'user_pref("browser.aboutwelcome.enabled", false);\n'
-                # as the README asks for workspaces: Firefox closes the window when its last *visible* tab
+                # as docs/USAGE.md asks for workspaces: Firefox closes the window when its last *visible* tab
                 # closes, the hidden tabs of the other workspaces with it
                 'user_pref("browser.tabs.closeWindowWithLastTab", false);\n'
                 # the browser restart in the workspace checks: restore the session, and keep the temporary
