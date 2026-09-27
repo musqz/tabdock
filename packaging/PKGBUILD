@@ -1,0 +1,67 @@
+# Maintainer: musqz <https://github.com/musqz>
+#
+# Release package, built from the v$pkgver tag. The signed extension is not built here: signing
+# needs the maintainer's addons.mozilla.org credentials, so it is attached to the GitHub release
+# once per version (docs/RELEASE.md, "Releasing a version") and installed to
+# /usr/share/tabdock/tabdock.xpi for every user.
+pkgname=tabdock
+pkgver=0.3.0
+pkgrel=1
+pkgdesc="Autohiding X11 side panel with the tabs and containers of Firefox-family browsers"
+arch=('any')
+url="https://github.com/musqz/tabdock"
+license=('MIT')
+depends=('python' 'python-gobject' 'python-xlib' 'gtk3')
+install=tabdock.install
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+        "$pkgname-$pkgver.xpi::$url/releases/download/v$pkgver/$pkgname-$pkgver.xpi")
+noextract=("$pkgname-$pkgver.xpi")  # a zip: makepkg would unpack it otherwise
+# run `updpkgsums` once the v$pkgver tag and its release asset exist
+sha256sums=('SKIP'
+            'SKIP')
+
+prepare() {
+    cd "$pkgname-$pkgver"
+    local version
+    version="$(<VERSION)"
+    if [[ $version != "$pkgver" ]]; then
+        echo "VERSION in the v$pkgver sources says $version" >&2
+        return 1
+    fi
+    # the same test as packaging/sign-extension.sh: Mozilla's signature is inside the file
+    python3 -c 'import sys, zipfile; sys.exit("META-INF/mozilla.rsa" not in zipfile.ZipFile(sys.argv[1]).namelist())' \
+        "$srcdir/$pkgname-$pkgver.xpi" || {
+        echo "$pkgname-$pkgver.xpi from the release is not signed by Mozilla" >&2
+        return 1
+    }
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    local share=/usr/share/$pkgname f
+    # the same layout install.sh creates: the relay finds the panel at ../../sidepanel
+    install -Dm755 sidepanel "$pkgdir$share/sidepanel"
+    install -Dm644 VERSION "$pkgdir$share/VERSION"
+    while IFS= read -r -d '' f; do
+        install -Dm644 "$f" "$pkgdir$share/$f"
+    done < <(find lib/sidepanel -type f -not -path '*/__pycache__/*' -print0)
+    install -Dm755 lib/native-host/sidepanel-nmhost "$pkgdir$share/lib/native-host/sidepanel-nmhost"
+    install -Dm644 configs/config.toml "$pkgdir$share/configs/config.toml"
+    install -Dm644 extension/icons/icon-96.png "$pkgdir$share/icon.png"
+    install -Dm644 "$srcdir/$pkgname-$pkgver.xpi" "$pkgdir$share/$pkgname.xpi"
+
+    install -d "$pkgdir/usr/bin"
+    ln -s "$share/sidepanel" "$pkgdir/usr/bin/sidepanel"
+
+    # system-wide native-messaging manifest (a per-user one in ~/.mozilla takes precedence)
+    install -d "$pkgdir/usr/lib/mozilla/native-messaging-hosts"
+    sed "s|@HOST_PATH@|$share/lib/native-host/sidepanel-nmhost|" configs/openbox_sidepanel.json.in \
+        > "$pkgdir/usr/lib/mozilla/native-messaging-hosts/openbox_sidepanel.json"
+
+    install -d "$pkgdir/usr/share/applications"
+    sed -e "s|@BIN@|/usr/bin/sidepanel|" -e "s|@ICON@|$share/icon.png|" configs/sidepanel.desktop.in \
+        > "$pkgdir/usr/share/applications/openbox-sidepanel.desktop"
+
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 README.md CHANGELOG.md docs/RELEASE.md -t "$pkgdir/usr/share/doc/$pkgname"
+}

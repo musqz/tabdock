@@ -104,7 +104,7 @@ monitor changes without a restart. Use `"primary"` or an output name to pin a sp
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests     # pure logic, relay protocol, panel routing, GTK view, install.sh
+python3 -m unittest discover -s tests     # pure logic, relay protocol, panel routing, GTK view, install.sh, PKGBUILD
 python3 tests/e2e_firefox.py              # slow: real headless Firefox with the extension
 python3 tests/e2e_x11.py                  # slow: the dock under real Openbox in a nested Xephyr window
 python3 tests/e2e_multihead.py            # slow: two monitors under real Openbox: tiling respects a pinned panel
@@ -122,7 +122,7 @@ directory. `e2e_x11.py` opens a small Xephyr window on your desktop while it run
 | `lib/sidepanel/` | panel: socket server, model, geometry, autohide, X11 helpers, site icons, GTK dock |
 | `lib/native-host/` | native-messaging relay |
 | `extension/` | the WebExtension (MV2), with icons |
-| `packaging/` | `build-extension.sh` (reproducible .xpi); AUR packaging later |
+| `packaging/` | `build-extension.sh` (reproducible .xpi), `sign-extension.sh`, Arch `PKGBUILD` |
 | `configs/` | native-messaging manifest template, sample config |
 | `docs/` | plan, protocol, install and release guide |
 | `tests/` | unit, protocol and end-to-end tests |

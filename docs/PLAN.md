@@ -153,7 +153,7 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
   `install.sh` covers them and no per-browser directories (`~/.zen`, `~/.firedragon`, `~/.librewolf`) are
   needed. Process-based identification tells them apart (Zen even reports itself as "Firefox"); Waterfox
   has its own accent colour. The signed `.xpi` is installed once per browser.
-- **Later, only if wanted:** tree tabs, Zen-workspace import, AUR packaging.
+- **Later, only if wanted:** tree tabs, Zen-workspace import, publishing `packaging/PKGBUILD` on the AUR.
 
 ## Risks
 
