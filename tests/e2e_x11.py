@@ -154,14 +154,14 @@ def main():
     ap.add_argument("--shots", help="keep screenshots here")
     args = ap.parse_args()
 
-    tmp = tempfile.mkdtemp(prefix="sidepanel-x11-")
+    tmp = tempfile.mkdtemp(prefix="tabdock-x11-")
     shots = args.shots or tmp
     os.makedirs(shots, exist_ok=True)
     procs = []
     try:
         xdg = os.path.join(tmp, "xdg")
-        os.makedirs(os.path.join(xdg, "openbox-sidepanel"))
-        cfg = os.path.join(xdg, "openbox-sidepanel", "config.toml")
+        os.makedirs(os.path.join(xdg, "tabdock"))
+        cfg = os.path.join(xdg, "tabdock", "config.toml")
 
         def write_cfg(**opts):
             opts = {"icons": True, **opts}  # icons are off by default; this test wants to see them drawn
@@ -173,7 +173,7 @@ def main():
         sock_path = os.path.join(tmp, "sp.sock")
 
         procs.append(subprocess.Popen(
-            ["Xephyr", DISPLAY, "-screen", f"{SCREEN[0]}x{SCREEN[1]}", "-ac", "-br", "-noreset", "-name", "sidepanel-e2e"],
+            ["Xephyr", DISPLAY, "-screen", f"{SCREEN[0]}x{SCREEN[1]}", "-ac", "-br", "-noreset", "-name", "tabdock-e2e"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         ))
         wait_for(lambda: run("xdpyinfo").returncode == 0, "Xephyr")
@@ -196,16 +196,16 @@ def main():
         with open(cfg, "w") as f:
             f.write(f'side = "left"\nwidth = {WIDTH}\nicons = true\n')
         layout_dump = os.path.join(tmp, "rows.json")
-        panel_env = {**ENV, "XDG_CONFIG_HOME": xdg, "SIDEPANEL_SOCKET": sock_path, "SIDEPANEL_LAYOUT_DUMP": layout_dump}
+        panel_env = {**ENV, "XDG_CONFIG_HOME": xdg, "TABDOCK_SOCKET": sock_path, "TABDOCK_LAYOUT_DUMP": layout_dump}
         panel_log = open(os.path.join(tmp, "panel.log"), "w")
-        panel = subprocess.Popen([os.path.join(ROOT, "sidepanel")], env=panel_env, stdout=panel_log, stderr=subprocess.STDOUT)
+        panel = subprocess.Popen([os.path.join(ROOT, "tabdock")], env=panel_env, stdout=panel_log, stderr=subprocess.STDOUT)
         procs.append(panel)
         wait_for(lambda: os.path.exists(sock_path), "panel socket")
-        strip = wait_for(lambda: find("openbox-sidepanel-strip"), "strip window")
+        strip = wait_for(lambda: find("tabdock-strip"), "strip window")
         wait_for(lambda: wininfo(strip)["mapped"], "strip mapped")
 
         def panel_win():
-            return find("openbox-sidepanel-panel")  # not "openbox-sidepanel": GTK's hidden leader window owns that
+            return find("tabdock-panel")  # not "tabdock": GTK's hidden leader window owns that
 
         def panel_mapped():
             wid = panel_win()
@@ -565,18 +565,18 @@ def main():
         wait_for(lambda: panel.poll() is not None, "panel exits after the quit button")
         assert panel.returncode == 0, f"panel exit code {panel.returncode}"
         assert not os.path.exists(sock_path), "the panel left its socket behind"
-        wait_for(lambda: find("openbox-sidepanel-strip") is None, "the strip window is gone once the panel exited")
+        wait_for(lambda: find("tabdock-strip") is None, "the strip window is gone once the panel exited")
         ok("quit button: the panel exits with code 0, removes its socket and its windows")
 
         # -- a browser start is enough: the relay launches the real panel, which outlives the relay ---
-        relay_env = {**panel_env, "SIDEPANEL_SOCKET": os.path.join(tmp, "launched.sock"), "XDG_RUNTIME_DIR": tmp}
-        relay_env.pop("SIDEPANEL_NO_LAUNCH", None)
+        relay_env = {**panel_env, "TABDOCK_SOCKET": os.path.join(tmp, "launched.sock"), "XDG_RUNTIME_DIR": tmp}
+        relay_env.pop("TABDOCK_NO_LAUNCH", None)
         relay = subprocess.Popen(
-            [os.path.join(ROOT, "lib", "native-host", "sidepanel-nmhost")],
+            [os.path.join(ROOT, "lib", "native-host", "tabdock-nmhost")],
             env=relay_env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         )
         procs.append(relay)
-        launched_strip = wait_for(lambda: find("openbox-sidepanel-strip"), "the relay never started the panel")
+        launched_strip = wait_for(lambda: find("tabdock-strip"), "the relay never started the panel")
         panel_pid = int(re.search(r"= (\d+)", prop(launched_strip, "_NET_WM_PID")).group(1))
         relay.stdin.close()  # the browser goes away
         relay.wait(timeout=10)

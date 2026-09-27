@@ -19,7 +19,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
-from sidepanel import favicons  # noqa: E402
+from tabdock import favicons  # noqa: E402
 
 
 def chunk(kind, body):

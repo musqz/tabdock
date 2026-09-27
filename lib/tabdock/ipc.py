@@ -101,7 +101,7 @@ def _claim(path):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         lock.close()
-        raise RuntimeError(f"another sidepanel is already listening on {path}") from None
+        raise RuntimeError(f"another tabdock is already listening on {path}") from None
     try:
         os.unlink(path)  # only ever a leftover of a dead panel: we hold the lock
     except FileNotFoundError:

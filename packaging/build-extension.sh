@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Builds an unsigned, reproducible openbox-sidepanel-<version>.xpi from extension/, containing
+# Builds an unsigned, reproducible tabdock-<version>.xpi from extension/, containing
 # exactly the files the manifest references. Sign it as described in docs/RELEASE.md.
 #
-#   packaging/build-extension.sh              -> web-ext-artifacts/openbox-sidepanel-<version>.xpi
+#   packaging/build-extension.sh              -> web-ext-artifacts/tabdock-<version>.xpi
 #   OUT_DIR=/some/dir packaging/build-extension.sh
 set -euo pipefail
 
@@ -21,7 +21,7 @@ with open(os.path.join(src, "manifest.json")) as f:
 files = ["manifest.json", *manifest["background"]["scripts"], *manifest["icons"].values()]
 
 os.makedirs(out_dir, exist_ok=True)
-out = os.path.join(out_dir, f"openbox-sidepanel-{manifest['version']}.xpi")
+out = os.path.join(out_dir, f"tabdock-{manifest['version']}.xpi")
 with zipfile.ZipFile(out, "w") as z:
     for name in files:
         # fixed timestamp and mode: the same sources always give the same bytes

@@ -63,7 +63,7 @@ class BuildTest(unittest.TestCase):
     def build(self, out_dir):
         done = subprocess.run([BUILD], env={**os.environ, "OUT_DIR": out_dir}, capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stderr)
-        return os.path.join(out_dir, f"openbox-sidepanel-{read(os.path.join(ROOT, 'VERSION')).strip()}.xpi")
+        return os.path.join(out_dir, f"tabdock-{read(os.path.join(ROOT, 'VERSION')).strip()}.xpi")
 
     def test_xpi_holds_exactly_what_the_manifest_references(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -73,7 +73,7 @@ class BuildTest(unittest.TestCase):
                 self.assertEqual(
                     sorted(z.namelist()), ["background.js", "icons/icon-48.png", "icons/icon-96.png", "manifest.json"]
                 )  # manifest at the archive root, no stray files (icon.svg source stays out)
-                self.assertEqual(json.loads(z.read("manifest.json"))["name"], "Openbox Sidepanel")
+                self.assertEqual(json.loads(z.read("manifest.json"))["name"], "Tabdock")
 
     def test_build_is_reproducible(self):
         with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:

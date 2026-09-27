@@ -21,6 +21,20 @@
   the chips, the right-click menu, typing a name). `tests/e2e_x11.py` now clicks its first tab where the layout
   dump says it is, instead of sweeping pixel rows that depend on fonts.
 
+- The command is `tabdock` now, the project's own name, instead of `sidepanel`: `~/.local/bin/tabdock` (or
+  `/usr/bin/tabdock` from the package), installed in `~/.local/share/tabdock`, with a "Tabdock" menu entry, its
+  config in `~/.config/tabdock/config.toml` and the output of a panel the browser started in
+  `$XDG_RUNTIME_DIR/tabdock.log`. `tabdock -h` lists the options and where those two files are on this machine.
+  To update, run `./install.sh` again: it removes the install from before the rename (`~/.local/share/openbox-sidepanel`,
+  `~/.local/bin/sidepanel`, the old menu entry) and names every line of your Openbox `autostart` and `rc.xml` that
+  still starts `sidepanel`, which it never edits itself; the package says the same when it upgrades. A config still
+  in `~/.config/openbox-sidepanel/` keeps working until you move it (`tabdock -h` says where to), and so do signing
+  credentials saved there. Quit a panel still running from before (its `✕`) and start `tabdock`: the old one listens
+  where only the old relay looks. Window rules (picom, Openbox) that match the panel's windows by
+  `openbox-sidepanel` need `tabdock` now (`tabdock-strip`, `tabdock-panel`). The extension shows as "Tabdock" in
+  `about:addons` from its next signed version; its id and native-messaging name stay the old ones, so it remains the
+  same add-on with the same stored container order, and the one installed now keeps working with the renamed panel.
+
 ## 0.3.1
 
 - The extension signed as 0.3.0 was signed before the `+` new-tab button reached the extension, so in the browser

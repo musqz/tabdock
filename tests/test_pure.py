@@ -8,10 +8,10 @@ from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
-from sidepanel import config  # noqa: E402
-from sidepanel.autohide import Autohide  # noqa: E402
-from sidepanel.geometry import TRIGGER_PX, dock_rect, outer_monitor, strut  # noqa: E402
-from sidepanel.model import accent, ancestors, detect_browser, match_browser, owns_window  # noqa: E402
+from tabdock import config  # noqa: E402
+from tabdock.autohide import Autohide  # noqa: E402
+from tabdock.geometry import TRIGGER_PX, dock_rect, outer_monitor, strut  # noqa: E402
+from tabdock.model import accent, ancestors, detect_browser, match_browser, owns_window  # noqa: E402
 
 
 class ConfigTest(unittest.TestCase):
@@ -70,6 +70,22 @@ class ConfigTest(unittest.TestCase):
                 f.write("side = [")
             with self.assertRaises(ValueError):  # TOMLDecodeError is a ValueError
                 config.load(path)
+
+    def test_a_config_from_before_the_rename_is_read_until_there_is_a_new_one(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp}):
+            new = os.path.join(tmp, "tabdock", "config.toml")
+            old = os.path.join(tmp, "openbox-sidepanel", "config.toml")
+            self.assertEqual(config.config_path(), new)  # neither exists: where to make one
+            os.makedirs(os.path.dirname(old))
+            with open(old, "w") as f:
+                f.write('side = "right"\n')
+            self.assertEqual(config.config_path(), old)
+            self.assertEqual(config.load()["side"], "right")
+            os.makedirs(os.path.dirname(new))
+            with open(new, "w") as f:
+                f.write("")
+            self.assertEqual(config.config_path(), new)  # once there is a new one, the old one is ignored
+            self.assertEqual(config.load()["side"], "left")
 
     def test_shipped_template_is_valid(self):
         template = os.path.join(os.path.dirname(__file__), "..", "configs", "config.toml")
@@ -302,7 +318,7 @@ class MatchTest(unittest.TestCase):
             ("/usr/lib/firefox-developer-edition/firefox", "Firefox"),
             ("/usr/bin/somethingelse", "Firefox"),  # unknown executable: keep the reported name
         ):
-            with self.subTest(exe=exe), mock.patch("sidepanel.model.os.readlink", return_value=exe):
+            with self.subTest(exe=exe), mock.patch("tabdock.model.os.readlink", return_value=exe):
                 self.assertEqual(detect_browser(hello), expected)
 
     def test_detect_browser_without_a_readable_process(self):
@@ -317,7 +333,7 @@ class MatchTest(unittest.TestCase):
         self.assertEqual(accent({"browser": "Waterfox"}), "#2ec4b6")
         self.assertEqual(accent({"browser": "Mystery"}), "#8f9bb3")
         self.assertEqual(accent({}), "#8f9bb3")
-        from sidepanel.model import KNOWN_BROWSERS
+        from tabdock.model import KNOWN_BROWSERS
 
         # every browser the panel recognises has its own colour, so several can be listed together
         browsers = [name for _key, name in KNOWN_BROWSERS]

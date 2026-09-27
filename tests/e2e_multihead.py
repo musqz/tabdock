@@ -43,10 +43,10 @@ def maximised_geometry(head_x):
 
 
 def main():
-    tmp = tempfile.mkdtemp(prefix="sidepanel-multi-")
+    tmp = tempfile.mkdtemp(prefix="tabdock-multi-")
     procs = []
     try:
-        cfg_dir = os.path.join(tmp, "xdg", "openbox-sidepanel")
+        cfg_dir = os.path.join(tmp, "xdg", "tabdock")
         os.makedirs(cfg_dir)
         cfg = os.path.join(cfg_dir, "config.toml")
 
@@ -73,12 +73,12 @@ def main():
 
         # -- outer LEFT edge, pinned: only the left head shrinks ---------------------------------
         write_cfg(side="left", width=WIDTH, pinned=True)
-        panel_env = {**x.ENV, "XDG_CONFIG_HOME": os.path.join(tmp, "xdg"), "SIDEPANEL_SOCKET": os.path.join(tmp, "sp.sock"),
-                     "SIDEPANEL_NO_LAUNCH": "1"}
-        panel = subprocess.Popen([os.path.join(x.ROOT, "sidepanel")], env=panel_env,
+        panel_env = {**x.ENV, "XDG_CONFIG_HOME": os.path.join(tmp, "xdg"), "TABDOCK_SOCKET": os.path.join(tmp, "sp.sock"),
+                     "TABDOCK_NO_LAUNCH": "1"}
+        panel = subprocess.Popen([os.path.join(x.ROOT, "tabdock")], env=panel_env,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         procs.append(panel)
-        panel_win = x.wait_for(lambda: x.find("openbox-sidepanel-panel"), "panel window")
+        panel_win = x.wait_for(lambda: x.find("tabdock-panel"), "panel window")
         x.wait_for(lambda: x.has_strut(panel_win), "the pinned panel reserves space")
         left, right = maximised_geometry(0), maximised_geometry(HEAD)
         assert (left[0] - base_left[0], base_left[1] - left[1]) == (WIDTH, WIDTH), (left, base_left)

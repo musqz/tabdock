@@ -5,7 +5,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
-from sidepanel.model import (  # noqa: E402
+from tabdock.model import (  # noqa: E402
     format_state,
     group_tabs,
     heir,
@@ -191,12 +191,12 @@ class ModelTest(unittest.TestCase):
         self.assertNotIn(" home [10]", lines)  # another workspace's tab is not listed
 
     def test_waiting_text_without_a_packaged_extension(self):
-        self.assertEqual(waiting_text("/nonexistent/tabdock.xpi"), "Waiting for a browser with the Sidepanel extension")
+        self.assertEqual(waiting_text("/nonexistent/tabdock.xpi"), "Waiting for a browser with the Tabdock extension")
 
     def test_waiting_text_says_where_the_packaged_extension_is(self):
         with tempfile.NamedTemporaryFile(suffix=".xpi") as xpi:
             text = waiting_text(xpi.name)
-        self.assertTrue(text.startswith("Waiting for a browser with the Sidepanel extension"))
+        self.assertTrue(text.startswith("Waiting for a browser with the Tabdock extension"))
         self.assertIn("about:addons", text)
         self.assertTrue(text.endswith(xpi.name))
 

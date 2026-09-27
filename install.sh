@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Installs openbox-sidepanel for native browsers (Firefox, Zen, ...; no Flatpak/Snap).
+# Installs tabdock for native browsers (Firefox, Zen, ...; no Flatpak/Snap).
 #
-#   ./install.sh                          install to ~/.local (bin/sidepanel, share/openbox-sidepanel)
+#   ./install.sh                          install to ~/.local (bin/tabdock, share/tabdock)
 #   PREFIX=/usr SUDO=sudo ./install.sh    program files system-wide (manifests stay per-user)
 #   ./install.sh --uninstall              remove exactly what install created
 #
-# Installed under $PREFIX/share/openbox-sidepanel, with $PREFIX/bin/sidepanel linking to it, plus
-# the native-messaging manifest that lets the browser start the relay. Nothing outside those
+# Installed under $PREFIX/share/tabdock, with $PREFIX/bin/tabdock linking to it, plus the
+# native-messaging manifest that lets the browser start the relay. Nothing outside those
 # paths is touched (your Openbox autostart is only mentioned, never edited).
 set -euo pipefail
 
@@ -15,13 +15,17 @@ shopt -u patsub_replacement 2>/dev/null || true  # keep '&' in paths literal
 root="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 PREFIX="${PREFIX:-$HOME/.local}"
 SUDO="${SUDO:-}"
-share="$PREFIX/share/openbox-sidepanel"
-bin="$PREFIX/bin/sidepanel"
-relay="$share/lib/native-host/sidepanel-nmhost"
+share="$PREFIX/share/tabdock"
+bin="$PREFIX/bin/tabdock"
+relay="$share/lib/native-host/tabdock-nmhost"
 receipt="$share/.installed"  # every path install created, one per line: what --uninstall removes
-manifest_name="openbox_sidepanel.json"
+manifest_name="openbox_sidepanel.json"  # named by the extension, which kept its name through the rename
 apps_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-desktop_name="openbox-sidepanel.desktop"
+desktop_name="tabdock.desktop"
+# an install from before the rename to tabdock: installing removes it, and so does --uninstall
+old_share="$PREFIX/share/openbox-sidepanel"
+old_bin="$PREFIX/bin/sidepanel"
+old_receipt="$old_share/.installed"
 # native-messaging manifest dirs. One manifest in ~/.mozilla serves Firefox, Zen, FireDragon,
 # Waterfox and LibreWolf: each was verified with tests/e2e_firefox.py --firefox <browser>.
 nm_dirs=("$HOME/.mozilla/native-messaging-hosts")
@@ -54,27 +58,46 @@ remove() {
     fi
 }
 
+# remove a path a receipt lists, except a command that no longer links to the install it came from
+# (repointed by hand, e.g. to a dev checkout)
+remove_listed() {
+    local path=$1
+    if [[ ( $path == "$bin" && ! ( -L $path && "$(readlink -- "$path")" == "$share/tabdock" ) ) ||
+          ( $path == "$old_bin" && ! ( -L $path && "$(readlink -- "$path")" == "$old_share/sidepanel" ) ) ]]; then
+        printf '%-10s %s (not a link to this install)\n' skipped "$path"
+    else
+        remove "$path"
+    fi
+}
+
+# bytecode written by the installed copy, then any directories left empty
+tidy() {
+    [[ -d $1 ]] || return 0
+    $SUDO find "$1" -name __pycache__ -type d -prune -exec rm -rf {} +
+    $SUDO find "$1" -depth -type d -empty -delete
+}
+
 install_files() {
     local f
-    put 755 "$root/sidepanel" "$share/sidepanel"
+    put 755 "$root/tabdock" "$share/tabdock"
     put 644 "$root/VERSION" "$share/VERSION"
     # the whole package tree, so a new module or subpackage is never left out of the installed copy
     while IFS= read -r -d '' f; do
-        put 644 "$f" "$share/lib/sidepanel/${f#"$root"/lib/sidepanel/}"
-    done < <(find "$root/lib/sidepanel" -type f -not -path '*/__pycache__/*' -print0 | sort -z)
-    put 755 "$root/lib/native-host/sidepanel-nmhost" "$relay"
+        put 644 "$f" "$share/lib/tabdock/${f#"$root"/lib/tabdock/}"
+    done < <(find "$root/lib/tabdock" -type f -not -path '*/__pycache__/*' -print0 | sort -z)
+    put 755 "$root/lib/native-host/tabdock-nmhost" "$relay"
     put 644 "$root/configs/config.toml" "$share/configs/config.toml"
     put 644 "$root/extension/icons/icon-96.png" "$share/icon.png"  # for the menu entry
 }
 
 link_bin() {
-    local target="$share/sidepanel" note=
+    local target="$share/tabdock" note=
     if [[ -L $bin && "$(readlink -- "$bin")" == "$target" ]]; then
         printf '%-10s %s\n' unchanged "$bin"
         installed+=("$bin")
         return
     fi
-    if [[ -f $bin && ! -L $bin ]] && cmp -s -- "$root/sidepanel" "$bin"; then
+    if [[ -f $bin && ! -L $bin ]] && cmp -s -- "$root/tabdock" "$bin"; then
         # A launcher copied there by hand can never find its files. It is identical to ours,
         # so replacing it with the link loses nothing.
         $SUDO rm -f -- "$bin"
@@ -127,7 +150,7 @@ write_desktop_entry() {
         echo "warning: $bin has characters a menu entry cannot express; skipping the menu entry" >&2
         return 0
     }
-    content="$(<"$root/configs/sidepanel.desktop.in")"
+    content="$(<"$root/configs/tabdock.desktop.in")"
     content="${content//@BIN@/$exec_value}"
     content="${content//@ICON@/$share/icon.png}"
     if [[ -e $file && "$(<"$file")" == "$content" ]]; then
@@ -144,15 +167,34 @@ write_desktop_entry() {
     installed+=("$file")
 }
 
-# files an earlier version installed that this one no longer ships
+# files an earlier version installed that this one no longer ships, including a whole install from
+# before the rename to tabdock
 remove_stale() {
-    local old path keep
-    [[ -f $receipt ]] || return 0
-    while IFS= read -r old; do
-        keep=
-        for path in "${installed[@]}"; do [[ $path == "$old" ]] && keep=1; done
-        [[ -n $keep ]] || remove "$old"
-    done < "$receipt"
+    local list old path keep
+    for list in "$receipt" "$old_receipt"; do
+        [[ -f $list ]] || continue
+        while IFS= read -r old; do
+            keep=
+            for path in "${installed[@]}"; do [[ $path == "$old" ]] && keep=1; done
+            [[ -n $keep ]] || remove_listed "$old"
+        done < "$list"
+    done
+    if [[ -f $old_receipt ]]; then
+        remove "$old_receipt"
+        tidy "$old_share"
+    fi
+}
+
+# The command was called sidepanel before the rename: say where it is still started by that name.
+mention_old_command() {
+    local file files=() found
+    for file in "${XDG_CONFIG_HOME:-$HOME/.config}"/openbox/{autostart,rc.xml}; do
+        [[ -f $file ]] && files+=("$file")
+    done
+    (( ${#files[@]} )) || return 0
+    found="$(grep -Hn -E -- '(^|[^[:alnum:]_.-])sidepanel([^[:alnum:]_.-]|$)' "${files[@]}")" || return 0
+    echo "warning: the command is tabdock now; these lines still start it as sidepanel:" >&2
+    sed 's/^/  /' <<< "$found" >&2
 }
 
 write_receipt() {
@@ -183,13 +225,14 @@ do_install() {
     remove_stale
     write_receipt
     verify
+    mention_old_command
     cat <<EOF
 
 Next:
   1. Install the signed browser extension: see docs/RELEASE.md
   2. Starting the panel, any of these:
        - it starts by itself when a browser with the extension opens (start_with_browser in config.toml)
-       - "Sidepanel" in your application menu
+       - "Tabdock" in your application menu
        - at login: add this line to ~/.config/openbox/autostart, after picom starts:
              (sleep 5.0s && $(printf '%q' "$bin")) &
 EOF
@@ -198,16 +241,14 @@ EOF
 do_uninstall() {
     local path dir file target
     if [[ -f $receipt ]]; then
-        while IFS= read -r path; do
-            if [[ $path == "$bin" && ! ( -L $path && "$(readlink -- "$path")" == "$share/sidepanel" ) ]]; then
-                printf '%-10s %s (not a link to this install)\n' skipped "$path"
-            else
-                remove "$path"
-            fi
-        done < "$receipt"
+        while IFS= read -r path; do remove_listed "$path"; done < "$receipt"
         remove "$receipt"
     else
         printf '%-10s %s (nothing installed there)\n' absent "$receipt"
+    fi
+    if [[ -f $old_receipt ]]; then
+        while IFS= read -r path; do remove_listed "$path"; done < "$old_receipt"
+        remove "$old_receipt"
     fi
     # The browser manifest: remove it when it points at this install's relay, even without a
     # receipt; keep it (and say so) when it belongs to an install under another PREFIX.
@@ -215,17 +256,14 @@ do_uninstall() {
         file="$dir/$manifest_name"
         [[ -e $file ]] || continue
         target="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("path", ""))' "$file" 2> /dev/null || true)"
-        if [[ $target == "$relay" ]]; then
+        if [[ $target == "$relay" || $target == "$old_share/lib/native-host/sidepanel-nmhost" ]]; then
             remove "$file"
         else
             printf '%-10s %s (points at %s: uninstall with the PREFIX it was installed with)\n' kept "$file" "${target:-?}" >&2
         fi
     done
-    # bytecode written by the installed copy, then any directories left empty
-    if [[ -d $share ]]; then
-        $SUDO find "$share" -name __pycache__ -type d -prune -exec rm -rf {} +
-        $SUDO find "$share" -depth -type d -empty -delete
-    fi
+    tidy "$share"
+    tidy "$old_share"
 }
 
 case "${1:-}" in

@@ -14,8 +14,8 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk  # noqa: E402
 
-from sidepanel import favicons, geometry  # noqa: E402
-from sidepanel.config import DEFAULTS  # noqa: E402
+from tabdock import favicons, geometry  # noqa: E402
+from tabdock.config import DEFAULTS  # noqa: E402
 
 STATE = {
     "focusedWindowId": 2,
@@ -113,7 +113,7 @@ class DockViewTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def make(self, **cfg):
-        from sidepanel.dock import DockView
+        from tabdock.dock import DockView
 
         self.activated = []
         self.quit_calls = []
@@ -177,7 +177,7 @@ class DockViewTest(unittest.TestCase):
 
     def test_quit_button_quits(self):
         view = self.make()
-        self.assertEqual(view.quit_btn.get_tooltip_text(), "Quit sidepanel")
+        self.assertEqual(view.quit_btn.get_tooltip_text(), "Quit tabdock")
         view.quit_btn.clicked()
         self.assertEqual(self.quit_calls, [1])
 
@@ -490,7 +490,7 @@ class DockViewTest(unittest.TestCase):
         import json
         import tempfile
 
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"SIDEPANEL_LAYOUT_DUMP": tmp + "/rows.json"}):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"TABDOCK_LAYOUT_DUMP": tmp + "/rows.json"}):
             view = self.make()  # the hook is read once, when the panel starts
             view.show([(object(), INFO, DRAG_STATE)])
             view._dump_layout()
@@ -551,7 +551,7 @@ class DockViewTest(unittest.TestCase):
 
         view = self.make()
         self.assertFalse(view.cfg["icons"] or view.icons_btn.get_active())
-        with mock.patch("sidepanel.favicons.download", return_value=png()) as download:
+        with mock.patch("tabdock.favicons.download", return_value=png()) as download:
             view.show([(object(), INFO, self.icon_state(self.ICON_URL))])
             self.assertEqual(self.tab_widgets(view, 1), [Gtk.Label])
             self.assertIsNone(view._fetcher)  # not even the worker threads
@@ -602,7 +602,7 @@ class DockViewTest(unittest.TestCase):
 
     def test_an_icon_that_is_in_the_page_as_data_shows_without_any_download(self):
         view = self.make(icons=True)
-        with mock.patch("sidepanel.favicons.download", side_effect=AssertionError("no network for a data: icon")):
+        with mock.patch("tabdock.favicons.download", side_effect=AssertionError("no network for a data: icon")):
             view.show([(object(), INFO, self.icon_state(self.data_icon(24)))])
             self.pump(lambda: self.has_icon(view, 1), "the icon")
         self.assertEqual(self.tab_image(view, 1).get_pixbuf().get_width(), 16)
@@ -612,7 +612,7 @@ class DockViewTest(unittest.TestCase):
 
         view = self.make(icons=True)
         state = self.icon_state(self.ICON_URL, self.ICON_URL, self.ICON_URL)
-        with mock.patch("sidepanel.favicons.download", return_value=png()) as download:
+        with mock.patch("tabdock.favicons.download", return_value=png()) as download:
             view.show([(object(), INFO, state)])
             self.pump(lambda: self.has_icon(view, 1, 2, 3), "three icons")
             view.show([(object(), INFO, {**state})])  # a redraw
@@ -633,7 +633,7 @@ class DockViewTest(unittest.TestCase):
             return png()
 
         conn = object()
-        with mock.patch("sidepanel.favicons.download", side_effect=slow):
+        with mock.patch("tabdock.favicons.download", side_effect=slow):
             view.show([(conn, INFO, self.icon_state(self.ICON_URL))])
             self.pump(lambda: calls, "the download to start")
             view.show([(conn, INFO, self.icon_state(self.ICON_URL, self.ICON_URL))])  # the state changed: new rows
@@ -643,7 +643,7 @@ class DockViewTest(unittest.TestCase):
 
     def test_a_download_that_did_not_work_is_tried_again_later_but_not_on_every_redraw(self):
         view = self.make(icons=True)
-        with mock.patch("sidepanel.favicons.download", return_value=None) as download:  # no network, say
+        with mock.patch("tabdock.favicons.download", return_value=None) as download:  # no network, say
             view.show([(object(), INFO, self.icon_state(self.ICON_URL))])
             self.pump(lambda: view._failed and not view._pending, "the failure")
             for _ in range(3):
@@ -658,7 +658,7 @@ class DockViewTest(unittest.TestCase):
     def test_something_that_can_never_be_an_icon_is_not_asked_for_again(self):
         view = self.make(icons=True)
         for answer in (favicons.REFUSED, b"<svg onload='x'/>", b"<html>sign in</html>"):  # 404, svg, a page
-            with self.subTest(answer=answer), mock.patch("sidepanel.favicons.download", return_value=answer) as download:
+            with self.subTest(answer=answer), mock.patch("tabdock.favicons.download", return_value=answer) as download:
                 view._refused.clear()
                 view.show([(object(), INFO, self.icon_state(self.ICON_URL))])
                 self.pump(lambda: view._refused and not view._pending, "the refusal")
@@ -674,7 +674,7 @@ class DockViewTest(unittest.TestCase):
         view = self.make(icons=True)
         urls = ("http://example.com/favicon.ico", "chrome://branding/content/icon32.png", "about:newtab",
                 "file:///etc/passwd", "resource://gre/x.png", "", None)
-        with mock.patch("sidepanel.favicons.download", side_effect=AssertionError("fetched")) as download:
+        with mock.patch("tabdock.favicons.download", side_effect=AssertionError("fetched")) as download:
             view.show([(object(), INFO, self.icon_state(*urls))])
             self.pump(lambda: len(view._refused) == 5 and not view._pending, "the refusals")  # '' and None: no request at all
         download.assert_not_called()
@@ -683,7 +683,7 @@ class DockViewTest(unittest.TestCase):
         view = self.make(icons=True)
         why = lambda tab_id: self.tab_image(view, tab_id).get_tooltip_text()  # noqa: E731
         urls = (self.ICON_URL, "chrome://branding/content/icon32.png", None)
-        with mock.patch("sidepanel.favicons.download", return_value=favicons.Refused("the site answered 404")) as download:
+        with mock.patch("tabdock.favicons.download", return_value=favicons.Refused("the site answered 404")) as download:
             view.show([(object(), INFO, self.icon_state(*urls))])
             self.pump(lambda: not view._pending and len(view._refused) == 2, "the answers")
             self.assertEqual(why(1), "No icon: the site answered 404")
@@ -695,7 +695,7 @@ class DockViewTest(unittest.TestCase):
 
     def test_an_icon_that_could_not_be_downloaded_says_it_will_be_tried_again(self):
         view = self.make(icons=True)
-        with mock.patch("sidepanel.favicons.download", return_value=None):
+        with mock.patch("tabdock.favicons.download", return_value=None):
             view.show([(object(), INFO, self.icon_state(self.ICON_URL))])
             self.pump(lambda: view._failed and not view._pending, "the failure")
         self.assertIn("could not be downloaded", self.tab_image(view, 1).get_tooltip_text())
@@ -711,7 +711,7 @@ class DockViewTest(unittest.TestCase):
         from test_favicons import png
 
         view = self.make()
-        with mock.patch("sidepanel.favicons.download", return_value=png()) as download:
+        with mock.patch("tabdock.favicons.download", return_value=png()) as download:
             view.show([(object(), INFO, self.icon_state(self.ICON_URL))])
             download.assert_not_called()
             view.icons_btn.set_active(True)  # a click
@@ -734,7 +734,7 @@ class DockViewTest(unittest.TestCase):
             return png()
 
         urls = [f"https://site{i}.test/favicon.png" for i in range(7)]
-        with mock.patch("sidepanel.favicons.download", side_effect=slow):
+        with mock.patch("tabdock.favicons.download", side_effect=slow):
             view.show([(object(), INFO, self.icon_state(*urls))])
             self.pump(lambda: len(started) == 4, "the four workers to be busy")  # the other three are queued
             view.icons_btn.set_active(False)
@@ -761,7 +761,7 @@ class DockViewTest(unittest.TestCase):
         view = self.make(icons=True)
         a, b, c = (self.data_icon(side) for side in (2, 3, 4))
         conn = object()
-        with mock.patch("sidepanel.dock.ICONS_KEPT", 2):
+        with mock.patch("tabdock.dock.ICONS_KEPT", 2):
             view.show([(conn, INFO, self.icon_state(a, b))])
             self.pump(lambda: len(view._icons) == 2 and not view._pending, "a and b")
             view.show([(conn, INFO, self.icon_state(a))])  # a is used again: b is now the one not used for longest
@@ -792,7 +792,7 @@ class DockViewTest(unittest.TestCase):
             return None
 
         urls = [f"https://site{i}.test/favicon.png" for i in range(10)]
-        with mock.patch("sidepanel.dock.ICONS_PENDING_MAX", 3), mock.patch("sidepanel.favicons.download", side_effect=slow):
+        with mock.patch("tabdock.dock.ICONS_PENDING_MAX", 3), mock.patch("tabdock.favicons.download", side_effect=slow):
             view.show([(object(), INFO, self.icon_state(*urls))])
             self.pump(lambda: len(started) == 3, "three downloads")
             self.assertEqual(len(view._pending), 3)  # the rest is not asked for at all
@@ -820,7 +820,7 @@ class DockViewTest(unittest.TestCase):
         view = self.make(icons=True)
         with tempfile.TemporaryDirectory() as home, mock.patch.dict(
             os.environ, {"HOME": home, "XDG_CACHE_HOME": home + "/cache", "XDG_DATA_HOME": home + "/data"}
-        ), mock.patch("sidepanel.favicons.download", return_value=png()):
+        ), mock.patch("tabdock.favicons.download", return_value=png()):
             view.show([(object(), INFO, self.icon_state(self.ICON_URL))])
             self.pump(lambda: self.has_icon(view, 1), "the icon")
             self.assertEqual(os.listdir(home), [])
@@ -998,7 +998,7 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(view.browser_name.get_text(), "Firefox 2")
 
     def test_the_layout_hook_survives_a_window_that_is_already_gone(self):
-        with mock.patch.dict(os.environ, {"SIDEPANEL_LAYOUT_DUMP": "/nonexistent/rows.json"}):
+        with mock.patch.dict(os.environ, {"TABDOCK_LAYOUT_DUMP": "/nonexistent/rows.json"}):
             view = self.make()
         view.show([(object(), INFO, DRAG_STATE)])
         view.win.destroy()
@@ -1170,7 +1170,7 @@ class DockViewTest(unittest.TestCase):
         import json
         import tempfile
 
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"SIDEPANEL_LAYOUT_DUMP": tmp + "/rows.json"}):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"TABDOCK_LAYOUT_DUMP": tmp + "/rows.json"}):
             view = self.make()
             view.show([(object(), INFO, self.WS_STATE)])
             view._dump_layout()
@@ -1237,7 +1237,7 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(view.pin_btn.get_label(), "pin")
 
     def test_a_layout_change_moves_the_panel(self):
-        from sidepanel import geometry
+        from tabdock import geometry
 
         view = self.make()
         view.cfg["side"] = "left"

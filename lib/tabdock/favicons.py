@@ -337,7 +337,7 @@ def download(url, resolve=socket.getaddrinfo, context=None, public=is_public):
             try:
                 path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
                 conn.request("GET", path, headers={  # nothing else: no cookies, no referrer
-                    "User-Agent": "openbox-sidepanel",
+                    "User-Agent": "tabdock",
                     "Accept": "image/png,image/svg+xml,image/x-icon,image/gif,image/*;q=0.5",
                     "Accept-Encoding": "identity",
                 })

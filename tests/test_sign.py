@@ -57,7 +57,7 @@ class SignScriptTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.artifacts = os.path.join(self.tmp.name, "artifacts")
         self.config = os.path.join(self.tmp.name, "config")
-        self.saved = os.path.join(self.config, "openbox-sidepanel", "amo-credentials")
+        self.saved = os.path.join(self.config, "tabdock", "amo-credentials")
         self.log = os.path.join(self.tmp.name, "npx.log")
         bindir = os.path.join(self.tmp.name, "bin")
         os.makedirs(bindir)
@@ -208,6 +208,15 @@ class SignScriptTest(unittest.TestCase):
         self.assertEqual(done.returncode, 2)
         self.assertIn(self.saved, done.stderr)
         self.assertIn("--forget", done.stderr)
+
+    def test_credentials_saved_before_the_rename_to_tabdock_are_still_used_and_forgotten(self):
+        self.saved = os.path.join(self.config, "openbox-sidepanel", "amo-credentials")
+        self.write_saved(ISSUER, SECRET)
+        done = self.run_script(dry=True)
+        self.assertEqual(done.returncode, 0, self.out(done))
+        self.assertIn(f"saved in {self.saved}", done.stdout)
+        self.assertEqual(self.run_script("--forget").returncode, 0)
+        self.assertFalse(os.path.exists(self.saved))
 
     # -- already signed: decided by what is inside the file, not by its name ---------------------------
 

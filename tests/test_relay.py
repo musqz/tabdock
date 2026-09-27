@@ -15,8 +15,8 @@ import time
 import unittest
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-RELAY = os.path.join(ROOT, "lib", "native-host", "sidepanel-nmhost")
-PANEL = os.path.join(ROOT, "sidepanel")
+RELAY = os.path.join(ROOT, "lib", "native-host", "tabdock-nmhost")
+PANEL = os.path.join(ROOT, "tabdock")
 TIMEOUT = 10
 
 
@@ -51,7 +51,7 @@ class Base(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.sock_path = os.path.join(self.tmp.name, "sp.sock")
         # never start a real panel from a test (it would open dock windows on your desktop)
-        self.env = {**os.environ, "SIDEPANEL_SOCKET": self.sock_path, "SIDEPANEL_NO_LAUNCH": "1"}
+        self.env = {**os.environ, "TABDOCK_SOCKET": self.sock_path, "TABDOCK_NO_LAUNCH": "1"}
         self.procs = []
 
     def tearDown(self):
@@ -150,12 +150,12 @@ class LaunchTest(Base):
         self.fake_cmd = f"{shlex.quote(fake)} {shlex.quote(self.marker)}"
         self.launch_env = {
             **self.env,
-            "SIDEPANEL_PANEL_CMD": self.fake_cmd,  # exits at once, like a panel that died on startup
+            "TABDOCK_PANEL_CMD": self.fake_cmd,  # exits at once, like a panel that died on startup
             "XDG_RUNTIME_DIR": self.tmp.name,  # where the relay keeps the panel's log
             "XDG_CONFIG_HOME": self.cfg_home,
         }
-        del self.launch_env["SIDEPANEL_NO_LAUNCH"]
-        self.stay_env = {**self.launch_env, "SIDEPANEL_PANEL_CMD": self.fake_cmd + " stay"}
+        del self.launch_env["TABDOCK_NO_LAUNCH"]
+        self.stay_env = {**self.launch_env, "TABDOCK_PANEL_CMD": self.fake_cmd + " stay"}
         self.addCleanup(self.kill_started)
 
     def kill_started(self):
@@ -180,8 +180,8 @@ class LaunchTest(Base):
         return self.started()
 
     def write_config(self, text):
-        os.makedirs(os.path.join(self.cfg_home, "openbox-sidepanel"))
-        with open(os.path.join(self.cfg_home, "openbox-sidepanel", "config.toml"), "w") as f:
+        os.makedirs(os.path.join(self.cfg_home, "tabdock"))
+        with open(os.path.join(self.cfg_home, "tabdock", "config.toml"), "w") as f:
             f.write(text)
 
     def listen(self):
@@ -199,7 +199,7 @@ class LaunchTest(Base):
         self.assertNotEqual(sid, os.getsid(relay.pid))
         # stdout is the native-messaging channel: the panel must not have touched it
         self.assertEqual(select.select([relay.stdout.fileno()], [], [], 0.3)[0], [])
-        self.assertTrue(os.path.exists(os.path.join(self.tmp.name, "openbox-sidepanel.log")))
+        self.assertTrue(os.path.exists(os.path.join(self.tmp.name, "tabdock.log")))
 
     def test_a_panel_that_is_still_starting_is_not_started_twice(self):
         self.spawn([RELAY], env=self.stay_env)
@@ -246,13 +246,21 @@ class LaunchTest(Base):
         time.sleep(1.5)
         self.assertEqual(self.started(), [])
 
+    def test_a_config_from_before_the_rename_can_still_turn_it_off(self):
+        os.makedirs(os.path.join(self.cfg_home, "openbox-sidepanel"))
+        with open(os.path.join(self.cfg_home, "openbox-sidepanel", "config.toml"), "w") as f:
+            f.write("start_with_browser = false\n")
+        self.spawn([RELAY], env=self.launch_env)
+        time.sleep(1.5)
+        self.assertEqual(self.started(), [])
+
     def test_unreadable_config_keeps_the_default(self):
         self.write_config("start_with_browser = [\n")
         self.spawn([RELAY], env=self.launch_env)
         self.wait_started()
 
     def test_environment_can_turn_it_off(self):
-        self.spawn([RELAY], env={**self.launch_env, "SIDEPANEL_NO_LAUNCH": "1"})
+        self.spawn([RELAY], env={**self.launch_env, "TABDOCK_NO_LAUNCH": "1"})
         time.sleep(1.5)
         self.assertEqual(self.started(), [])
 
@@ -296,6 +304,30 @@ class SingleInstanceTest(Base):
         self.assertIsNone(second.poll())  # it took over
 
 
+class HelpTest(unittest.TestCase):
+    def help(self, home):
+        env = {**os.environ, "XDG_CONFIG_HOME": home, "XDG_RUNTIME_DIR": home}
+        done = subprocess.run([sys.executable, PANEL, "-h"], env=env, capture_output=True, text=True, timeout=TIMEOUT)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout
+
+    def test_help_names_the_command_and_where_its_files_are(self):
+        with tempfile.TemporaryDirectory() as home:
+            config = os.path.join(home, "tabdock", "config.toml")
+            out = self.help(home)
+            self.assertTrue(out.startswith("usage: tabdock "), out)
+            self.assertIn(f"config  {config}\n", out)
+            self.assertIn(os.path.normpath(os.path.join(ROOT, "configs", "config.toml")), out)  # none yet: the example
+            self.assertIn(f"log     {os.path.join(home, 'tabdock.log')}\n", out)
+            old = os.path.join(home, "openbox-sidepanel", "config.toml")
+            os.makedirs(os.path.dirname(old))
+            with open(old, "w") as f:
+                f.write("")
+            out = self.help(home)
+            self.assertIn(f"config  {old}\n", out)  # the one in use...
+            self.assertIn(f"move it to {config}", out)  # ...and where it belongs now
+
+
 class PanelDebugTest(Base):
     def read_panel_until(self, panel, needle):
         deadline = time.monotonic() + TIMEOUT
@@ -324,10 +356,10 @@ class PanelDebugTest(Base):
         self.assertIn(b"already listening", second.stderr)
 
         # unusable socket directory: clean error, no traceback
-        bad_env = {**self.env, "SIDEPANEL_SOCKET": os.path.join(self.tmp.name, "missing-dir", "sp.sock")}
+        bad_env = {**self.env, "TABDOCK_SOCKET": os.path.join(self.tmp.name, "missing-dir", "sp.sock")}
         bad = subprocess.run([sys.executable, PANEL, "--debug"], env=bad_env, capture_output=True, timeout=TIMEOUT)
         self.assertEqual(bad.returncode, 1)
-        self.assertIn(b"sidepanel:", bad.stderr)
+        self.assertIn(b"tabdock:", bad.stderr)
         self.assertNotIn(b"Traceback", bad.stderr)
 
         relay = self.spawn([RELAY])

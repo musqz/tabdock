@@ -10,14 +10,17 @@ temporary: the browser forgets it on restart. So a permanent setup has three par
 ./install.sh
 ```
 
-Installs to `~/.local/share/openbox-sidepanel` with `~/.local/bin/sidepanel` linking to it, plus the
+Installs to `~/.local/share/tabdock` with `~/.local/bin/tabdock` linking to it, plus the
 native-messaging manifest `~/.mozilla/native-messaging-hosts/openbox_sidepanel.json` (Firefox and Zen
-both read it). It prints every file it touches and ends by running `sidepanel --version` from the
-installed copy. Nothing else is edited. `PREFIX=/usr SUDO=sudo ./install.sh` installs the program
-system-wide (the manifest stays per-user). `./install.sh --uninstall` removes exactly what was installed.
+both read it; it keeps the name the extension looks for). It prints every file it touches and ends by
+running `tabdock --version` from the installed copy. An install from before the rename to tabdock
+(`~/.local/share/openbox-sidepanel`, `~/.local/bin/sidepanel`) is removed on the way, and lines in your
+Openbox `autostart` or `rc.xml` that still start `sidepanel` are pointed out. Nothing else is edited.
+`PREFIX=/usr SUDO=sudo ./install.sh` installs the program system-wide (the manifest stays per-user).
+`./install.sh --uninstall` removes exactly what was installed.
 
 On Arch, the package does all of this system-wide instead: `cd packaging && makepkg -si` installs the
-program to `/usr/share/tabdock`, `/usr/bin/sidepanel`, the menu entry, the signed extension, and the manifest
+program to `/usr/share/tabdock`, `/usr/bin/tabdock`, the menu entry, the signed extension, and the manifest
 in `/usr/lib/mozilla/native-messaging-hosts`. Use one or the other: a per-user manifest from `install.sh`
 overrides the package's.
 
@@ -43,7 +46,7 @@ Signing needs a free Mozilla account, which only you can create. Then:
    ```
 
    The credentials go to web-ext through the script's own environment only: never on a command line, in
-   your shell history, or in the repo. `--save` remembers them in `~/.config/openbox-sidepanel/amo-credentials`
+   your shell history, or in the repo. `--save` remembers them in `~/.config/tabdock/amo-credentials`
    (mode 600, outside the repo) so the next release needs no typing; `--forget` deletes that file; `--dry-run`
    checks everything except contacting Mozilla. It refuses to run if the version has already been signed.
    If a value has the wrong shape (an issuer without `user:`, a secret that is not 64 characters) it says so
@@ -58,8 +61,11 @@ To build the unsigned file yourself: `packaging/build-extension.sh`, and to lint
 `npx web-ext lint --source-dir extension` (expect 0 errors, 0 warnings).
 
 The add-on id `openbox-sidepanel@musqz.local` is fixed in the manifest and must match the native-messaging
-manifest (a test checks this). AMO rejects a version number it has already signed, so bump `VERSION`
-and `extension/manifest.json` together for every new signature (a test checks they agree).
+manifest (a test checks this). The id and the native-messaging name `openbox_sidepanel` kept their old names
+through the rename to tabdock: a new id would be a different add-on (losing the stored container order), and a
+new native-messaging name would break every install whose extension and manifest are not updated together.
+AMO rejects a version number it has already signed, so bump `VERSION` and `extension/manifest.json` together
+for every new signature (a test checks they agree).
 
 What the permissions are for: `nativeMessaging` (talk to the local helper), `tabs` (list, activate and move
 tabs), `contextualIdentities` and `cookies` (list containers; Firefox requires `cookies` for that API),
@@ -88,18 +94,18 @@ start, and each browser's helper waits for the panel):
 - **With the browser (default).** Opening a browser that has the extension starts the panel if none is
   running. This happens once per browser start, so a panel you quit with its `✕` stays gone until the next
   browser start. The panel keeps running after the browser closes. Turn it off with
-  `start_with_browser = false` in `~/.config/openbox-sidepanel/config.toml`. Its output goes to
-  `$XDG_RUNTIME_DIR/openbox-sidepanel.log` if it ever fails to start.
-- **From the application menu.** `install.sh` adds a "Sidepanel" entry (`~/.local/share/applications/`),
+  `start_with_browser = false` in `~/.config/tabdock/config.toml`. Its output goes to
+  `$XDG_RUNTIME_DIR/tabdock.log` if it ever fails to start (`tabdock -h` shows both paths).
+- **From the application menu.** `install.sh` adds a "Tabdock" entry (`~/.local/share/applications/`),
   which jgmenu, rofi and similar launchers list.
 - **At login.** Add this to `~/.config/openbox/autostart`, after picom (4.0 s) so the compositor rules
   apply from the first frame:
 
   ```bash
-  (sleep 5.0s && ~/.local/bin/sidepanel) &         # Sidepanel
+  (sleep 5.0s && ~/.local/bin/tabdock) &           # Tabdock
   ```
 - **From a keyboard shortcut.** In `~/.config/openbox/rc.xml`, inside `<keyboard>`:
-  `<keybind key="W-p"><action name="Execute"><command>/home/you/.local/bin/sidepanel</command></action></keybind>`
+  `<keybind key="W-p"><action name="Execute"><command>/home/you/.local/bin/tabdock</command></action></keybind>`
   (pressing it while the panel runs does nothing).
 
 Starting with the browser only needs the extension to be installed; with an autostart line the panel is
@@ -107,11 +113,11 @@ also there before any browser opens.
 
 ## 4. Reboot check
 
-1. Log in again. With an autostart line, `pgrep -a -f 'sidepanel$'` already shows the panel; otherwise
+1. Log in again. With an autostart line, `pgrep -a -f 'tabdock$'` already shows the panel; otherwise
    open Firefox and it appears.
 2. Open Firefox: the extension is enabled in `about:addons` and the panel lists your tabs. Same for Zen.
 
-If the panel says "Waiting for a browser with the Sidepanel extension":
+If the panel says "Waiting for a browser with the Tabdock extension":
 - the extension is not installed or is disabled (`about:addons`);
 - `~/.mozilla/native-messaging-hosts/openbox_sidepanel.json` is missing, or its `path` no longer exists
   (re-run `./install.sh`);
@@ -121,7 +127,7 @@ If the panel only reacts on part of the screen edge, another tool has invisible 
 (for example `fittsmon`'s `[Left]` position). They sit above every normal window and catch the pointer
 first. List them with `xwininfo -root -tree | grep -E ' (2x[0-9]+|[0-9]+x2)\+'`, then either remove that
 position from the other tool's config or put the panel on an edge without one (`side` and `monitor` in
-`~/.config/openbox-sidepanel/config.toml`).
+`~/.config/tabdock/config.toml`).
 
 ## 5. Updating
 

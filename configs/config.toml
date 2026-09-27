@@ -1,4 +1,4 @@
-# openbox-sidepanel config -> ~/.config/openbox-sidepanel/config.toml
+# tabdock config -> ~/.config/tabdock/config.toml
 # Read when the panel starts: after a change, quit the panel with the x in its header and start it again
 # from the menu.
 

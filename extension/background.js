@@ -4,6 +4,8 @@
 // The relay waits for the panel itself and asks us to "resync" whenever the
 // panel (re)connects, so we never push state unprompted while nobody listens.
 
+// Named before the rename to tabdock and kept, like the add-on id: the browser finds the relay's
+// manifest (openbox_sidepanel.json) by this name, in installs this signed file cannot update.
 const HOST = "openbox_sidepanel";
 const RECONNECT_MS = 3000; // only needed if the relay process itself died
 const DEBOUNCE_MS = 50;
@@ -164,7 +166,7 @@ async function reconcile(windowId) {
     if (show.length) await browser.tabs.show(show);
     if (hide.length) await browser.tabs.hide(hide);
   } catch (e) {
-    console.warn("sidepanel: hiding or showing tabs failed (one was closed meanwhile?)", e); // the next change heals it
+    console.warn("tabdock: hiding or showing tabs failed (one was closed meanwhile?)", e); // the next change heals it
   }
 }
 
@@ -347,7 +349,7 @@ function push() {
     try {
       send(await serial(snapshot)); // after the workspace changes queued so far
     } catch (e) {
-      console.error("sidepanel: snapshot failed", e);
+      console.error("tabdock: snapshot failed", e);
     }
   }, DEBOUNCE_MS);
 }
@@ -411,10 +413,10 @@ async function onCommand(msg) {
         push();
         break;
       default:
-        console.warn("sidepanel: unknown command", msg.type);
+        console.warn("tabdock: unknown command", msg.type);
     }
   } catch (e) {
-    console.error("sidepanel: command failed", msg, e);
+    console.error("tabdock: command failed", msg, e);
   }
 }
 
@@ -427,14 +429,14 @@ function connect() {
   try {
     port = browser.runtime.connectNative(HOST);
   } catch (e) {
-    console.error("sidepanel: connectNative failed", e);
+    console.error("tabdock: connectNative failed", e);
     port = null;
     scheduleReconnect();
     return;
   }
   port.onMessage.addListener((msg) => serial(() => onCommand(msg)));
   port.onDisconnect.addListener((p) => {
-    console.warn("sidepanel: relay disconnected", p.error && p.error.message);
+    console.warn("tabdock: relay disconnected", p.error && p.error.message);
     port = null;
     panelUp = false;
     scheduleReconnect();
@@ -443,7 +445,7 @@ function connect() {
 
 // Workspace bookkeeping for a browser event, in turn with everything else, then a new snapshot.
 function track(fn) {
-  serial(fn).catch((e) => console.error("sidepanel: workspace update failed", e));
+  serial(fn).catch((e) => console.error("tabdock: workspace update failed", e));
   push();
 }
 
@@ -478,5 +480,5 @@ if (browser.contextualIdentities) {
   browser.contextualIdentities.onRemoved.addListener(push);
 }
 
-serial(loadWorkspaces).catch((e) => console.error("sidepanel: loading workspaces failed", e));
+serial(loadWorkspaces).catch((e) => console.error("tabdock: loading workspaces failed", e));
 connect();

@@ -204,29 +204,58 @@ def _watch_stdin(panel):
     reader.read_line_async(GLib.PRIORITY_DEFAULT, None, on_line)
 
 
+def _root(*parts):
+    """VERSION and configs/ sit two levels above this package, in a checkout and once installed."""
+    return os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", *parts))
+
+
 def _version():
-    """The VERSION file sits two levels above this package, in a checkout and once installed."""
     try:
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "VERSION")) as f:
+        with open(_root("VERSION")) as f:
             return f.read().strip()
     except OSError:
         return "unknown"
 
 
+def _help_files():
+    """The end of --help: where the files are on this machine, and how the panel usually starts."""
+    path, home = config.config_path(), os.path.join(config.config_dir(), "config.toml")
+    if not os.path.exists(path):
+        note = f"\n          (not there, so the defaults apply; an example to copy: {_root('configs', 'config.toml')})"
+    elif path != home:
+        note = f"\n          (from before the rename to tabdock: move it to {home})"
+    else:
+        note = ""
+    return (
+        "files:\n"
+        f"  config  {path}{note}\n"
+        f"  log     {config.log_path()}\n"
+        "          (the output of a panel the browser started)\n\n"
+        "Usually started by the browser when it opens with the Tabdock extension (start_with_browser),\n"
+        'from the "Tabdock" menu entry, or an autostart line. https://github.com/musqz/tabdock'
+    )
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="sidepanel", description="Desktop side panel for Firefox-family browsers")
-    parser.add_argument("--version", action="version", version=f"sidepanel {_version()}")
+    parser = argparse.ArgumentParser(
+        prog="tabdock",
+        description="Autohiding X11 side panel with the tabs and containers of Firefox-family browsers.",
+        epilog=_help_files(),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--version", action="version", version=f"tabdock {_version()}")
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="no GUI: print each snapshot to stdout, read 'activate <tabId>' from stdin",
+        help="no GUI: print each snapshot to stdout, and read 'activate <tabId>', 'move <tabId> <index>' "
+        "and 'order <cookieStoreId>,...' from stdin",
     )
     args = parser.parse_args(argv)
 
     try:
         cfg = config.load()
     except ValueError as e:
-        print(f"sidepanel: {config.config_path()}: {e}", file=sys.stderr)
+        print(f"tabdock: {config.config_path()}: {e}", file=sys.stderr)
         return 1
 
     loop = GLib.MainLoop()
@@ -236,13 +265,13 @@ def main(argv=None):
 
         x = x11.connect()
     except ImportError:
-        print("sidepanel: python-xlib not found, the active window will not be followed", file=sys.stderr)
+        print("tabdock: python-xlib not found, the active window will not be followed", file=sys.stderr)
     panel = Panel(cfg, x)
     server = Server(config.socket_path(), panel.on_message, panel.on_close)
     try:
         server.start()
     except (RuntimeError, GLib.Error, OSError) as e:  # already running, or socket dir missing/unwritable
-        print(f"sidepanel: {e}", file=sys.stderr)
+        print(f"tabdock: {e}", file=sys.stderr)
         return 1
 
     if args.debug:
@@ -250,7 +279,7 @@ def main(argv=None):
         _watch_stdin(panel)
     else:
         if x is None:
-            print("sidepanel: needs an X display and python-xlib (is DISPLAY set?)", file=sys.stderr)
+            print("tabdock: needs an X display and python-xlib (is DISPLAY set?)", file=sys.stderr)
             server.stop()
             return 1
         from .dock import DockView
@@ -265,7 +294,7 @@ def main(argv=None):
         try:
             panel.reconfigure(config.load())
         except ValueError as e:
-            print(f"sidepanel: reload failed, keeping the old config: {e}", file=sys.stderr)
+            print(f"tabdock: reload failed, keeping the old config: {e}", file=sys.stderr)
         return GLib.SOURCE_CONTINUE
 
     for sig in (signal.SIGINT, signal.SIGTERM):

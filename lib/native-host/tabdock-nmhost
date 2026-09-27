@@ -23,10 +23,8 @@ import subprocess
 import sys
 import tomllib
 
-# deliberately standalone (one copyable file); keep in sync with sidepanel/config.py socket_path()
-SOCKET = os.environ.get("SIDEPANEL_SOCKET") or os.path.join(
-    os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "openbox-sidepanel.sock"
-)
+# deliberately standalone (one copyable file); keep in sync with tabdock/config.py socket_path()
+SOCKET = os.environ.get("TABDOCK_SOCKET") or os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "tabdock.sock")
 RETRY_S = 1.0
 MAX_LAUNCHES = 3
 
@@ -58,12 +56,15 @@ def connect_panel():
 
 
 def launch_enabled():
-    """start_with_browser from config.toml (default true). SIDEPANEL_NO_LAUNCH=1 turns it off (tests)."""
-    if os.environ.get("SIDEPANEL_NO_LAUNCH"):
+    """start_with_browser from config.toml (default true). TABDOCK_NO_LAUNCH=1 turns it off (tests)."""
+    if os.environ.get("TABDOCK_NO_LAUNCH"):
         return False
-    path = os.path.join(
-        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "openbox-sidepanel", "config.toml"
-    )
+    # the same file as tabdock/config.py config_path(): the one from before the rename while only that exists
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    path = os.path.join(base, "tabdock", "config.toml")
+    legacy = os.path.join(base, "openbox-sidepanel", "config.toml")
+    if not os.path.exists(path) and os.path.exists(legacy):
+        path = legacy
     try:
         with open(path, "rb") as f:
             return tomllib.load(f).get("start_with_browser", True) is not False
@@ -77,11 +78,11 @@ def start_panel():
     Its stdio must never be ours: stdout is the native-messaging channel to the browser.
     Returns the Popen (kept only to reap it and to notice it dying), or None if nothing could be run.
     """
-    override = os.environ.get("SIDEPANEL_PANEL_CMD")  # a test hook
+    override = os.environ.get("TABDOCK_PANEL_CMD")  # a test hook
     cmd = shlex.split(override) if override else [
-        os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "sidepanel")
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "tabdock")
     ]
-    log = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "openbox-sidepanel.log")
+    log = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "tabdock.log")  # tabdock/config.py log_path()
     try:
         with open(log, "ab") as out:
             return subprocess.Popen(
