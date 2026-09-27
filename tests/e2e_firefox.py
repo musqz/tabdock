@@ -492,6 +492,13 @@ def check_workspaces(m, panel, out, restart):
     eventually(lambda: not m.strip()["tab-c"][0] and m.strip()["tab-d"][0], "Work shown, Default hidden")
     print("OK picking a hidden tab (the browser's list of all tabs) switches to its workspace")
 
+    say(panel, "ws default")
+    eventually(lambda: shown_workspace(snap()) == ("Default", "default") and m.strip()["work-tab"][0], "Default shown")
+    say(panel, f"activate {listed_or_hidden_id(m, out, 'work-tab')}")  # as a search offers a tab of another workspace
+    eventually(lambda: shown_workspace(snap()) == ("Work", work), "the window follows the hidden tab activated")
+    eventually(lambda: m.strip()["work-tab"] == (False, False, True), "work-tab shown and selected in the browser")
+    print("OK activating a hidden tab from the panel (a search result) switches to its workspace")
+
     say(panel, f"wsrename {work} Deep work")
     eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "the rename")
     print("OK wsrename")

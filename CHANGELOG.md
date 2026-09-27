@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Find a tab: a 🔍 in the header opens a small window beside the panel (it takes the keyboard, which the dock never
+  does). Typing narrows the list at once to the tabs whose title or address holds every word, in any case, from
+  every workspace of the window, a match from another workspace saying which one it is in; Enter goes to the
+  first match, and a hidden one's workspace is switched to; Escape gives the whole list back. Folded sections
+  show their matches. The header no longer makes the panel wider than `width`: the browser's name shortens
+  instead (the Openbox test caught the extra button doing that). Tested in real Firefox 156 (activating another
+  workspace's hidden tab switches to it) and under Openbox (typing, the list narrowing, Enter, the keyboard back
+  in the browser).
+
 - Reopen a tab in another container: *Reopen in container* in a tab's right-click menu. Firefox cannot move a tab
   between containers, so the page opens anew in the one picked, right after it (pinned if it was, in the same
   workspace), and the original closes; the page reloads and its back/forward history stays behind. Offered for

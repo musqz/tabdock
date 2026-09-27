@@ -99,8 +99,15 @@ def in_workspace(tab, workspace):
     return workspace is None or bool(tab.get("pinned")) or tab.get("workspaceId", workspace) == workspace
 
 
-def group_tabs(state):
-    """[(container, [tab, ...])] for the focused window, in the workspace it shows.
+def matches(tab, query):
+    """Whether every word of `query` is in the tab's title or address, whatever the case."""
+    text = f'{tab.get("title") or ""} {tab.get("url") or ""}'.casefold()
+    return all(word in text for word in query.casefold().split())
+
+
+def group_tabs(state, every_workspace=False):
+    """[(container, [tab, ...])] for the focused window, in the workspace it shows (with `every_workspace`: in all
+    of them, as a search lists them).
 
     No-container first, then every known container in the browser's order, then any unknown
     cookie store. No-container and known containers stay even when empty: they are targets for
@@ -111,7 +118,7 @@ def group_tabs(state):
         return []
     by_store = {}
     for tab in win["tabs"]:
-        if in_workspace(tab, win.get("workspaceId")):
+        if every_workspace or in_workspace(tab, win.get("workspaceId")):
             by_store.setdefault(tab.get("cookieStoreId") or NO_CONTAINER, []).append(tab)
 
     groups = [({"cookieStoreId": NO_CONTAINER, "name": "No container"}, by_store.pop(NO_CONTAINER, []))]

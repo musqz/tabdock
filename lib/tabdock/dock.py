@@ -42,6 +42,7 @@ from .model import (  # noqa: E402
     focused_window,
     group_tabs,
     heir,
+    matches,
     offers_workspaces,
     ordered_containers,
     reordered,
@@ -91,6 +92,7 @@ button.sp-btn.sp-ws {{ border-radius: 4px; padding: 1px 8px; }}
 button.sp-btn.sp-ws:hover {{ background-color: #2a2e38; color: #ffffff; }}
 button.sp-btn.sp-ws.selected {{ background-color: #2f3542; color: #fff; font-weight: bold; box-shadow: inset 0 -2px 0 0 {accent}; }}
 .sp-pinmark {{ font-size: 0.8em; }}
+.sp-where {{ color: #7d8594; font-size: 0.85em; }}
 button.sp-btn.sp-close {{ opacity: 0; padding: 0 4px; }}
 .sp-row:hover button.sp-btn.sp-close {{ opacity: 1; }}
 button.sp-btn.sp-close:hover {{ color: #ff6b6b; }}
@@ -187,6 +189,8 @@ class DockView:
         self._chip_buttons = []  # (key, button)
         self._ws_buttons = []  # (conn, workspace id or None for "+", button) of the rows built last
         self._close_buttons = []  # (tab id, its ✕ button) of the rows built last
+        self._query = ""  # what the find window has typed: only the tabs that match are listed, from every workspace
+        self._first_match = None  # (conn, tab id, window id) of the first tab listed while finding
         self._middle = None  # the row a middle button went down on: releasing it there closes that tab
         self._holds = set()  # why the panel must stay open whatever the pointer does: "drag", "menu", "dialog"
         self._menu = None  # the context menu up (kept referenced while it is shown)
@@ -223,6 +227,7 @@ class DockView:
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         header.get_style_context().add_class("sp-header")
         self.browser_name = Gtk.Label(label="", xalign=0)
+        self.browser_name.set_ellipsize(Pango.EllipsizeMode.END)  # the header never makes the panel wider than `width`
         self.browser_name.get_style_context().add_class("sp-browser")
         self.quit_btn = self._button("✕", "Quit tabdock", Gtk.Button)
         self.quit_btn.get_style_context().add_class("sp-quit")
@@ -237,11 +242,15 @@ class DockView:
         self.icons_btn.set_active(self.cfg["icons"])
         self._refresh_icons_btn()
         self.icons_btn.connect("toggled", self._on_icons_toggled)
+        self.find_btn = self._button("🔍", "Find a tab by its title or address, in every workspace", Gtk.Button)
+        self.find_btn.get_style_context().add_class("sp-pin")
+        self.find_btn.connect("clicked", lambda _b: self._find())
         header.pack_start(self.browser_name, True, True, 0)
         header.pack_end(self.quit_btn, False, False, 0)  # rightmost
         header.pack_end(self.flip_btn, False, False, 0)
         header.pack_end(self.pin_btn, False, False, 0)
         header.pack_end(self.icons_btn, False, False, 0)
+        header.pack_end(self.find_btn, False, False, 0)
 
         # which browser(s) to list; wraps onto more lines when many browsers are open, and only
         # shown when there is a choice to make
@@ -799,6 +808,7 @@ class DockView:
             rows += [spot(button, "chip", button.get_label()) for _key, button in self._chip_buttons]
         rows += [spot(button, "workspace", ws_id, button.get_label()) for _conn, ws_id, button in self._ws_buttons]
         rows += [spot(button, "close", tab_id) for tab_id, button in self._close_buttons]
+        rows.append(spot(self.find_btn, "button", "find"))
         with open(path + ".tmp", "w") as f:
             json.dump(rows, f)
         os.replace(path + ".tmp", path)
@@ -831,14 +841,19 @@ class DockView:
         self._ws_buttons = []
         self._close_buttons = []
         self._waiting = {}  # the old rows are about to go: only the rows built below wait for an icon
+        self._first_match = None
         many = len(self.sources) > 1
         rows = []
+        finding = bool(self._query.strip())
         for conn, info, state in self.sources:
             # per browser process: two profiles of the same browser fold independently
             browser = info.get("browserPid") or info.get("browser")
             colour = accent(info)
             window = focused_window(state)
-            groups = group_tabs(state)  # the focused window's tabs, in the workspace it shows
+            groups = group_tabs(state, every_workspace=finding)  # the focused window's tabs, in the workspace it shows
+            if finding:  # only what matches, and only the sections that hold some of it
+                groups = [(c, [t for t in tabs if matches(t, self._query)]) for c, tabs in groups]
+                groups = [(c, tabs) for c, tabs in groups if tabs]
             if many:  # each browser gets its own header, which folds the whole browser away
                 folded = (browser, None) in self.collapsed
                 count = sum(len(tabs) for _container, tabs in groups)
@@ -854,14 +869,18 @@ class DockView:
                 rows.append(self._workspace_row(conn, colour, spaces, window, ordered_containers(state)))
             for container, tabs in groups:
                 key = (browser, container["cookieStoreId"])
-                folded = key in self.collapsed
+                folded = key in self.collapsed and not finding  # a match is never folded away
                 rows.append(self._section(container, tabs, key, folded, conn, colour, state, window["id"], can))
                 if not folded:
                     rows.extend(
                         self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour, spaces, can,
-                                      ordered_containers(state))
+                                      ordered_containers(state), window.get("workspaceId") if finding else None)
                         for tab in tabs
                     )
+                if finding and tabs and self._first_match is None:
+                    self._first_match = (conn, tabs[0]["id"], window["id"])
+        if finding and self._first_match is None:
+            rows.append(self._label(f"No tab matches “{self._query.strip()}”", "sp-empty", wrap=True))
         self._replace_rows(rows or [self._label("No browser windows", "sp-empty", wrap=True)])
 
     def _name(self, conn, info):
@@ -954,10 +973,11 @@ class DockView:
         self._last = None
         self._rebuild()
 
-    def _tab_row(self, tab, window_id, group, conn, colour, spaces=(), can=(), containers=()):
+    def _tab_row(self, tab, window_id, group, conn, colour, spaces=(), can=(), containers=(), shown=None):
         """A tab: its site icon (optional), the title, an unread badge, a pin if pinned, and a ✕ that shows while
         the row is hovered. Middle-click closes it too; right-click pins, moves (to another workspace) or closes.
-        `can`: what the extension handles ("close_tab", "pin_tab", "reopen_in_container"); the rest is not offered."""
+        `can`: what the extension handles ("close_tab", "pin_tab", "reopen_in_container"); the rest is not offered.
+        `shown`: while finding, the workspace the window shows; a tab of another one says which it is in."""
         label = self._label(tab_label(tab), "sp-tab")
         label.set_tooltip_text("\n".join(filter(None, (tab.get("title"), tab.get("url")))))
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -974,6 +994,11 @@ class DockView:
             badge_label = self._label(badge, "sp-badge")
             badge_label.set_tooltip_text(f"{badge} unread, from the tab's title")
             box.pack_start(badge_label, False, False, 0)
+        other = shown is not None and not pinned and tab.get("workspaceId", shown) != shown
+        if other:  # found in a workspace the window does not show: picking it switches there
+            where = next((ws for ws in spaces if ws["id"] == tab.get("workspaceId")), None)
+            if where is not None:
+                box.pack_start(self._label(f"in {workspace_label(where)}", "sp-where"), False, False, 0)
         if pinned:  # after the title, so every title starts in the same place
             mark = self._label("📌", "sp-pinmark")
             mark.set_tooltip_text("Pinned: shows in every workspace" if len(spaces) > 1 else "Pinned")
@@ -1013,6 +1038,31 @@ class DockView:
             box, "tab", tab["id"], group, conn, colour, lambda: self.on_activate(conn, tab["id"], window_id),
             active=bool(tab.get("active")), pinned=pinned, menu=menu, closable="close_tab" in can,
         )
+
+    def _find(self):
+        """The find window: what is typed there narrows the list at once, to the tabs whose title or address has
+        every word of it, from every workspace; Enter picks the first one (switching to its workspace), Escape
+        gives the whole list back."""
+        entry = Gtk.Entry(placeholder_text="Title or address")
+        entry.set_width_chars(28)
+
+        def narrow(_entry):
+            self._query = entry.get_text()
+            self._last = None
+            self._rebuild()
+
+        def answer(accepted):
+            first = self._first_match
+            self._query = ""
+            self._last = None
+            self._rebuild()
+            if accepted and first is not None:
+                self.on_activate(*first)
+
+        finish, _ok = self._small_window("Find tab", entry, "Go", answer, focus=entry, beside=True)
+        entry.connect("changed", narrow)
+        entry.connect("activate", lambda _e: finish(True))
+        self._dialog_entry = entry
 
     def _close_tab(self, conn, tab_id):
         self._command(conn, {"type": "close_tab", "tabId": tab_id})
@@ -1150,10 +1200,11 @@ class DockView:
             menu.append(item)
         return menu
 
-    def _small_window(self, title, content, accept_label, answer, focus=None):
+    def _small_window(self, title, content, accept_label, answer, focus=None, beside=False):
         """A small window of its own: `content` above Cancel and `accept_label`. It takes the keyboard, which the dock
         windows never do (a click must not steal it from the browser), and the panel stays open while it is up.
-        answer(accepted) is called once, as it goes; Escape or closing it is Cancel. Returns (finish, accept button)."""
+        answer(accepted) is called once, as it goes; Escape or closing it is Cancel. Returns (finish, accept button).
+        `beside`: next to the panel instead of at the pointer, where it would cover what the panel shows."""
         if self._dialog is not None:
             self._dialog.destroy()
         dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL, title=title)
@@ -1188,6 +1239,12 @@ class DockView:
         self._dialog_ok = ok
         self._hold("dialog", True)
         box.show_all()
+        if beside:
+            px, py = self.win.get_position()
+            pw, _ph = self.win.get_size()
+            dw = dialog.get_preferred_size()[1].width
+            dialog.set_position(Gtk.WindowPosition.NONE)
+            dialog.move(px + pw + 8 if self.cfg["side"] == "left" else max(0, px - dw - 8), py + 30)
         dialog.show()
         (focus or cancel).grab_focus()
         return finish, ok

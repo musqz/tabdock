@@ -26,6 +26,10 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/tabdock-nmhost  
   Right-click a tab to pin or unpin it, reopen it in another container (Firefox cannot move a tab between
   containers, so the page loads anew there and its back/forward history stays behind), or close it. Pinned tabs wear a 📌. With workspaces in use, closing a
   workspace's only tab from the panel leaves the window open (see Workspaces).
+- **Find a tab:** the 🔍 in the header opens a small window beside the panel. What you type there narrows the
+  list at once to the tabs whose title or address holds every word, from every workspace of the window (a tab
+  of another workspace says which); Enter goes to the first one, switching workspace if needed, and Escape
+  gives the whole list back.
 - **Edit containers:** right-click a container section to rename it, change its colour or icon, make a new
   container, or remove it. Removing asks first, with Cancel as the default: its tabs close (in every window and
   workspace) and Firefox deletes its cookies, which logs you out of the sites you used in it.

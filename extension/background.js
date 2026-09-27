@@ -578,6 +578,8 @@ async function onCommand(msg) {
         }
         break;
       case "activate_tab":
+        // a hidden tab (another workspace's, found by a search) is shown first; its window then shows its workspace
+        if ((await getTab(msg.tabId) || {}).hidden) await browser.tabs.show(msg.tabId);
         await browser.tabs.update(msg.tabId, { active: true });
         await browser.windows.update(msg.windowId, { focused: true });
         break;

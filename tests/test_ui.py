@@ -1410,6 +1410,45 @@ class DockViewTest(unittest.TestCase):
         self.right_click(self.row(view, "tab", 10))
         self.assertNotIn("Reopen in container", self.labels(view))
 
+    # -- finding a tab -------------------------------------------------------------------------------
+
+    def listed_tabs(self, view):
+        return [m["id"] for m in view._meta.values() if m["kind"] == "tab"]
+
+    def test_find_narrows_the_list_as_you_type_across_workspaces_and_enter_picks_the_first(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, self.WS_STATE)])  # Work shows tabs 2 and 3 (pinned); tab 1 "home" is in Default
+        self.assertEqual(sorted(self.listed_tabs(view)), [2, 3])
+        view.find_btn.clicked()
+        self.assertEqual(view._dialog.get_title(), "Find tab")
+        self.assertTrue(view.autohide.held)
+        view._dialog_entry.set_text("HOME")
+        self.assertEqual(self.listed_tabs(view), [1])  # from another workspace, whatever the case
+        where = [c.get_text() for c in self.row(view, "tab", 1).get_child().get_children()
+                 if c.get_style_context().has_class("sp-where")]
+        self.assertEqual(where, ["in Default"])  # says where it is
+        view._dialog_entry.emit("activate")  # Enter
+        self.assertEqual(self.activated, [(conn, 1, 2)])  # the extension switches to its workspace
+        self.assertEqual(sorted(self.listed_tabs(view)), [2, 3])  # the whole list back
+        self.assertFalse(view.autohide.held)
+
+    def test_find_says_when_nothing_matches_and_escape_gives_the_list_back(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        view.collapsed.add((1, "firefox-container-1"))  # a folded section still shows what matches in it
+        view.find_btn.clicked()
+        view._dialog_entry.set_text("mail")
+        self.assertEqual(self.listed_tabs(view), [11])
+        view._dialog_entry.set_text("nothing like this")
+        self.assertEqual(self.listed_tabs(view), [])
+        self.assertTrue(any(isinstance(c, Gtk.Label) and "No tab matches" in c.get_text() for c in view.list.get_children()))
+        event = Gdk.Event.new(Gdk.EventType.KEY_PRESS)
+        event.keyval = Gdk.KEY_Escape
+        view._dialog.emit("key-press-event", event)
+        self.assertEqual(self.activated, [])
+        self.assertEqual(self.listed_tabs(view), [10])  # everything again, the folded section folded again
+
     def test_a_middle_click_closes_the_tab_it_was_released_on(self):
         view = self.make()
         view.show([(object(), INFO, DRAG_STATE)])
