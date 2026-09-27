@@ -23,8 +23,8 @@ On Arch, the package does all of this system-wide instead: `cd packaging && make
 program to `/usr/share/tabdock`, `/usr/bin/tabdock`, the menu entry, the signed extension, and the manifest
 in `/usr/lib/mozilla/native-messaging-hosts`. Use one or the other: a per-user manifest from `install.sh`
 overrides the package's. The package needs a release with the signed `.xpi` attached (step 4 of "Releasing a
-version"): v0.3.1 has none, and its tag sits one merge before the 0.3.1 sources, so it cannot be packaged; use
-`install.sh` until the next release.
+version"). v0.3.1 has none, and its tag sits one merge before the 0.3.1 sources, so it cannot be packaged: the
+package starts at 0.4.0.
 
 ## 2. Get the extension signed (once per version)
 
@@ -77,9 +77,10 @@ which workspace each tab is in and which one each window shows) and `tabGroups` 
 Firefox's own tab groups next to their tabs). The manifest declares that no data is
 collected, and nothing leaves your computer.
 
-**A new version needs a new signature.** Workspaces (after 0.3.1) add the `tabHide` and `sessions`
-permissions and the workspace commands, so the next version needs a new signing and Firefox asks you to
-approve the two permissions when you install it; until then the panel works as before, without workspaces.
+**A new version needs a new signature.** 0.4.0 adds the `tabHide`, `sessions` and `tabGroups` permissions and
+the workspace, close, pin and container commands, so it needs a new signing and Firefox asks you to approve the
+three permissions when you install it; until then the panel works as before, without those (it offers only
+what the installed extension says it handles).
 Version 0.3.0 added the `storage` permission and the reorder commands, so it must be signed again (the
 same command as above, and Mozilla rejects a version number it has already signed) and installed in each
 browser over the old one. Firefox may ask you to approve the new permission when it updates. Until then

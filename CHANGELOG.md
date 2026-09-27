@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
+
+Sign this version's extension and install it in each browser (docs/RELEASE.md): it asks for three new
+permissions, `tabHide`, `sessions` and `tabGroups`. The command is `tabdock` now; see the rename below.
 
 - Firefox's own tab groups show in the panel: a grouped tab wears its group's name, in the group's colour, after
   its title (hover it for the full name). The extension reports them (`tabGroups`, a new permission, asked for

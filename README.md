@@ -5,10 +5,10 @@ through a small WebExtension. Firefox-family (Netscape-lineage, Gecko) browsers 
 FireDragon, Waterfox, LibreWolf; native installs, no Chromium/Blink, no Flatpak/Snap. Goal: a Zen-style
 sidebar (containers, workspaces, autohide) everywhere.
 
-Status: **0.3.1, installable.** Autohiding dock on the left/right edge, real install, signed extension,
-autostart, drag to reorder, new tab per container. Since 0.3.1, not yet released (they need the next signed
-extension): Zen-style workspaces; closing, pinning and reopening tabs in another container; editing containers;
-finding a tab; and Firefox's own tab groups shown. That completes the plan — see
+Status: **0.4.0, installable.** Autohiding dock on the left/right edge, real install, signed extension,
+autostart, drag to reorder, new tab per container; since 0.4.0 also Zen-style workspaces; closing, pinning and
+reopening tabs in another container; editing containers; finding a tab; and Firefox's own tab groups shown.
+That completes the plan — see
 [docs/PLAN.md](docs/PLAN.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ```
@@ -67,9 +67,8 @@ panel starts with the browser (`start_with_browser`), from the "Tabdock" menu en
 line / keybinding.
 
 **Arch Linux:** `cd packaging && makepkg -si` installs the latest release system-wide instead, with the
-extension already signed. This works from the next release on: the v0.3.1 release has no signed `.xpi` attached
-(and `packaging/PKGBUILD` already follows the renamed layout), so for now use `./install.sh` and install the
-signed extension yourself. Install that extension once in each browser: `about:addons` -> gear icon ->
+extension already signed (from 0.4.0 on: the v0.3.1 release has no signed `.xpi` attached, so it cannot be
+packaged). Install that extension once in each browser: `about:addons` -> gear icon ->
 "Install Add-on From File..." -> `/usr/share/tabdock/tabdock.xpi` (the panel shows this path too, until a
 browser connects). Use the package or `./install.sh`, not both: the per-user manifest `install.sh` writes
 overrides the package's.
