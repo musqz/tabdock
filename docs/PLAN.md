@@ -28,7 +28,7 @@ Verified on this machine (2026-09-19):
 - **Flatpak/Snap browsers are not supported.** Native installs only (Firefox, Zen, `firedragon-bin`,
   `librewolf` from pacman/AUR). No portal code, no `flatpak-spawn`, no PID-namespace workarounds. The
   README states this; `install.sh` only writes native-messaging manifests to native profile dirs.
-- No Wayland support (X11/Openbox only), no drag-and-drop or tree tabs in v1.
+- No Wayland support (X11/Openbox only), no tree tabs in v1.
 
 ## Architecture
 
@@ -97,8 +97,8 @@ before or after the browser; the extension reconnects with backoff.
 - **Content:** header (browser name + pin + side flip); pinned row; one collapsible section per
   container (colored bar, icon, name, `+` for a new tab in that container); a "no container" section;
   window switcher when the browser has >1 window; active tab highlighted; search/filter box.
-  Favicons: fetched by the panel (no cookies, no referrer) and cached in
-  `~/.cache/openbox-sidepanel/favicons`.
+  Site icons (as built, off by default): fetched by the panel (no cookies, no referrer, public `https:`
+  addresses only), decoded in a limited child process and kept in memory only; nothing is written to disk.
   Trade-off: a cookie-less favicon fetch outside the container. The alternative is converting them
   inside the extension, which needs `<all_urls>`.
 - Click tab -> `activate_tab` + raise/focus the browser window (extension `windows.update`
@@ -145,7 +145,7 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
   container (`tabs.move`). Second slice done: **new tab in container**, a `+` button per section
   (`tabs.create({cookieStoreId})`). Still open: close, pin, container create/rename/recolor/
   delete from the panel, "reopen in container" (Firefox cannot change a tab's container, so it reopens the
-  tab and loses its history), search box, favicons cache.
+  tab and loses its history), search box.
 - **M4 workspaces** via `tabs.hide()`; optional native tab-group display.
 - **M5 more browsers (done, pulled forward):** verified with `tests/e2e_firefox.py --firefox <browser>` on
   Firefox, Zen, FireDragon (`firedragon-bin`), Waterfox (`waterfox-bin`) and LibreWolf (`librewolf`), all
@@ -153,7 +153,7 @@ Git repo is initialised on a `feat/` branch; nothing on `main` except README upd
   `install.sh` covers them and no per-browser directories (`~/.zen`, `~/.firedragon`, `~/.librewolf`) are
   needed. Process-based identification tells them apart (Zen even reports itself as "Firefox"); Waterfox
   has its own accent colour. The signed `.xpi` is installed once per browser.
-- **Later, only if wanted:** drag-and-drop reorder, tree tabs, Zen-workspace import, AUR packaging.
+- **Later, only if wanted:** tree tabs, Zen-workspace import, AUR packaging.
 
 ## Risks
 

@@ -34,5 +34,6 @@ come first in that order (unknown ones are ignored); containers not named keep t
 | `activate_tab` | `tabId`, `windowId` | activates the tab and focuses its window |
 | `move_tab` | `tabId`, `index` | `tabs.move`: `index` is the tab's final position in its window (it leaves its old place first, so moving forward lands one earlier than the target's index); the resulting `tabs.onMoved` triggers a new `state` |
 | `set_container_order` | `order[]` (cookieStoreIds) | stores the order of the panel's container sections and pushes a new `state`; the panel also shows it at once without waiting |
+| `new_tab` | `cookieStoreId`, `windowId` | `tabs.create` in that container and window (the `+` on a container section); the resulting `tabs.onCreated` triggers a new `state` |
 
-Later milestones add `close_tab`, `new_tab`, `pin_tab` and `container_*`.
+Later milestones add `close_tab`, `pin_tab`, `focus_window` and `container_*`.
