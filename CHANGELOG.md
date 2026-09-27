@@ -19,6 +19,9 @@
   correctly signed v0.4.0 extension as "signed from other code". Every other file is still compared exactly,
   and a manifest that says anything else is still refused. No new signing or tag is needed for 0.4.0.
 
+- A `config.toml` that fails to parse now shows the offending line along with the TOML error, not just its
+  line and column. Only the panel changed: a panel restart is enough, no new signing.
+
 ## 0.4.0
 
 Sign this version's extension and install it in each browser (docs/RELEASE.md): it asks for three new
