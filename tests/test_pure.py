@@ -71,6 +71,11 @@ class ConfigTest(unittest.TestCase):
                 f.write("side = [")
             with self.assertRaises(ValueError):  # TOMLDecodeError is a ValueError
                 config.load(path)
+            with open(path, "w") as f:
+                f.write('side = "right"\nwidth = 280    not a comment\n')
+            with self.assertRaises(ValueError) as ctx:  # a value trailing without "#" before the comment text
+                config.load(path)
+            self.assertIn("width = 280    not a comment", str(ctx.exception))
 
     def test_a_config_from_before_the_rename_is_read_until_there_is_a_new_one(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp}):

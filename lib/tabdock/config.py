@@ -88,4 +88,8 @@ def load(path=None):
             user = tomllib.load(f)
     except FileNotFoundError:
         user = {}
+    except tomllib.TOMLDecodeError as e:
+        lines = e.doc.splitlines() if e.doc else []
+        line = lines[e.lineno - 1] if 0 < e.lineno <= len(lines) else None
+        raise ValueError(f"{e}\n  {line}" if line else str(e)) from e
     return validate(user)
