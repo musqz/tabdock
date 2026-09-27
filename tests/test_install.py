@@ -30,6 +30,7 @@ class InstallTest(unittest.TestCase):
         self.bin = os.path.join(self.prefix, "bin", "tabdock")
         self.relay = os.path.join(self.share, "lib", "native-host", "tabdock-nmhost")
         self.manifest = os.path.join(self.home, ".mozilla", "native-messaging-hosts", "openbox_sidepanel.json")
+        self.config = os.path.join(self.home, ".config", "tabdock", "config.toml")
 
     def base_env(self):
         # XDG dirs pinned inside the throwaway home: a real one must never be read or receive test files
@@ -63,6 +64,46 @@ class InstallTest(unittest.TestCase):
         self.assertIn("verified", done.stdout)
         self.assertIn("(sleep 5.0s &&", done.stdout)  # the autostart line is printed, not applied
 
+    def test_makes_a_config_to_edit_and_never_overwrites_it(self):
+        done = self.run_install()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        with open(self.config) as f, open(os.path.join(ROOT, "configs", "config.toml")) as example:
+            self.assertEqual(f.read(), example.read())  # the example, every option explained
+        self.assertRegex(done.stdout, r"installed\s+\S+/\.config/tabdock/config\.toml")
+        self.assertIn(f"Settings (side, width, colours, ...): {self.config}", done.stdout)
+        with open(os.path.join(self.share, ".installed")) as f:
+            self.assertNotIn(self.config, f.read().split("\n"))  # yours: never removed as stale by a later install
+        with open(self.config, "a") as f:
+            f.write('side = "right"\n')
+        with open(self.config) as f:
+            mine = f.read()
+        again = self.run_install()
+        self.assertEqual(again.returncode, 0, again.stderr)
+        with open(self.config) as f:
+            self.assertEqual(f.read(), mine)
+        self.assertRegex(again.stdout, r"kept\s+\S+/config\.toml \(yours, never overwritten")
+
+    def test_a_config_from_before_the_rename_is_not_hidden_behind_a_new_one(self):
+        old = os.path.join(self.home, ".config", "openbox-sidepanel", "config.toml")
+        os.makedirs(os.path.dirname(old))
+        with open(old, "w") as f:
+            f.write('side = "right"\n')
+        done = self.run_install()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertFalse(os.path.exists(self.config))  # the panel would read it instead, with none of your settings
+        self.assertIn(f"(your config is still {old}: move it there)", done.stdout)
+        self.assertIn(f"Settings (side, width, colours, ...): {old}", done.stdout)
+
+    def test_uninstall_keeps_a_config_with_your_settings(self):
+        self.run_install()
+        with open(self.config, "a") as f:
+            f.write('side = "right"\n')
+        removed = self.run_install("--uninstall")
+        self.assertEqual(removed.returncode, 0, removed.stderr)
+        self.assertTrue(os.path.isfile(self.config))
+        self.assertRegex(removed.stdout, r"kept\s+\S+/config\.toml \(your settings")
+        self.assertFalse(os.path.exists(self.share))  # everything else went
+
     def test_reinstall_reports_unchanged_then_updated(self):
         self.run_install()
         again = self.run_install()
@@ -94,6 +135,7 @@ class InstallTest(unittest.TestCase):
         self.assertFalse(os.path.exists(self.share))
         self.assertFalse(os.path.lexists(self.bin))
         self.assertFalse(os.path.exists(self.manifest))
+        self.assertFalse(os.path.exists(os.path.dirname(self.config)))  # the config was still the example
         self.assertEqual(files_under(self.home), [])
         again = self.run_install("--uninstall")  # idempotent
         self.assertEqual(again.returncode, 0)

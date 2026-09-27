@@ -15,9 +15,11 @@ native-messaging manifest `~/.mozilla/native-messaging-hosts/openbox_sidepanel.j
 both read it; it keeps the name the extension looks for). It prints every file it touches and ends by
 running `tabdock --version` from the installed copy. An install from before the rename to tabdock
 (`~/.local/share/openbox-sidepanel`, `~/.local/bin/sidepanel`) is removed on the way, and lines in your
-Openbox `autostart` or `rc.xml` that still start `sidepanel` are pointed out. Nothing else is edited.
+Openbox `autostart` or `rc.xml` that still start `sidepanel` are pointed out. When you have no
+`~/.config/tabdock/config.toml`, it copies the example there for your settings (never over yours, and not while
+one from before the rename is still in `~/.config/openbox-sidepanel/`). Nothing else is edited.
 `PREFIX=/usr SUDO=sudo ./install.sh` installs the program system-wide (the manifest stays per-user).
-`./install.sh --uninstall` removes exactly what was installed.
+`./install.sh --uninstall` removes exactly what was installed; the config only while it is still the example.
 
 On Arch, the package does all of this system-wide instead: `cd packaging && makepkg -si` installs the
 program to `/usr/share/tabdock`, `/usr/bin/tabdock`, the menu entry, the signed extension, and the manifest

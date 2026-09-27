@@ -2,6 +2,8 @@ post_install() {
     cat <<'EOF'
 ==> Install the extension once in each browser: about:addons -> gear icon ->
     "Install Add-on From File..." -> /usr/share/tabdock/tabdock.xpi
+==> Settings: copy /usr/share/tabdock/configs/config.toml to ~/.config/tabdock/config.toml
+    and edit it; without one the defaults apply.
 ==> Installed with ./install.sh before? Run "./install.sh --uninstall" in that checkout:
     its manifest in ~/.mozilla/native-messaging-hosts overrides this package's.
 EOF
