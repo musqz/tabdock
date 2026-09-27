@@ -141,7 +141,7 @@ class Panel:
         """--debug console, to drive the reverse path without a GUI:
         'activate <tabId>', 'move <tabId> <index>', 'order <cookieStoreId>,<cookieStoreId>,...',
         'newtab <cookieStoreId>' (the "+" of a container section), 'close <tabId>', 'pin <tabId>',
-        'unpin <tabId>', for containers 'cnew <name>', 'crename <id> <name>', 'ccolor <id> <colour>', 'cicon <id> <icon>',
+        'unpin <tabId>', 'reopen <tabId> <cookieStoreId>', for containers 'cnew <name>', 'crename <id> <name>', 'ccolor <id> <colour>', 'cicon <id> <icon>',
         'crm <id>', and for workspaces (the focused window's; ids as the console prints them, in braces) 'ws <id>',
         'wsnew <name>', 'wsrename <id> <name>', 'wsrm <id>', 'wsmove <tabId> <id>', and 'wsicon <id> [icon]',
         'wscolor <id> [colour]', 'wscontainer <id> [cookieStoreId]' (without the last word: none)."""
@@ -161,6 +161,8 @@ class Panel:
             self.command(self.current, {"type": "close_tab", "tabId": int(parts[1])})
         elif len(parts) == 2 and parts[0] in ("pin", "unpin") and parts[1].isdigit():
             self.command(self.current, {"type": "pin_tab", "tabId": int(parts[1]), "pinned": parts[0] == "pin"})
+        elif len(parts) == 3 and parts[0] == "reopen" and parts[1].isdigit():
+            self.command(self.current, {"type": "reopen_in_container", "tabId": int(parts[1]), "cookieStoreId": parts[2]})
         elif parts[0] in CONTAINER_VERBS:
             self._container_line(line)
         elif len(parts) == 2 and parts[0] == "newtab" and focused_window(state):

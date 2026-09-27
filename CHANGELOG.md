@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Firefox's own tab groups show in the panel: a grouped tab wears its group's name, in the group's colour, after
+  its title (hover it for the full name). The extension reports them (`tabGroups`, a new permission, asked for
+  with the next signed extension along with the workspaces' ones). Tested in real Firefox 156: a tab grouped and
+  ungrouped in the browser is reported both ways.
+
+- Find a tab: a 🔍 in the header opens a small window beside the panel (it takes the keyboard, which the dock never
+  does). Typing narrows the list at once to the tabs whose title or address holds every word, in any case, from
+  every workspace of the window, a match from another workspace saying which one it is in; Enter goes to the
+  first match, and a hidden one's workspace is switched to; Escape gives the whole list back. Folded sections
+  show their matches. The header no longer makes the panel wider than `width`: the browser's name shortens
+  instead (the Openbox test caught the extra button doing that). Tested in real Firefox 156 (activating another
+  workspace's hidden tab switches to it) and under Openbox (typing, the list narrowing, Enter, the keyboard back
+  in the browser).
+
+- Reopen a tab in another container: *Reopen in container* in a tab's right-click menu. Firefox cannot move a tab
+  between containers, so the page opens anew in the one picked, right after it (pinned if it was, in the same
+  workspace), and the original closes; the page reloads and its back/forward history stays behind. Offered for
+  web pages and the new-tab page, which an extension may open, not for `about:config` and the like. Tested in
+  real Firefox 156 with a page served for the test (`tests/e2e_firefox.py`).
+
 - Packaging: `packaging/sign-extension.sh` now also leaves the signed extension as
   `web-ext-artifacts/tabdock-<version>.xpi`, the name the GitHub release attaches it by and `packaging/PKGBUILD`
   downloads it by, and prints the `gh release upload` command for it (also when the version was signed before).

@@ -10,7 +10,7 @@ const HOST = "openbox_sidepanel";
 const RECONNECT_MS = 3000; // only needed if the relay process itself died
 const DEBOUNCE_MS = 50;
 // What this extension does beyond what every version did, told to the panel in "hello": it offers only those.
-const FEATURES = ["close_tab", "pin_tab", "containers"];
+const FEATURES = ["close_tab", "pin_tab", "containers", "reopen_in_container"];
 
 let port = null;
 let panelUp = false; // relay has a panel connected (set by resync, cleared by panel_disconnected)
@@ -338,6 +338,22 @@ async function closeTab(tabId) {
   await browser.tabs.remove(tabId);
 }
 
+// A tab cannot change its container, so it is opened anew in the other one, in its place (pinned if it was, in
+// the same workspace), and the original closed: the page reloads there and its back/forward history stays behind.
+// A page an extension may not open (about:config, file:, ...) is left where it is.
+const BLANK_URLS = ["about:newtab", "about:home", "about:blank"];
+
+async function reopenInContainer(tabId, store) {
+  const tab = await getTab(tabId);
+  if (tab === null || tab.incognito || tab.cookieStoreId === store) return;
+  if (store !== "firefox-default") await browser.contextualIdentities.get(store); // (throws for what is none)
+  const where = { windowId: tab.windowId, index: tab.index + 1, active: tab.active, pinned: tab.pinned, cookieStoreId: store };
+  const fresh = await browser.tabs.create(BLANK_URLS.includes(tab.url) ? where : { ...where, url: tab.url });
+  explicit.add(fresh.id); // the container asked for, whatever the workspace's own
+  if (workspaces !== null) await assign(fresh.id, await tabWsOf(tab));
+  await browser.tabs.remove(tab.id);
+}
+
 // -- containers -----------------------------------------------------------------------------------
 
 const CONTAINER_ICONS = [
@@ -473,11 +489,18 @@ async function snapshot() {
     // containers disabled (privacy.userContext.enabled = false)
   }
   await loadOrder();
+  let groups = [];
+  try {
+    groups = browser.tabGroups ? await browser.tabGroups.query({}) : []; // Firefox's own tab groups, shown as they are
+  } catch (e) {
+    // a browser without them
+  }
   const list = workspaces || [DEFAULT_WS];
   return {
     type: "state",
     focusedWindowId: lastFocusedWindowId,
     containerOrder,
+    groups: groups.map((g) => ({ id: g.id, title: g.title || "", color: g.color, collapsed: g.collapsed })),
     containers: containers.map((c) => ({
       cookieStoreId: c.cookieStoreId,
       name: c.name,
@@ -510,6 +533,7 @@ async function snapshot() {
           audible: t.audible,
           discarded: t.discarded,
           hidden: t.hidden,
+          groupId: t.groupId === undefined || t.groupId === -1 ? null : t.groupId,
           workspaceId: tabWs.get(t.id) || shown,
         })),
       };
@@ -562,11 +586,18 @@ async function onCommand(msg) {
         }
         break;
       case "activate_tab":
+        // a hidden tab (another workspace's, found by a search) is shown first; its window then shows its workspace
+        if ((await getTab(msg.tabId) || {}).hidden) await browser.tabs.show(msg.tabId);
         await browser.tabs.update(msg.tabId, { active: true });
         await browser.windows.update(msg.windowId, { focused: true });
         break;
       case "close_tab":
         if (Number.isInteger(msg.tabId)) await closeTab(msg.tabId);
+        break;
+      case "reopen_in_container":
+        if (Number.isInteger(msg.tabId) && typeof msg.cookieStoreId === "string") {
+          await reopenInContainer(msg.tabId, msg.cookieStoreId);
+        }
         break;
       case "pin_tab":
         // tabs.onUpdated reports it; an unpinned tab joins the workspace its window shows
@@ -653,7 +684,7 @@ browser.tabs.onActivated.addListener((info) => track(() => reconcile(info.window
 browser.tabs.onAttached.addListener((tabId, info) => track(() => onTabAttached(tabId, info)));
 browser.tabs.onDetached.addListener((tabId, info) => track(() => tabLeft(info.oldWindowId)));
 browser.tabs.onUpdated.addListener(push, {
-  properties: ["title", "favIconUrl", "pinned", "audible", "discarded", "url", "hidden"],
+  properties: ["title", "favIconUrl", "pinned", "audible", "discarded", "url", "hidden", "groupId"],
 });
 browser.tabs.onUpdated.addListener(
   (tabId, change) => {
@@ -677,6 +708,9 @@ if (browser.contextualIdentities) {
   browser.contextualIdentities.onRemoved.addListener((info) =>
     track(() => forgetContainer(info.contextualIdentity.cookieStoreId)),
   );
+}
+if (browser.tabGroups) {
+  for (const event of ["onCreated", "onUpdated", "onRemoved", "onMoved"]) browser.tabGroups[event].addListener(push);
 }
 browser.commands.onCommand.addListener((name) => track(() => onShortcut(name)));
 

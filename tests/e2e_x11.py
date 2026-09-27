@@ -9,7 +9,7 @@ xdotool, xprop, xwininfo and ImageMagick (`magick`).
 Checks: dock type + strip geometry, no strut while autohiding, hover expand/collapse, click on
 a tab reaches the browser without stealing focus, the strip colour follows the active browser,
 raising the browser when clicking while another app is active, dragging to reorder, closing a tab
-(its ✕, a middle click), a container's menu (rename, removal asked first), the chips
+(its ✕, a middle click), a container's menu (rename, removal asked first), finding a tab, the chips
 and the all-browsers list (folding, raising the right browser), workspaces (switch, the right-click
 menu, naming a new one in a window that takes the keyboard, a colour from the chip's submenu), pin ->
 strut, side switch, and follow=hide.
@@ -422,6 +422,28 @@ def main():
         got = messages("remove_container")
         assert got == [{"type": "remove_container", "cookieStoreId": "firefox-container-1"}], got
         ok("containers: a right click renames one in a window of its own; removing asks first, and Enter means Cancel")
+
+        find_btn = wait_for(settled_layout, "the header")[("button", "find")]
+        run("xdotool", "mousemove", str(find_btn["x"] + find_btn["w"] // 2), str(find_btn["y"] + find_btn["h"] // 2))
+        time.sleep(0.3)
+        run("xdotool", "click", "1")
+        wait_for(lambda: active_title() == "Find tab", "the find window, with the keyboard")
+        ff.received()
+        run("xdotool", "type", "--delay", "30", "mail")
+        def listed_tabs():
+            try:
+                return sorted(key[1] for key in layout() if key[0] == "tab")
+            except (OSError, ValueError):
+                return None
+
+        wait_for(lambda: listed_tabs() == [3], "only the mail tab listed")  # (no "No container" section: nothing matches)
+        screenshot(os.path.join(shots, "find.png"))
+        run("xdotool", "key", "Return")
+        got = messages("activate_tab")
+        assert [m["tabId"] for m in got] == [3], got
+        wait_for(lambda: int(run("xdotool", "getactivewindow").stdout) == ff_win, "the keyboard back in the browser")
+        wait_for(lambda: listed_tabs() == [1, 2, 3, 4], "every tab listed again")
+        ok("find: typing narrows the list at once, Enter picks the match, and the browser gets the keyboard back")
         collapse()
 
         # -- several browsers: chips choose what is listed, "all" gives each browser a foldable section -----

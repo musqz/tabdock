@@ -8,7 +8,7 @@ installed as a temporary add-on through Marionette. Then, against a real `tabdoc
   browser -> panel : tabs appear, new tabs show up, panel restart triggers a resync
   panel -> browser : `activate <id>` switches the active tab, tabs move, containers reorder, a tab is
                      pinned, unpinned and closed, a container is made, renamed, recoloured, given another
-                     icon and removed (its tab closed, its cookies gone)
+                     icon and removed (its tab closed, its cookies gone), a web page reopens in a container
   workspaces       : create, switch, move a tab, rename, close a workspace's last tab, remove, and an
                      extension restart, each checked against the browser's own tab strip too
                      (skipped in Zen, which has workspaces of its own); an icon and a colour, a container
@@ -17,6 +17,8 @@ installed as a temporary add-on through Marionette. Then, against a real `tabdoc
     python3 tests/e2e_firefox.py [--firefox /usr/bin/firefox]
 """
 import argparse
+import functools
+import http.server
 import json
 import os
 import re
@@ -200,6 +202,11 @@ class Marionette:
             self.call("Marionette:SetContext", {"value": "content"})
 
 
+class QuietHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *_args):
+        pass  # the test's own lines only
+
+
 def free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -245,7 +252,16 @@ def main():
                 # add-on's storage (Firefox removes a temporary add-on when it quits)
                 'user_pref("browser.startup.page", 3);\n'
                 'user_pref("extensions.webextensions.keepStorageOnUninstall", true);\n'
+                'user_pref("network.proxy.type", 0);\n'  # the local test page below, never through a proxy
             )
+        site = os.path.join(tmp, "site")
+        os.makedirs(site)
+        with open(os.path.join(site, "reopen.html"), "w") as f:
+            f.write("<title>reopen-me</title>a page served here, to reopen in a container")
+        server = http.server.ThreadingHTTPServer(
+            ("127.0.0.1", 0), functools.partial(QuietHandler, directory=site))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        page = f"http://127.0.0.1:{server.server_address[1]}/reopen.html"
 
         with open(os.path.join(ROOT, "VERSION")) as f:
             version = f.read().strip()
@@ -388,6 +404,30 @@ def main():
         print("OK remove_container refuses what is not a container, and closes nothing")
         m.call("WebDriver:SwitchToWindow", {"handle": home_handle})  # the tab in use before, as the checks below expect
 
+        handle = m.call("WebDriver:NewWindow", {"type": "tab", "focus": False})["handle"]
+        m.call("WebDriver:SwitchToWindow", {"handle": handle})
+        m.call("WebDriver:Navigate", {"url": page})
+        m.call("WebDriver:SwitchToWindow", {"handle": home_handle})
+        eventually(lambda: "reopen-me" in section_tabs(last_snapshot(out.text))["firefox-default"], "the page, no container")
+        personal = next(i for _n, i in sections(last_snapshot(out.text)) if i != "firefox-default")
+        say(panel, f"reopen {listed(last_snapshot(out.text))['reopen-me'][0]} {personal}")
+        eventually(lambda: "reopen-me" in section_tabs(last_snapshot(out.text)).get(personal, []), "reopened in the container")
+        assert "reopen-me" not in section_tabs(last_snapshot(out.text))["firefox-default"], "the original stayed"
+        assert m.chrome("return gBrowser.tabs.filter(t => t.label == 'reopen-me').map(t => t.userContextId)") \
+            == [int(personal.rsplit("-", 1)[1])], "not one tab, in the container, in the browser"
+        say(panel, f"close {listed(last_snapshot(out.text))['reopen-me'][0]}")
+        eventually(lambda: "reopen-me" not in listed(last_snapshot(out.text)), "the reopened page closed again")
+        m.call("WebDriver:SwitchToWindow", {"handle": home_handle})
+        print("OK reopen_in_container: a web page reopens, loaded, in another container, and the original is gone")
+
+        grouped = listed(last_snapshot(out.text))["marionette-tab"][0]
+        m.chrome("gBrowser.addTabGroup([gBrowser.tabs.find(t => t.label == 'marionette-tab')], "
+                 "{ label: 'e2e group', color: 'red' })")
+        eventually(lambda: f"tabgroup e2e group (red): {grouped}" in last_snapshot(out.text), "the tab group reported")
+        m.chrome("gBrowser.tabs.find(t => t.label == 'marionette-tab').group.ungroupTabs()")
+        eventually(lambda: "tabgroup " not in last_snapshot(out.text), "the tab group gone again")
+        print("OK Firefox's own tab groups: made and undone in the browser, reported with their tabs")
+
         panel.terminate()
         panel.wait(timeout=TIMEOUT)
         panel, out = start_panel(env)
@@ -459,6 +499,13 @@ def check_workspaces(m, panel, out, restart):
     eventually(lambda: shown_workspace(snap()) == ("Work", work), "the window follows the hidden tab picked")
     eventually(lambda: not m.strip()["tab-c"][0] and m.strip()["tab-d"][0], "Work shown, Default hidden")
     print("OK picking a hidden tab (the browser's list of all tabs) switches to its workspace")
+
+    say(panel, "ws default")
+    eventually(lambda: shown_workspace(snap()) == ("Default", "default") and m.strip()["work-tab"][0], "Default shown")
+    say(panel, f"activate {listed_or_hidden_id(m, out, 'work-tab')}")  # as a search offers a tab of another workspace
+    eventually(lambda: shown_workspace(snap()) == ("Work", work), "the window follows the hidden tab activated")
+    eventually(lambda: m.strip()["work-tab"] == (False, False, True), "work-tab shown and selected in the browser")
+    print("OK activating a hidden tab from the panel (a search result) switches to its workspace")
 
     say(panel, f"wsrename {work} Deep work")
     eventually(lambda: shown_workspace(snap()) == ("Deep work", work), "the rename")

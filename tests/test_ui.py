@@ -33,7 +33,8 @@ STATE = {
         }
     ],
 }
-INFO = {"browser": "Firefox", "version": "156.0", "browserPid": 1, "features": ["close_tab", "pin_tab", "containers"]}
+INFO = {"browser": "Firefox", "version": "156.0", "browserPid": 1,
+        "features": ["close_tab", "pin_tab", "containers", "reopen_in_container"]}
 OLD_INFO = {"browser": "Firefox", "version": "156.0", "browserPid": 1}  # an extension from before the features list
 
 
@@ -1386,6 +1387,81 @@ class DockViewTest(unittest.TestCase):
         view.show([(object(), OLD_INFO, self.WS_STATE)])  # with workspaces: moving is still offered
         self.right_click(self.row(view, "tab", 2))
         self.assertEqual(self.labels(view), ["Move to Default", "Move to Play"])
+
+    def test_a_tab_reopens_in_another_container(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])  # tab 10 is in no container, on https://a.example
+        self.right_click(self.row(view, "tab", 10))
+        self.assertEqual(self.labels(view), ["Pin tab", "Reopen in container", "Close tab"])
+        choices = self.texts(view, "Reopen in container")
+        self.assertEqual(list(choices), ["▌ Personal & Co", "▌ Work"])  # not where it is
+        choices["▌ Work"].activate()
+        self.assertEqual(self.commands, [{"type": "reopen_in_container", "tabId": 10, "cookieStoreId": "firefox-container-2"}])
+        tabs = [STATE["windows"][0]["tabs"][0], {**STATE["windows"][0]["tabs"][1], "url": "https://mail.example"}]
+        view.show([(object(), INFO, {**STATE, "windows": [{"id": 2, "tabs": tabs}]})])
+        self.right_click(self.row(view, "tab", 11))  # in Personal & Co: "No container" is a choice
+        self.assertEqual(list(self.texts(view, "Reopen in container")), ["▌ No container", "▌ Work"])
+
+    def test_a_page_an_extension_may_not_open_is_not_offered_another_container(self):
+        view = self.make()
+        state = {**STATE, "windows": [{"id": 2, "tabs": [
+            {"id": 10, "title": "config", "url": "about:config", "cookieStoreId": "firefox-default", "active": True}]}]}
+        view.show([(object(), INFO, state)])
+        self.right_click(self.row(view, "tab", 10))
+        self.assertNotIn("Reopen in container", self.labels(view))
+
+    # -- finding a tab -------------------------------------------------------------------------------
+
+    def listed_tabs(self, view):
+        return [m["id"] for m in view._meta.values() if m["kind"] == "tab"]
+
+    def test_find_narrows_the_list_as_you_type_across_workspaces_and_enter_picks_the_first(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, self.WS_STATE)])  # Work shows tabs 2 and 3 (pinned); tab 1 "home" is in Default
+        self.assertEqual(sorted(self.listed_tabs(view)), [2, 3])
+        view.find_btn.clicked()
+        self.assertEqual(view._dialog.get_title(), "Find tab")
+        self.assertTrue(view.autohide.held)
+        view._dialog_entry.set_text("HOME")
+        self.assertEqual(self.listed_tabs(view), [1])  # from another workspace, whatever the case
+        where = [c.get_text() for c in self.row(view, "tab", 1).get_child().get_children()
+                 if c.get_style_context().has_class("sp-where")]
+        self.assertEqual(where, ["in Default"])  # says where it is
+        view._dialog_entry.emit("activate")  # Enter
+        self.assertEqual(self.activated, [(conn, 1, 2)])  # the extension switches to its workspace
+        self.assertEqual(sorted(self.listed_tabs(view)), [2, 3])  # the whole list back
+        self.assertFalse(view.autohide.held)
+
+    def test_find_says_when_nothing_matches_and_escape_gives_the_list_back(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        view.collapsed.add((1, "firefox-container-1"))  # a folded section still shows what matches in it
+        view.find_btn.clicked()
+        view._dialog_entry.set_text("mail")
+        self.assertEqual(self.listed_tabs(view), [11])
+        view._dialog_entry.set_text("nothing like this")
+        self.assertEqual(self.listed_tabs(view), [])
+        self.assertTrue(any(isinstance(c, Gtk.Label) and "No tab matches" in c.get_text() for c in view.list.get_children()))
+        event = Gdk.Event.new(Gdk.EventType.KEY_PRESS)
+        event.keyval = Gdk.KEY_Escape
+        view._dialog.emit("key-press-event", event)
+        self.assertEqual(self.activated, [])
+        self.assertEqual(self.listed_tabs(view), [10])  # everything again, the folded section folded again
+
+    def test_a_tab_in_a_firefox_tab_group_wears_the_groups_name_in_its_colour(self):
+        view = self.make()
+        tabs = [{**STATE["windows"][0]["tabs"][0], "groupId": 7}, STATE["windows"][0]["tabs"][1]]
+        state = {**STATE, "groups": [{"id": 7, "title": "Trip & co", "color": "blue", "collapsed": False}],
+                 "windows": [{"id": 2, "tabs": tabs}]}
+        view.show([(object(), INFO, state)])
+        tag = lambda tab_id: next((c for c in self.row(view, "tab", tab_id).get_child().get_children()  # noqa: E731
+                                   if c.get_style_context().has_class("sp-group")), None)
+        self.assertEqual(tag(10).get_text(), "Trip & co")
+        self.assertIn("#3f8cf2", tag(10).get_label())  # blue
+        self.assertEqual(tag(10).get_tooltip_text(), "In the tab group “Trip & co”")
+        self.assertIsNone(tag(11))
+        self.assertEqual(label_of(self.row(view, "tab", 10).get_child()).get_text(), "plain")  # the title stays first
 
     def test_a_middle_click_closes_the_tab_it_was_released_on(self):
         view = self.make()

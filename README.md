@@ -6,9 +6,9 @@ FireDragon, Waterfox, LibreWolf; native installs, no Chromium/Blink, no Flatpak/
 sidebar (containers, workspaces, autohide) everywhere.
 
 Status: **0.3.1, installable.** Autohiding dock on the left/right edge, real install, signed extension,
-autostart, drag to reorder, new tab per container. Since 0.3.1, not yet released: Zen-style workspaces, closing
-and pinning tabs, and editing containers from the panel (they need the next signed extension). Next: moving a tab
-to another container and a search box — see
+autostart, drag to reorder, new tab per container. Since 0.3.1, not yet released (they need the next signed
+extension): Zen-style workspaces; closing, pinning and reopening tabs in another container; editing containers;
+finding a tab; and Firefox's own tab groups shown. That completes the plan — see
 [docs/PLAN.md](docs/PLAN.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ```
@@ -23,8 +23,14 @@ Firefox + extension/  <-- native messaging -->  lib/native-host/tabdock-nmhost  
   (colour, icon, name, tab count) with its tabs, site icons optional (see Site icons). Click a tab to
   activate it.
 - **Close and pin:** a hovered tab shows a `✕`; middle-click closes a tab too, as in the browser's tab strip.
-  Right-click a tab to pin or unpin it, or close it. Pinned tabs wear a 📌. With workspaces in use, closing a
+  Right-click a tab to pin or unpin it, reopen it in another container (Firefox cannot move a tab between
+  containers, so the page loads anew there and its back/forward history stays behind), or close it. Pinned tabs wear a 📌. With workspaces in use, closing a
   workspace's only tab from the panel leaves the window open (see Workspaces).
+- **Tab groups:** a tab in one of Firefox's own tab groups wears the group's name in its colour.
+- **Find a tab:** the 🔍 in the header opens a small window beside the panel. What you type there narrows the
+  list at once to the tabs whose title or address holds every word, from every workspace of the window (a tab
+  of another workspace says which); Enter goes to the first one, switching workspace if needed, and Escape
+  gives the whole list back.
 - **Edit containers:** right-click a container section to rename it, change its colour or icon, make a new
   container, or remove it. Removing asks first, with Cancel as the default: its tabs close (in every window and
   workspace) and Firefox deletes its cookies, which logs you out of the sites you used in it.

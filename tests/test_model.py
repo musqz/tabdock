@@ -12,10 +12,13 @@ from tabdock.model import (  # noqa: E402
     group_tabs,
     heir,
     in_workspace,
+    matches,
     offers_workspaces,
     ordered_containers,
     removal_text,
+    reopenable,
     reordered,
+    tab_group,
     supports,
     tab_badge,
     tab_label,
@@ -216,6 +219,35 @@ class ModelTest(unittest.TestCase):
         self.assertIn("Its 1 open tab will close,", removal_text("Bank", 1))
         self.assertIn("Its 3 open tabs will close,", removal_text("Bank", 3))
         self.assertIn("deletes its cookies", removal_text("Bank", 3))
+
+    def test_tab_groups_are_looked_up_and_listed_on_the_console(self):
+        tabs = [{**tab(10, "plain", active=True), "groupId": 5}, tab(11, "mail")]
+        state = {"focusedWindowId": 2, "groups": [{"id": 5, "title": "Trip", "color": "red", "collapsed": False}],
+                 "windows": [{"id": 2, "tabs": tabs}]}
+        self.assertEqual(tab_group(state, tabs[0])["title"], "Trip")
+        self.assertIsNone(tab_group(state, tabs[1]))
+        self.assertIsNone(tab_group(STATE, {"id": 1, "groupId": 5}))  # an extension that reports no groups
+        self.assertIn("tabgroup Trip (red): 10", format_state({"browser": "Firefox", "version": "1"}, state))
+
+    def test_a_search_matches_every_word_in_the_title_or_address(self):
+        tab = {"title": "Quarterly Report", "url": "https://docs.example/q3"}
+        for query in ("report", "REPORT quarterly", "docs.example q3", "", "  "):
+            self.assertTrue(matches(tab, query), query)
+        for query in ("report 2024", "mail"):
+            self.assertFalse(matches(tab, query), query)
+        self.assertTrue(matches({"title": None, "url": None}, ""))
+
+    def test_a_search_groups_the_tabs_of_every_workspace(self):
+        every = [t["id"] for _c, tabs in group_tabs(self.WS_STATE, every_workspace=True) for t in tabs]
+        shown = [t["id"] for _c, tabs in group_tabs(self.WS_STATE) for t in tabs]
+        self.assertEqual(sorted(every), [10, 11, 12])
+        self.assertNotIn(10, shown)  # (home is in Default; the window shows Work)
+
+    def test_only_pages_an_extension_may_open_can_move_to_another_container(self):
+        for url in ("https://a.example/x", "http://b.example", "about:newtab", "about:blank"):
+            self.assertTrue(reopenable({"url": url}), url)
+        for url in ("about:config", "file:///etc/passwd", "moz-extension://x/y", "data:text/html,x", None):
+            self.assertFalse(reopenable({"url": url}), url)
 
     def test_the_panel_offers_what_the_extension_says_it_handles(self):
         self.assertTrue(supports({"features": ["close_tab", "pin_tab"]}, "close_tab"))
