@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
+
+Sign this version's extension and install it in each browser (docs/RELEASE.md): it adds the `restore_tab` command
+for the undo row. The permissions are the same as 0.4.0's. Until then the panel works as before, without the undo
+row and its Ctrl+Shift+T (it offers only what the installed extension says it handles).
 
 - The `+` on a section brings the browser forward with the new tab, so what you type next goes to its address
   bar, even from another app or the find window. Only the panel changed: a panel restart is enough, no new signing.
