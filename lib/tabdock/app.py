@@ -99,6 +99,13 @@ class Panel:
 
     def activate_tab(self, conn, tab_id, window_id):
         conn.send({"type": "activate_tab", "tabId": tab_id, "windowId": window_id})
+        self._raise(conn)
+
+    def restore_tab(self, conn):
+        conn.send({"type": "restore_tab"})
+        self._raise(conn)  # the tab comes back in that browser, even when asked from the find window in a terminal
+
+    def _raise(self, conn):
         xid = self._window_of(conn)
         if self.x and xid and xid != self.active:
             self.x.activate(xid)  # that browser is not the focused window: bring it forward
@@ -149,7 +156,7 @@ class Panel:
         """--debug console, to drive the reverse path without a GUI:
         'activate <tabId>', 'move <tabId> <index>', 'order <cookieStoreId>,<cookieStoreId>,...',
         'newtab <cookieStoreId>' (the "+" of a container section), 'close <tabId>', 'pin <tabId>',
-        'unpin <tabId>', 'reopen <tabId> <cookieStoreId>', for containers 'cnew <name>', 'crename <id> <name>', 'ccolor <id> <colour>', 'cicon <id> <icon>',
+        'unpin <tabId>', 'restore' (the tab closed last), 'reopen <tabId> <cookieStoreId>', for containers 'cnew <name>', 'crename <id> <name>', 'ccolor <id> <colour>', 'cicon <id> <icon>',
         'crm <id>', and for workspaces (the focused window's; ids as the console prints them, in braces) 'ws <id>',
         'wsnew <name>', 'wsrename <id> <name>', 'wsrm <id>', 'wsmove <tabId> <id>', and 'wsicon <id> [icon]',
         'wscolor <id> [colour]', 'wscontainer <id> [cookieStoreId]' (without the last word: none)."""
@@ -169,6 +176,8 @@ class Panel:
             self.command(self.current, {"type": "close_tab", "tabId": int(parts[1])})
         elif len(parts) == 2 and parts[0] in ("pin", "unpin") and parts[1].isdigit():
             self.command(self.current, {"type": "pin_tab", "tabId": int(parts[1]), "pinned": parts[0] == "pin"})
+        elif parts == ["restore"]:
+            self.restore_tab(self.current)
         elif len(parts) == 3 and parts[0] == "reopen" and parts[1].isdigit():
             self.command(self.current, {"type": "reopen_in_container", "tabId": int(parts[1]), "cookieStoreId": parts[2]})
         elif parts[0] in CONTAINER_VERBS:
@@ -346,7 +355,10 @@ def main(argv=None):
             return 1
         from .dock import DockView
 
-        panel.view = DockView(cfg, panel.activate_tab, loop.quit, x, on_command=panel.command, on_choose=panel.choose)
+        panel.view = DockView(
+            cfg, panel.activate_tab, loop.quit, x,
+            on_command=panel.command, on_choose=panel.choose, on_restore=panel.restore_tab,
+        )
 
     if x is not None:
         x.watch_active_window(panel.follow, loop.quit)

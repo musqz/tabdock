@@ -105,6 +105,9 @@ button.sp-btn.sp-ws.selected {{ background-color: #2f3542; color: #fff; font-wei
 button.sp-btn.sp-close {{ opacity: 0; padding: 0 4px; }}
 .sp-row:hover button.sp-btn.sp-close {{ opacity: 1; }}
 button.sp-btn.sp-close:hover {{ color: #ff6b6b; }}
+.sp-ghost {{ color: #7d8594; }}
+button.sp-btn.sp-reopen {{ padding: 0 4px; color: #dfe3ea; }}
+button.sp-btn.sp-reopen:hover {{ color: #ffffff; }}
 """
 
 
@@ -121,6 +124,8 @@ FIND_KEYS = {
 # With one of these down, Home and End are the entry's caret keys (Shift+Home selects). Super is not one of them:
 # it is still down from the hotkey.
 CARET_MODS = Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK
+# Ctrl+Shift+T reopens the closed tab, as in the browser (Super may still be down from the hotkey).
+RESTORE_MODS = Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK
 # The keys that switch workspace (workspaces to step), while the find window's entry is empty.
 WORKSPACE_KEYS = {Gdk.KEY_Left: -1, Gdk.KEY_Right: 1, Gdk.KEY_KP_Left: -1, Gdk.KEY_KP_Right: 1}
 
@@ -173,6 +178,9 @@ CONTAINER_ICONS = tuple(ICONS)  # the icons Firefox offers a container, in its o
 
 DRAG_THRESHOLD = 6  # px the pointer must travel with the button down before a click becomes a drag
 PRESS_STALE_S = 30  # a press with no release this long is forgotten, so updates cannot stay blocked
+GHOST_S = 8  # seconds a tab closed from the panel stays in its place as an undo (see DockView._ghost_row)
+GHOST_GUARD_S = 0.5  # a click on it sooner than this is ignored: a double click on the ✕ must not undo itself
+GHOST_RESTORING_S = 3  # after the click its row waits this long for the tab to come back, then goes anyway
 ICON_RETRY_S = 300  # an icon that could not be fetched (no network, a timeout) is tried again after this long
 ICONS_KEPT = 512  # icons (and remembered failures) held in memory
 ICONS_PENDING_MAX = 64  # icon downloads queued or running at once
@@ -193,11 +201,12 @@ def _schedule(ms, fn):
 
 
 class DockView:
-    def __init__(self, cfg, on_activate, on_quit, xconn=None, on_command=None, on_choose=None):
+    def __init__(self, cfg, on_activate, on_quit, xconn=None, on_command=None, on_choose=None, on_restore=None):
         self.cfg = dict(cfg)
         self.on_activate = on_activate
         self.on_command = on_command  # on_command(conn, message): what a drop asks the browser to do
         self.on_choose = on_choose  # on_choose("auto" | "all" | conn): a chip was clicked
+        self.on_restore = on_restore  # on_restore(conn): reopen the tab that browser closed last, and bring it forward
         self.x = xconn
         self._meta = {}  # row widget -> what it stands for (kind, id, group, conn, click handler, draggable)
         self._row_order = []  # row widgets in display order
@@ -223,6 +232,8 @@ class DockView:
         self._close_buttons = []  # (tab id, its ✕ button) of the rows built last
         self._query = ""  # what the find window has typed: only the tabs that match are listed, from every workspace
         self._first_match = None  # (conn, tab id, window id) of the first tab listed while finding
+        self._ghost = None  # the tab just closed from the panel: {conn, id, title, group, position, t}
+        self._ghost_timer = None
         self._selected = None  # (conn, tab id) of the tab the arrow keys have highlighted while finding
         self._find_dialog = None  # the find window, while it is up (self._dialog may be another window)
         self._state = {}  # the state of the browser whose rows are being built
@@ -374,6 +385,7 @@ class DockView:
         """Nothing to list (yet). The chips stay when browsers are connected: they lead to another one."""
         self._end_press()
         self._deferred = None
+        self._clear_ghost()  # (its timer would rebuild the list over the waiting text)
         self.sources = []
         self._names = {}
         self._last = None
@@ -559,6 +571,7 @@ class DockView:
     def _teardown(self, *_args):
         """The panel window is gone: stop reacting to monitor changes."""
         self._closed = True
+        self._clear_ghost()
         if self._relayout_id is not None:
             GLib.source_remove(self._relayout_id)
             self._relayout_id = None
@@ -911,6 +924,7 @@ class DockView:
             colour = accent(info, self._colours)
             window = focused_window(state)
             self._state = state  # (what a tab row looks its group up in)
+            self._check_ghost(conn, state)
             groups = group_tabs(state, every_workspace=finding)  # the focused window's tabs, in the workspace it shows
             if finding:  # only what matches, and only the sections that hold some of it
                 groups = [(c, [t for t in tabs if matches(t, self._query)]) for c, tabs in groups]
@@ -933,13 +947,18 @@ class DockView:
                 folded = key in self.collapsed and not finding  # a match is never folded away
                 rows.append(self._section(container, tabs, key, folded, conn, colour, state, window["id"], can))
                 if not folded:
-                    rows.extend(
+                    tab_rows = [
                         self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour, spaces, can,
                                       ordered_containers(state), window.get("workspaceId") if finding else None)
                         for tab in tabs
-                    )
+                    ]
+                    ghost = None if finding else self._ghost_row(conn, container["cookieStoreId"], tabs, colour, window)
+                    if ghost is not None:
+                        tab_rows.insert(min(self._ghost["position"], len(tab_rows)), ghost)
+                    rows.extend(tab_rows)
                 if finding and tabs and self._first_match is None:
                     self._first_match = (conn, tabs[0]["id"], window["id"])
+        self._row_order = [r for r in rows if r in self._meta]  # (an undo row is made last but sits among the tabs)
         if finding and self._first_match is None:
             rows.append(self._label(f"No tab matches “{self._query.strip()}”", "sp-empty", wrap=True))
         self._replace_rows(rows or [self._label("No browser windows", "sp-empty", wrap=True)])
@@ -1163,10 +1182,15 @@ class DockView:
         The arrows are always taken, even with nothing to walk: GTK would move the focus off the entry with them.
         Home and End stay the entry's caret keys when chorded (Shift+Home selects text) or when no tab is listed.
         Left and Right switch workspace, but only while nothing is typed: they are the caret's after that, and the
-        list spans every workspace then anyway.
+        list spans every workspace then anyway. Ctrl+Shift+T reopens the tab closed last, as in the browser, and
+        closes the window.
         The hotkey's Super may still be down, so it changes none of this, and Enter still picks."""
         if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and event.state & Gtk.accelerator_get_default_mod_mask():
             self._dialog_finish(True)  # (the entry's own "activate" needs every modifier up)
+            return True
+        if event.keyval in (Gdk.KEY_t, Gdk.KEY_T) and event.state & CARET_MODS == RESTORE_MODS:
+            if self._restore_tab():
+                self._dialog_finish(False)  # the tab is back: the keyboard goes on to the browser
             return True
         if event.keyval in WORKSPACE_KEYS:
             if entry.get_text().strip():  # (as _rebuild counts a query: blanks alone list nothing more)
@@ -1185,14 +1209,30 @@ class DockView:
             self._select(rows[step_index(current, len(rows), step)])
         return True
 
+    def _keyboard_source(self):
+        """(conn, hello, state) of the browser the find window's keys act on: the one listed, or of several the one
+        in use."""
+        return next((s for s in self.sources if len(self.sources) == 1 or s[1] is self._focus), None)
+
+    def _restore(self, conn):
+        if self.on_restore is not None:
+            self.on_restore(conn)
+
+    def _restore_tab(self):
+        """Reopen the tab closed last, in the find window's browser. False, and nothing sent, when its extension
+        cannot."""
+        source = self._keyboard_source()
+        if source is None or not supports(source[1], "restore_tab"):
+            return False
+        self._clear_ghost()  # the tab comes back under a new id: the undo row would name it twice
+        self._restore(source[0])
+        return True
+
     def _step_workspace(self, step):
         """Switch the window to the workspace `step` away, stopping at the ends, as a click on its chip does: of the
         browser listed, or of the one in use among several. The tabs listed change, so no tab stays highlighted."""
-        source = next(
-            (s for s in self.sources if (len(self.sources) == 1 or s[1] is self._focus) and offers_workspaces(s[1], s[2])),
-            None,
-        )
-        target = source and workspace_step(source[2], step, self._ws_pending)
+        source = self._keyboard_source()
+        target = source and offers_workspaces(source[1], source[2]) and workspace_step(source[2], step, self._ws_pending)
         if not target:
             return
         self._ws_pending = target[1]  # (keys pressed before the browser reports the switch count from here)
@@ -1218,7 +1258,97 @@ class DockView:
             adj.set_value(bottom - adj.get_page_size())
 
     def _close_tab(self, conn, tab_id):
+        self._note_closed(conn, tab_id)
         self._command(conn, {"type": "close_tab", "tabId": tab_id})
+
+    # -- undoing a close ---------------------------------------------------------------------
+
+    # A tab closed from the panel leaves its row behind for a few seconds, struck through, with a ↶ where its ✕ was:
+    # one click brings it back to that place. The browser restores the tab it closed last, so the row is only kept
+    # while that is still this tab: it goes as soon as another one closes.
+
+    def _note_closed(self, conn, tab_id):
+        """Remember the tab about to close (its title, place and window), if its browser can restore it."""
+        self._clear_ghost()  # whatever was closed before is not the tab closed last any more
+        info = next((i for c, i, _s in self.sources if c is conn), None)
+        box = next((b for b in self._tab_rows() if self._tab_key(b) == (conn, tab_id)), None)
+        state = self._state_of(conn) or {}
+        found = next(((w, t) for w in state.get("windows", []) for t in w["tabs"] if t["id"] == tab_id), None)
+        if info is None or box is None or found is None or not supports(info, "restore_tab") or self._query.strip():
+            return
+        window, tab = found
+        group = self._meta[box]["group"]
+        peers = [b for b in self._tab_rows() if self._meta[b]["conn"] is conn and self._meta[b]["group"] == group]
+        self._ghost = {
+            "conn": conn, "id": tab_id, "title": tab_label(tab), "group": group, "position": peers.index(box),
+            "window": window["id"], "workspace": window.get("workspaceId"),  # (it shows only where it was closed)
+            "others": {t["id"] for w in state["windows"] for t in w["tabs"]} - {tab_id},
+            "restoring": False, "t": time.monotonic(),
+        }
+        self._arm_ghost(GHOST_S)
+
+    def _arm_ghost(self, seconds):
+        if self._ghost_timer is not None:
+            GLib.source_remove(self._ghost_timer)
+        self._ghost_timer = _schedule(seconds * 1000, self._drop_ghost)
+
+    def _clear_ghost(self):
+        if self._ghost_timer is not None:
+            GLib.source_remove(self._ghost_timer)
+            self._ghost_timer = None
+        self._ghost = None
+
+    def _drop_ghost(self):
+        """Its time is up."""
+        self._clear_ghost()
+        self._rebuild()
+
+    def _check_ghost(self, conn, state):
+        """Forget the undo row once it would bring back another tab: one of the others has gone since (closed in the
+        browser, by 'Reopen in container' ...), or, after the click, the restored tab is listed."""
+        ghost = self._ghost
+        if ghost is None or ghost["conn"] is not conn:
+            return
+        now = {t["id"] for w in state.get("windows", []) for t in w["tabs"]}
+        if ghost["others"] - now or (ghost["restoring"] and now - ghost["others"] - {ghost["id"]}):
+            self._clear_ghost()
+
+    def _ghost_row(self, conn, group, tabs, colour, window):
+        """The closed tab's row for its container `group` (whose listed `tabs` are given, in `window`): its title
+        struck through and a ↶. None when it belongs elsewhere (another container, window or workspace), or the
+        browser still lists the tab (it has not reported the close)."""
+        ghost = self._ghost
+        if ghost is None or ghost["conn"] is not conn or ghost["group"] != group:
+            return None
+        if window["id"] != ghost["window"] or window.get("workspaceId") != ghost["workspace"]:
+            return None
+        if any(t["id"] == ghost["id"] for t in tabs):
+            return None
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.get_style_context().add_class("sp-tabbox")
+        if self.cfg["icons"]:
+            spacer = Gtk.Image()
+            spacer.set_size_request(favicons.ICON_PX, favicons.ICON_PX)  # the titles stay in line
+            box.pack_start(spacer, False, False, 0)
+        box.pack_start(self._label(f'<s>{GLib.markup_escape_text(ghost["title"])}</s>', "sp-ghost", markup=True),
+                       True, True, 0)
+        if not ghost["restoring"]:  # (asked already: no second ↶ to click while the tab is on its way)
+            undo = self._button("↶", "Reopen this tab", Gtk.Button)
+            undo.get_style_context().add_class("sp-reopen")
+            undo.connect("clicked", lambda _b: self._reopen_ghost())
+            box.pack_end(undo, False, False, 0)
+        row = self._row(box, "ghost", ghost["id"], group, conn, colour, self._reopen_ghost, draggable=False)
+        row.get_style_context().add_class("ghost")
+        return row
+
+    def _reopen_ghost(self):
+        ghost = self._ghost
+        if ghost is None or ghost["restoring"] or time.monotonic() - ghost["t"] < GHOST_GUARD_S:
+            return
+        self._restore(ghost["conn"])
+        ghost["restoring"] = True  # the row stays until the tab is listed again, so nothing below it moves under a
+        self._arm_ghost(GHOST_RESTORING_S)  # second click, and goes anyway if it never comes
+        self._rebuild()
 
     # -- workspaces ------------------------------------------------------------------------
 

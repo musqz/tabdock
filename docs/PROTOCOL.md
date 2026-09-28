@@ -14,7 +14,7 @@ directions, with two additions: it sends `resync` to the extension whenever the 
 
 | type    | fields | notes |
 |---------|--------|-------|
-| `hello` | `browser`, `version`, `features`, `browserPid` (added by relay) | sent on every resync, before `state`. `browser` is what `getBrowserInfo()` reports, which is unreliable (Zen says "Firefox"), so the panel names the browser from `/proc/<browserPid>/exe` and only falls back to this. `features` lists what the extension handles beyond what every version did (`close_tab`, `pin_tab`, `containers`, `reopen_in_container`): the panel offers only those, so an older extension (no `features`) never gets a `✕` or a menu item that does nothing |
+| `hello` | `browser`, `version`, `features`, `browserPid` (added by relay) | sent on every resync, before `state`. `browser` is what `getBrowserInfo()` reports, which is unreliable (Zen says "Firefox"), so the panel names the browser from `/proc/<browserPid>/exe` and only falls back to this. `features` lists what the extension handles beyond what every version did (`close_tab`, `pin_tab`, `containers`, `reopen_in_container`, `restore_tab`): the panel offers only those, so an older extension (no `features`) never gets a `✕` or a menu item that does nothing |
 | `state` | `focusedWindowId`, `containerOrder[]`, `containers[]`, `groups[]`, `workspaces[]`, `windows[]` | full snapshot, debounced 50 ms after any change |
 
 `containers[]`: `{cookieStoreId, name, color, colorCode, icon}`.
@@ -48,6 +48,7 @@ offers no workspaces in Zen (it has its own) or from an older extension (no `wor
 | `panel_disconnected` | (none) | sent by the relay when the panel goes away; extension stops pushing snapshots until the next `resync` |
 | `activate_tab` | `tabId`, `windowId` | activates the tab and focuses its window |
 | `close_tab` | `tabId` | closes the tab (`tabs.remove`). With workspaces in use, when it is the only tab its window shows (every other one hidden), the window's workspace gets a new tab first, so Firefox does not close the window and the other workspaces' tabs with it (`browser.tabs.closeWindowWithLastTab`) |
+| `restore_tab` | (none) | reopens the tab (or window) closed last, as Ctrl+Shift+T does (`sessions.restore()`): in its container, and back in its workspace, which the window then shows because the restored tab is the active one. Only an extension that lists `restore_tab` in its `features` gets it |
 | `create_container` | `name`, and optionally `color`, `icon` | a new container; without a colour, the first container colour no container has yet, and the `circle` icon |
 | `update_container` | `cookieStoreId`, and any of `name`, `color`, `icon` | changes what it names; an empty name, or a colour or icon Firefox does not offer, is ignored |
 | `remove_container` | `cookieStoreId` | as Firefox's own settings do: its tabs close first (each as `close_tab` closes one, so never a window with other workspaces' hidden tabs), then the container goes and Firefox deletes its cookies. A workspace that opened its new tabs in it opens them in none from then on |

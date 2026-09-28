@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- A tab closed from the panel stays in its place for 8 seconds, struck through, with a `↶` where its `✕` was:
+  one click reopens it (the browser's own Ctrl+Shift+T: in its container and workspace). Ctrl+Shift+T does the
+  same in the find window, which it closes, raising the browser. This one changes the extension: sign the new
+  version and install it in each browser (docs/RELEASE.md). A browser with an older extension shows no `↶` and
+  the key does nothing there.
+
 - `tabdock --find` shows the panel and its find window from any app, so a key bound to it in your window
   manager (an Openbox `<keybind>` is in the usage doc) opens the tab list at the keyboard: Down and Up (Page
   Down, Page Up, Home, End) highlight a tab, Enter opens it, Escape gives the keyboard back. Only the panel

@@ -10,7 +10,7 @@ const HOST = "openbox_sidepanel";
 const RECONNECT_MS = 3000; // only needed if the relay process itself died
 const DEBOUNCE_MS = 50;
 // What this extension does beyond what every version did, told to the panel in "hello": it offers only those.
-const FEATURES = ["close_tab", "pin_tab", "containers", "reopen_in_container"];
+const FEATURES = ["close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab"];
 
 let port = null;
 let panelUp = false; // relay has a panel connected (set by resync, cleared by panel_disconnected)
@@ -594,6 +594,13 @@ async function onCommand(msg) {
       case "close_tab":
         if (Number.isInteger(msg.tabId)) await closeTab(msg.tabId);
         break;
+      case "restore_tab": {
+        // the tab (or window) the browser closed last, as Ctrl+Shift+T does: in its container, and back in its
+        // workspace (readTab). It returns to its own window, which may not be the one the panel raised.
+        const restored = await browser.sessions.restore();
+        if (restored && restored.tab) await browser.windows.update(restored.tab.windowId, { focused: true });
+        break;
+      }
       case "reopen_in_container":
         if (Number.isInteger(msg.tabId) && typeof msg.cookieStoreId === "string") {
           await reopenInContainer(msg.tabId, msg.cookieStoreId);

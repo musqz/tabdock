@@ -122,12 +122,14 @@ class DockViewTest(unittest.TestCase):
         self.commands = []
         self.command_conns = []
         self.chosen = []
+        self.restored = []
         view = DockView(
             {**DEFAULTS, **cfg},
             lambda *a: self.activated.append(a),
             lambda: self.quit_calls.append(1),
             on_command=lambda conn, message: (self.commands.append(message), self.command_conns.append(conn)),
             on_choose=self.chosen.append,
+            on_restore=self.restored.append,
         )
         self.addCleanup(view.win.destroy)
         self.addCleanup(view.strip.destroy)
@@ -1690,6 +1692,192 @@ class DockViewTest(unittest.TestCase):
         view._dialog_entry.set_text("")  # emptied again: they switch workspace again
         self.assertTrue(self.key(view, Gdk.KEY_Right))
         self.assertEqual(len(self.commands), 1)
+
+    RESTORING = {**INFO, "features": [*INFO["features"], "restore_tab"]}
+
+    def without(self, state, tab_id):
+        window = state["windows"][0]
+        return {**state, "windows": [{**window, "tabs": [t for t in window["tabs"] if t["id"] != tab_id]}]}
+
+    def listed(self, view):
+        return [(view._meta[b]["kind"], view._meta[b]["id"]) for b in view._row_order
+                if view._meta[b]["kind"] in ("tab", "ghost")]
+
+    def undo_of(self, view):
+        row = next(b for b, m in view._meta.items() if m["kind"] == "ghost")
+        return row, next(c for c in row.get_child().get_children() if isinstance(c, Gtk.Button))
+
+    def test_a_tab_closed_from_the_panel_leaves_its_row_in_place_as_an_undo(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, self.RESTORING, DRAG_STATE)])
+        self.assertEqual(self.listed(view), [("tab", 1), ("tab", 3), ("tab", 4), ("tab", 2)])
+        self.close_button(view, 3).clicked()
+        self.assertEqual(self.commands, [{"type": "close_tab", "tabId": 3}])
+        self.assertEqual(self.listed(view), [("tab", 1), ("tab", 3), ("tab", 4), ("tab", 2)])  # not reported yet: no twin
+        view.show([(conn, self.RESTORING, self.without(DRAG_STATE, 3))])
+        self.assertEqual(self.listed(view), [("tab", 1), ("ghost", 3), ("tab", 4), ("tab", 2)])  # where it was
+        row, undo = self.undo_of(view)
+        self.assertEqual(label_of(row).get_text(), "p2")
+        self.assertIn("<s>", label_of(row).get_label())  # struck through
+        self.assertEqual(undo.get_label(), "↶")
+        self.assertFalse(view._meta[row]["draggable"])
+        self.assertFalse(view._meta[row]["closable"])
+
+    def test_the_undo_row_of_the_only_tab_of_a_container_sits_in_that_container(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, self.RESTORING, DRAG_STATE)])
+        self.close_button(view, 2).clicked()  # "mail", alone in Personal
+        view.show([(conn, self.RESTORING, self.without(DRAG_STATE, 2))])
+        self.assertEqual(self.listed(view), [("tab", 1), ("tab", 3), ("tab", 4), ("ghost", 2)])
+
+    def test_the_undo_reopens_the_tab_but_not_at_once_after_the_close(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, self.RESTORING, DRAG_STATE)])
+        self.close_button(view, 3).clicked()
+        view.show([(conn, self.RESTORING, self.without(DRAG_STATE, 3))])
+        row, undo = self.undo_of(view)
+        undo.clicked()  # a double click on the ✕ lands here
+        self.assertEqual(self.restored, [])
+        self.assertEqual(self.listed(view)[1], ("ghost", 3))
+        view._ghost["t"] -= 1
+        undo.clicked()
+        self.assertEqual(self.restored, [conn])
+
+    def test_after_the_click_the_row_stays_without_its_arrow_until_the_tab_is_listed_again(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, self.RESTORING, DRAG_STATE)])
+        self.close_button(view, 3).clicked()
+        closed = self.without(DRAG_STATE, 3)
+        view.show([(conn, self.RESTORING, closed)])
+        view._ghost["t"] -= 1
+        click(self.undo_of(view)[0])  # a click on the row itself
+        self.assertEqual(self.restored, [conn])
+        self.assertEqual(self.listed(view), [("tab", 1), ("ghost", 3), ("tab", 4), ("tab", 2)])  # nothing moves up
+        row = next(b for b, m in view._meta.items() if m["kind"] == "ghost")
+        self.assertEqual([c for c in row.get_child().get_children() if isinstance(c, Gtk.Button)], [])
+        click(row)  # a second click: the tab is on its way already
+        self.assertEqual(self.restored, [conn])
+        window = closed["windows"][0]
+        back = {"id": 99, "index": 2, "title": "p2", "cookieStoreId": "firefox-default"}  # it comes back as a new tab
+        view.show([(conn, self.RESTORING, {**closed, "windows": [{**window, "tabs": [*window["tabs"], back]}]})])
+        self.assertNotIn("ghost", [kind for kind, _id in self.listed(view)])
+        self.assertIsNone(view._ghost)
+
+    def test_the_undo_row_goes_when_another_tab_closes_meanwhile(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, self.RESTORING, DRAG_STATE)])
+        self.close_button(view, 3).clicked()
+        closed = self.without(DRAG_STATE, 3)
+        view.show([(conn, self.RESTORING, closed)])
+        self.assertIn(("ghost", 3), self.listed(view))
+        view.show([(conn, self.RESTORING, self.without(closed, 4))])  # closed in the browser: the tab closed last is 4
+        self.assertNotIn("ghost", [kind for kind, _id in self.listed(view)])
+        self.assertIsNone(view._ghost)
+
+    def test_the_undo_row_shows_only_in_the_workspace_it_was_closed_in(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, self.RESTORING, self.WS_STATE)])  # the window shows Work
+        self.close_button(view, 2).clicked()
+        closed = self.without(self.WS_STATE, 2)
+        elsewhere = {**closed, "windows": [{**closed["windows"][0], "workspaceId": "default"}]}
+        view.show([(conn, self.RESTORING, closed)])
+        self.assertIn(("ghost", 2), self.listed(view))
+        view.show([(conn, self.RESTORING, elsewhere)])
+        self.assertNotIn("ghost", [kind for kind, _id in self.listed(view)])
+        view.show([(conn, self.RESTORING, closed)])  # back in Work: still there
+        self.assertIn(("ghost", 2), self.listed(view))
+
+    def test_closing_another_tab_moves_the_undo_to_it(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, self.RESTORING, DRAG_STATE)])
+        self.close_button(view, 3).clicked()
+        state = self.without(DRAG_STATE, 3)
+        view.show([(conn, self.RESTORING, state)])
+        self.close_button(view, 4).clicked()  # the tab closed last is 4 now, and that is what would come back
+        self.assertEqual(view._ghost["id"], 4)
+        view.show([(conn, self.RESTORING, self.without(state, 4))])
+        self.assertEqual(self.listed(view), [("tab", 1), ("ghost", 4), ("tab", 2)])
+
+    def test_the_undo_row_goes_when_its_time_is_up(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, self.RESTORING, DRAG_STATE)])
+        with mock.patch("tabdock.dock._schedule") as schedule:
+            self.close_button(view, 3).clicked()
+        self.assertEqual((schedule.call_args.args[0], schedule.call_args.args[1]), (8000, view._drop_ghost))
+        view.show([(conn, self.RESTORING, self.without(DRAG_STATE, 3))])
+        self.assertIn(("ghost", 3), self.listed(view))
+        view._drop_ghost()
+        self.assertEqual(self.listed(view), [("tab", 1), ("tab", 4), ("tab", 2)])
+        self.assertEqual(self.commands, [{"type": "close_tab", "tabId": 3}])
+        self.assertEqual(self.restored, [])  # nothing was restored
+
+    def test_the_browser_going_away_takes_the_undo_row_and_its_timer_with_it(self):
+        view = self.make()
+        view.show([(object(), self.RESTORING, DRAG_STATE)])
+        self.close_button(view, 3).clicked()
+        view.clear()
+        self.assertIsNone(view._ghost)
+        self.assertIsNone(view._ghost_timer)
+
+    def test_no_undo_row_when_the_extension_cannot_restore_or_while_finding(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, DRAG_STATE)])  # an extension from before it
+        self.close_button(view, 3).clicked()
+        view.show([(conn, INFO, self.without(DRAG_STATE, 3))])
+        self.assertNotIn("ghost", [kind for kind, _id in self.listed(view)])
+        view.show([(conn, self.RESTORING, DRAG_STATE)])
+        view.find_btn.clicked()
+        view._dialog_entry.set_text("p")
+        self.close_button(view, 3).clicked()  # closed from the search results
+        self.assertIsNone(view._ghost)
+
+    def test_ctrl_shift_t_in_the_find_window_reopens_the_tab_and_closes_the_window(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, self.RESTORING, STATE)])
+        view.find_btn.clicked()
+        ctrl_shift = Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.SHIFT_MASK
+        self.assertTrue(self.key(view, Gdk.KEY_T, ctrl_shift | Gdk.ModifierType.SUPER_MASK))  # Super still down
+        self.assertEqual(self.restored, [conn])
+        self.assertIsNone(view._dialog)
+        self.assertEqual(self.activated, [])
+        view.find_btn.clicked()
+        self.key(view, Gdk.KEY_t, ctrl_shift)
+        self.assertEqual(self.restored, [conn, conn])
+
+    def test_ctrl_shift_t_takes_the_undo_row_away_as_the_tab_comes_back_under_a_new_id(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, self.RESTORING, DRAG_STATE)])
+        self.close_button(view, 3).clicked()
+        view.show([(conn, self.RESTORING, self.without(DRAG_STATE, 3))])
+        view.find_btn.clicked()
+        self.key(view, Gdk.KEY_T, Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.SHIFT_MASK)
+        self.assertEqual(self.restored, [conn])
+        self.assertIsNone(view._ghost)
+        self.assertNotIn("ghost", [kind for kind, _id in self.listed(view)])
+
+    def test_the_find_window_ignores_t_without_ctrl_and_shift_and_when_the_browser_cannot_restore(self):
+        view = self.make()
+        view.show([(object(), self.RESTORING, STATE)])
+        view.find_btn.clicked()
+        self.assertFalse(self.key(view, Gdk.KEY_t))  # plain typing
+        self.assertFalse(self.key(view, Gdk.KEY_t, Gdk.ModifierType.CONTROL_MASK))
+        self.assertEqual(self.restored, [])
+        self.assertIsNotNone(view._dialog)
+        view.show([(object(), INFO, STATE)])  # an extension from before it
+        self.assertTrue(self.key(view, Gdk.KEY_T, Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.SHIFT_MASK))
+        self.assertEqual(self.restored, [])
+        self.assertIsNotNone(view._dialog)  # the window stays: nothing came back
 
     def test_find_left_and_right_do_nothing_where_the_panel_shows_no_workspaces(self):
         view = self.make()

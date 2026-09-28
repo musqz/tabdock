@@ -370,6 +370,12 @@ def main():
         eventually(lambda: "pin-me" not in m.strip() and "pin-me" not in listed(last_snapshot(out.text)), "pin-me gone")
         print("OK pin_tab, close_tab: the panel pins, unpins and closes a tab in the browser")
 
+        say(panel, "restore")
+        eventually(lambda: "pin-me" in m.strip() and "pin-me" in listed(last_snapshot(out.text)), "pin-me back")
+        print("OK restore_tab: the tab closed last comes back, in the browser and in the panel")
+        say(panel, f"close {listed(last_snapshot(out.text))['pin-me'][0]}")  # (as before: the tab is not needed)
+        eventually(lambda: "pin-me" not in m.strip(), "pin-me gone again")
+
         say(panel, "cnew e2e box")
         eventually(lambda: "e2e box" in dict(sections(last_snapshot(out.text))), "the new container listed")
         box = dict(sections(last_snapshot(out.text)))["e2e box"]

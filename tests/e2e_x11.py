@@ -123,7 +123,7 @@ class FakeExtension:
         self.sock.setblocking(False)
         self.buf = b""
         self.send({"type": "hello", "browser": browser, "version": "1", "browserPid": pid,
-                   "features": ["close_tab", "pin_tab", "containers"]})
+                   "features": ["close_tab", "pin_tab", "containers", "restore_tab"]})
         self.state = (
             {
                 "type": "state",
@@ -387,6 +387,27 @@ def main():
         assert int(run("xdotool", "getactivewindow").stdout) == ff_win, "closing took the focus from the browser"
         ok("close: the ✕ of a hovered tab and a middle click send close_tab, and the browser keeps the focus")
 
+        # the tab closed last stays where it was, as an undo, once the browser reports it gone
+        def row_of(key):
+            try:
+                return layout().get(key)
+            except (OSError, ValueError):
+                return None
+
+        window = ff.state["windows"][0]
+        ff.send({**ff.state, "windows": [{**window, "tabs": [t for t in window["tabs"] if t["id"] != 3]}]})
+        undo = wait_for(lambda: row_of(("ghost", 3)), "the closed tab's row, left in place as an undo")
+        screenshot(os.path.join(shots, "undo-row.png"))
+        time.sleep(0.6)  # (sooner than that a click counts as a double click on the ✕)
+        run("xdotool", "mousemove", str(undo["x"] + 60), str(undo["y"] + undo["h"] // 2))
+        time.sleep(0.3)
+        run("xdotool", "click", "1")
+        got = messages("restore_tab")
+        assert got == [{"type": "restore_tab"}], got
+        wait_for(lambda: row_of(("ghost", 3)) is None, "the undo row gone after the click")
+        ff.send(ff.state)  # the browser has the tab again
+        ok("undo: a tab closed from the panel stays as a row with a ↶, and a click on it sends restore_tab")
+
         # a container's own menu: rename it in the name window, and removing asks first, Cancel being the default
         def container_menu(*keys):
             # where it is now: the sections dragged into another order earlier go back to the fake browser's order
@@ -481,6 +502,15 @@ def main():
         wait_for(lambda: active_window() == term_win, "the keyboard back where it was, again")
         assert not messages("activate_tab"), "closing the window opened a tab"
         ok("find key: Escape, and the same key again, close the window and give the keyboard back")
+
+        run("xdotool", "windowactivate", "--sync", str(term_win))
+        ff.received()
+        hotkey_find()
+        run("xdotool", "key", "ctrl+shift+t")
+        assert messages("restore_tab") == [{"type": "restore_tab"}]
+        wait_for(lambda: find("Find tab") is None, "the find window closed by Ctrl+Shift+T")
+        wait_for(lambda: active_window() == ff_win, "the browser raised for the tab that came back")
+        ok("find key: Ctrl+Shift+T asks the browser to reopen the closed tab, closes the window and raises the browser")
         collapse()
 
         # -- several browsers: chips choose what is listed, "all" gives each browser a foldable section -----
