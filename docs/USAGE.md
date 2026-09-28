@@ -22,14 +22,7 @@
   (from nothing, the first or the last), Page Down and Page Up move ten, Home and End go to the first and
   the last, Enter opens the highlighted tab and raises its browser, Escape closes the window and gives the
   keyboard back. The same key closes the window too. The panel has to be running (`tabdock: not running`,
-  exit 1, otherwise). tabdock binds nothing itself and `install.sh` leaves `rc.xml` alone; in Openbox, add
-  this inside `<keyboard>` in `~/.config/openbox/rc.xml`, then run `openbox --reconfigure`:
-
-  ```xml
-  <keybind key="W-grave">
-    <action name="Execute"><command>tabdock --find</command></action>
-  </keybind>
-  ```
+  exit 1, otherwise). tabdock binds no key itself: see Hotkey below.
 - **Edit containers:** right-click a container section to rename it, change its colour or icon, make a new
   container, or remove it. Removing asks first, with Cancel as the default: its tabs close (in every window and
   workspace) and Firefox deletes its cookies, which logs you out of the sites you used in it.
@@ -139,6 +132,31 @@ closing the last tab of a workspace closes the whole window, and the other works
 come back with History → Recently Closed Windows, or Restore Previous Session if it was the last window). With
 `false`, Firefox leaves a new tab instead and the workspace stays. An extension can neither read nor change
 this setting, nor stop a window from closing.
+
+### Hotkey
+
+tabdock grabs no key; the window manager runs `tabdock --find` for one you choose, and `install.sh` leaves
+your `rc.xml` alone. In Openbox add a `<keybind>` to the `<keyboard>` section of `~/.config/openbox/rc.xml`
+(copy `/etc/xdg/openbox/rc.xml` there first if you have none), then run `openbox --reconfigure`:
+
+```xml
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <!-- ... -->
+  <keyboard>
+    <!-- ... -->
+    <keybind key="W-grave">
+      <action name="Execute">
+        <command>tabdock --find</command>
+      </action>
+    </keybind>
+  </keyboard>
+  <!-- ... -->
+</openbox_config>
+```
+
+`W-grave` is Super+`` ` ``. In a key name `W-` is Super, `A-` Alt, `C-` Ctrl and `S-` Shift, and the key
+itself is an X keysym (`xev` prints them). Pick one no other `<keybind>` uses. Any other window manager works
+the same way: bind a key to the command `tabdock --find`.
 
 ### Multiple monitors
 

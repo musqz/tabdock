@@ -74,3 +74,13 @@ window joins that window's workspace, and an unpinned tab the workspace it was u
 the workspace of the window focused before it.
 
 (`focus_window`, once planned, is not needed: `activate_tab` focuses the tab's window.)
+
+## Command line -> panel
+
+The panel takes one message from a client that is no relay: `tabdock --find` connects to the same socket, sends it
+and disconnects. The panel answers nothing, and the client never sends `hello`, so it is never listed as a browser.
+With no panel listening, `--find` prints `tabdock: not running` and exits 1.
+
+| type   | fields | notes |
+|--------|--------|-------|
+| `find` | (none) | shows the panel (even while hidden) with its find window, where the arrow keys highlight a tab; sent again while that window is up, it closes it |

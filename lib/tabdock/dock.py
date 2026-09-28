@@ -119,7 +119,13 @@ FIND_KEYS = {
     Gdk.KEY_Down: (1, False), Gdk.KEY_Up: (-1, False),
     Gdk.KEY_Page_Down: (10, False), Gdk.KEY_Page_Up: (-10, False),
     Gdk.KEY_Home: (1, True), Gdk.KEY_End: (-1, True),
+    Gdk.KEY_KP_Down: (1, False), Gdk.KEY_KP_Up: (-1, False),
+    Gdk.KEY_KP_Page_Down: (10, False), Gdk.KEY_KP_Page_Up: (-10, False),
+    Gdk.KEY_KP_Home: (1, True), Gdk.KEY_KP_End: (-1, True),
 }
+# With one of these down, Home and End are the entry's caret keys (Shift+Home selects). Super is not one of them:
+# it is still down from the hotkey.
+CARET_MODS = Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK
 
 
 def acc_class(colour):
@@ -221,12 +227,12 @@ class DockView:
         self._first_match = None  # (conn, tab id, window id) of the first tab listed while finding
         self._selected = None  # (conn, tab id) of the tab the arrow keys have highlighted while finding
         self._find_dialog = None  # the find window, while it is up (self._dialog may be another window)
-        self._find_finish = None
         self._state = {}  # the state of the browser whose rows are being built
         self._middle = None  # the row a middle button went down on: releasing it there closes that tab
         self._holds = set()  # why the panel must stay open whatever the pointer does: "drag", "menu", "dialog"
         self._menu = None  # the context menu up (kept referenced while it is shown)
         self._dialog = None  # the window asking for a workspace name, while it is up
+        self._dialog_finish = None  # finish(accepted) of that window
         self.collapsed = set()  # (browser pid, cookieStoreId) of folded container sections; (pid, None) a folded browser
         self.hidden = False
         self._last = None  # what the last render showed, to skip identical ones
@@ -1136,7 +1142,7 @@ class DockView:
         """The hotkey (`tabdock --find`): the find window, with the panel shown for it even while it is hidden.
         The same key closes it again."""
         if self._dialog is not None and self._dialog is self._find_dialog:
-            self._find_finish(False)
+            self._dialog_finish(False)
             return
         self.set_hidden(False)
         self._find()
@@ -1157,6 +1163,7 @@ class DockView:
             box = next((b for b in self._tab_rows() if self._tab_key(b) == self._selected), None)
             pick = self._meta[box]["click"] if box is not None else None  # what a click on that row does
             first = self._first_match
+            self._find_dialog = None
             self._query = ""
             self._selected = None
             self._last = None
@@ -1167,7 +1174,7 @@ class DockView:
                 self.on_activate(*first)
 
         finish, _ok = self._small_window("Find tab", entry, "Go", answer, focus=entry, beside=True)
-        self._find_dialog, self._find_finish = self._dialog, finish
+        self._find_dialog = self._dialog
         entry.connect("changed", narrow)
         entry.connect("activate", lambda _e: finish(True))
         entry.connect("key-press-event", self._on_find_key)
@@ -1180,16 +1187,23 @@ class DockView:
         return self._meta[box]["conn"], self._meta[box]["id"]
 
     def _on_find_key(self, _entry, event):
-        """Down, Up, Page Down, Page Up, Home and End walk the tab rows while the find window has the keyboard."""
-        if event.keyval not in FIND_KEYS or event.state & Gtk.accelerator_get_default_mod_mask():
+        """Down, Up, Page Down, Page Up, Home and End walk the tab rows while the find window has the keyboard.
+        The arrows are always taken, even with nothing to walk: GTK would move the focus off the entry with them.
+        Home and End stay the entry's caret keys when chorded (Shift+Home selects text) or when no tab is listed.
+        The hotkey's Super may still be down, so it changes none of this, and Enter still picks."""
+        if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and event.state & Gtk.accelerator_get_default_mod_mask():
+            self._dialog_finish(True)  # (the entry's own "activate" needs every modifier up)
+            return True
+        if event.keyval not in FIND_KEYS:
             return False
-        rows = self._tab_rows()
-        if not rows:
-            return False
-        keys = [self._tab_key(b) for b in rows]
         step, from_nothing = FIND_KEYS[event.keyval]
-        current = None if from_nothing or self._selected not in keys else keys.index(self._selected)
-        self._select(rows[step_index(current, len(rows), step)])
+        rows = self._tab_rows()
+        if from_nothing and (not rows or event.state & CARET_MODS):
+            return False
+        if rows:
+            keys = [self._tab_key(b) for b in rows]
+            current = None if from_nothing or self._selected not in keys else keys.index(self._selected)
+            self._select(rows[step_index(current, len(rows), step)])
         return True
 
     def _select(self, box):
@@ -1382,7 +1396,7 @@ class DockView:
         answer(accepted) is called once, as it goes; Escape or closing it is Cancel. Returns (finish, accept button).
         `beside`: next to the panel instead of at the pointer, where it would cover what the panel shows."""
         if self._dialog is not None:
-            self._dialog.destroy()
+            self._dialog_finish(False)  # replaced is cancelled: its answer undoes what it changed (a find's list)
         dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL, title=title)
         dialog.set_type_hint(Gdk.WindowTypeHint.DIALOG)
         dialog.set_keep_above(True)
@@ -1403,6 +1417,7 @@ class DockView:
             if self._dialog is not dialog:
                 return  # already answered
             self._dialog = None
+            self._dialog_finish = None
             self._hold("dialog", False)
             answer(accept)
             dialog.destroy()
@@ -1412,6 +1427,7 @@ class DockView:
         dialog.connect("key-press-event", lambda _w, e: e.keyval == Gdk.KEY_Escape and (finish(False) or True))
         dialog.connect("delete-event", lambda *_a: finish(False) or True)
         self._dialog = dialog
+        self._dialog_finish = finish
         self._dialog_ok = ok
         self._hold("dialog", True)
         box.show_all()

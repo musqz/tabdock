@@ -1525,11 +1525,12 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(self.activated, [])
         self.assertEqual(self.listed_tabs(view), [10])  # everything again, the folded section folded again
 
-    def key(self, view, keyval):
+    def key(self, view, keyval, state=0):
         """A key for the find window's entry, whether the panel handled it. (Not emitted: a key event with no window
         makes GTK's own handler complain when the panel leaves it alone.)"""
         event = Gdk.Event.new(Gdk.EventType.KEY_PRESS)
         event.keyval = keyval
+        event.state = Gdk.ModifierType(state)
         return view._on_find_key(view._dialog_entry, event)
 
     def highlighted(self, view):
@@ -1600,16 +1601,87 @@ class DockViewTest(unittest.TestCase):
         view._dialog_entry.emit("activate")
         self.assertEqual(self.activated, [(conn, 2, 2)])
 
-    def test_find_highlights_nothing_for_other_keys_or_when_no_tab_is_listed(self):
+    def test_find_leaves_other_keys_alone_and_keeps_the_arrows_from_moving_the_focus(self):
         view = self.make()
         view.show([(object(), INFO, STATE)])
         view.find_btn.clicked()
         self.assertFalse(self.key(view, Gdk.KEY_a))
         self.assertEqual(self.highlighted(view), [])
         view._dialog_entry.set_text("nothing like this")
-        self.assertFalse(self.key(view, Gdk.KEY_Down))
+        self.assertTrue(self.key(view, Gdk.KEY_Down))  # taken, or GTK moves the focus off the entry to a button
+        self.assertTrue(self.key(view, Gdk.KEY_Page_Up))
+        self.assertFalse(self.key(view, Gdk.KEY_Home))  # nothing to walk: the caret's again
         self.assertEqual(self.highlighted(view), [])
         self.assertIsNone(view._selected)
+
+    def test_find_keys_work_with_super_still_down_from_the_hotkey_and_on_the_keypad(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, DRAG_STATE)])
+        order = self.listed_tabs(view)
+        super_ = Gdk.ModifierType.SUPER_MASK
+        view.find_btn.clicked()
+        self.assertTrue(self.key(view, Gdk.KEY_Down, super_))
+        self.assertEqual(self.highlighted(view), [order[0]])
+        self.key(view, Gdk.KEY_KP_Down)
+        self.assertEqual(self.highlighted(view), [order[1]])
+        self.key(view, Gdk.KEY_KP_End)
+        self.assertEqual(self.highlighted(view), [order[-1]])
+        self.key(view, Gdk.KEY_Home, super_)
+        self.assertEqual(self.highlighted(view), [order[0]])
+        self.key(view, Gdk.KEY_End, super_)
+        self.assertEqual(self.highlighted(view), [order[-1]])
+        self.assertTrue(self.key(view, Gdk.KEY_Return, super_))  # the entry's own Enter needs every modifier up
+        self.assertEqual(self.activated, [(conn, order[-1], 2)])
+        self.assertIsNone(view._dialog)
+
+    def test_find_home_and_end_with_shift_or_control_are_the_carets(self):
+        view = self.make()
+        view.show([(object(), INFO, DRAG_STATE)])
+        view.find_btn.clicked()
+        self.assertFalse(self.key(view, Gdk.KEY_Home, Gdk.ModifierType.SHIFT_MASK))  # selects text in the entry
+        self.assertFalse(self.key(view, Gdk.KEY_End, Gdk.ModifierType.CONTROL_MASK))
+        self.assertEqual(self.highlighted(view), [])
+
+    def test_a_closed_window_leaves_nothing_of_itself_behind(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        view.find_btn.clicked()
+        view.find()  # closes it
+        self.assertIsNone(view._dialog)
+        self.assertIsNone(view._dialog_finish)
+        self.assertIsNone(view._find_dialog)
+
+    def test_another_window_replacing_the_find_window_cancels_it(self):
+        view = self.make()
+        view.show([(object(), INFO, DRAG_STATE)])
+        order = self.listed_tabs(view)
+        view.find_btn.clicked()
+        view._dialog_entry.set_text("p")
+        self.key(view, Gdk.KEY_Down)
+        self.assertEqual(self.highlighted(view), [order[0]])
+        view._ask_name("Rename", "x", lambda name: None)
+        self.assertEqual(view._dialog.get_title(), "Rename")
+        self.assertEqual(self.highlighted(view), [])
+        self.assertEqual(self.listed_tabs(view), order)  # not filtered by what was typed
+        self.assertTrue(view.autohide.held)  # the panel stays open for the window that replaced it
+        self.assertEqual(self.activated, [])
+        view.find()  # the hotkey opens the find window again, not "closes" the rename window
+        self.assertEqual(view._dialog.get_title(), "Find tab")
+
+    def test_the_find_button_again_starts_a_fresh_find(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, DRAG_STATE)])
+        order = self.listed_tabs(view)
+        view.find_btn.clicked()
+        view._dialog_entry.set_text("mail")
+        self.key(view, Gdk.KEY_Down)
+        view.find_btn.clicked()
+        self.assertEqual(view._dialog_entry.get_text(), "")
+        self.assertEqual(self.listed_tabs(view), order)
+        view._dialog_entry.emit("activate")  # nothing typed: the tab highlighted before is not opened
+        self.assertEqual(self.activated, [])
 
     def test_find_from_the_hotkey_shows_a_hidden_panel_and_the_same_key_closes_it(self):
         view = self.make()

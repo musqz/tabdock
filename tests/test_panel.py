@@ -416,6 +416,13 @@ class PanelTest(unittest.TestCase):
         self.panel.on_message(FakeConn(), {"type": "find"})
         self.assertEqual(self.view.calls, [("find",)])
 
+    def test_a_client_that_never_said_hello_closing_redraws_nothing(self):
+        self.panel.on_message(FakeConn(), {"type": "find"})  # what `tabdock --find` sends
+        self.view.calls.clear()
+        self.panel.on_close(FakeConn())
+        self.assertEqual(self.view.calls, [])
+        self.assertIs(self.panel.current, self.ff)
+
     def test_debug_console_activate(self):
         self.panel.on_stdin_line("activate 7")
         self.assertEqual(self.ff.sent[-1], {"type": "activate_tab", "tabId": 7, "windowId": 1})
