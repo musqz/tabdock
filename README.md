@@ -1,37 +1,28 @@
 # Tabdock
 
-An autohiding X11/Openbox side panel that mirrors Firefox based browser's tabs and containers, two-way,
-through a small WebExtension. Chromium based browser's are not supported.
+An autohiding X11/Openbox side panel that mirrors the tabs and containers of Firefox-based browsers, two-way,
+through a small WebExtension. Chromium-based browsers are not supported.
 
 ## Install
 
 Needs `python-gobject` (GTK 3) and `python-xlib`.
 
 ```bash
-./install.sh                     # program -> ~/.local, browser manifest, "Tabdock" menu entry, a config
-packaging/sign-extension.sh      # signs the extension (safe prompts for your Mozilla credentials)
-
+./install.sh     # program -> ~/.local, browser manifest, "Tabdock" menu entry, a config
 ```
 
-Release Firefox and Zen only keep **signed** extensions, so it needs signing once (free, via
-addons.mozilla.org, unlisted) before it survives a restart.
+Then install the signed `tabdock-*.xpi` from the [latest release](https://github.com/musqz/tabdock/releases/latest)
+in each browser: `about:addons` → gear → *Install Add-on From File…* (Firefox-based browsers keep only signed
+extensions). `./install.sh --uninstall` removes exactly what it installed.
 
-`./install.sh --uninstall` removes exactly what was installed.
-
-**Arch Linux:** installs the latest release system-wide instead. 
-
-```
-cd packaging && makepkg -si # In this dir the *.xpi will be placed.
-```
-
-Import extension `tabdock-*.xpi` into browser.
+**Arch Linux:** `cd packaging && makepkg -si` installs the latest release system-wide; the extension is then
+`/usr/share/tabdock/tabdock.xpi`.
 
 ## Docs
 
-- [docs/USAGE.md](docs/USAGE.md) — how it behaves, configuration, troubleshooting
-- [docs/RELEASE.md](docs/RELEASE.md) — signing, install locations, releasing a version
+- [docs/INSTALL.md](docs/INSTALL.md) — install, extension, starting the panel, troubleshooting
+- [docs/USAGE.md](docs/USAGE.md) — how it behaves, configuration
 - [docs/PROTOCOL.md](docs/PROTOCOL.md) — the panel/extension/relay wire protocol
-- [docs/PLAN.md](docs/PLAN.md) — design, milestones, repo layout
 
 <img width="320" height="1440" alt="Image" src="https://github.com/user-attachments/assets/764e92bf-bfef-45dd-8a08-6cd2d1bb4fdc" />
 

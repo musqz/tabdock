@@ -75,7 +75,7 @@ for_release() {  # a copy of the signed file under that name, and what to do wit
     [[ $1 -ef $release_file ]] || cp -- "$1" "$release_file"
     echo
     echo "for the release: $release_file"
-    echo "  attach it to the GitHub release v$version (docs/RELEASE.md), for example:"
+    echo "  attach it to the GitHub release v$version, for example:"
     echo "    gh release upload v$version $(printf '%q' "$release_file")"
     echo "  packaging/PKGBUILD downloads it from there (to build the package before uploading, copy it into packaging/)"
 }

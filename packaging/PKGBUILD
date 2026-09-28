@@ -2,8 +2,7 @@
 #
 # Release package, built from the v$pkgver tag. The signed extension is not built here: signing
 # needs the maintainer's addons.mozilla.org credentials, so it is attached to the GitHub release
-# once per version (docs/RELEASE.md, "Releasing a version") and installed to
-# /usr/share/tabdock/tabdock.xpi for every user.
+# once per version and installed to /usr/share/tabdock/tabdock.xpi for every user.
 pkgname=tabdock
 pkgver=0.5.0
 pkgrel=1
@@ -90,5 +89,5 @@ package() {
         > "$pkgdir/usr/share/applications/tabdock.desktop"
 
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
-    install -Dm644 README.md CHANGELOG.md docs/RELEASE.md -t "$pkgdir/usr/share/doc/$pkgname"
+    install -Dm644 README.md CHANGELOG.md docs/*.md -t "$pkgdir/usr/share/doc/$pkgname"  # whichever docs the tag has
 }
