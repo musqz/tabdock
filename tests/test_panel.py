@@ -263,6 +263,20 @@ class PanelTest(unittest.TestCase):
         self.panel.choose(FakeConn())
         self.assertEqual(self.panel.mode, "auto")
 
+    def test_restoring_a_tab_is_sent_and_raises_the_browser_only_when_it_was_not_focused(self):
+        self.panel.follow(FIREFOX_XID)
+        self.panel.restore_tab(self.ff)
+        self.assertEqual(self.ff.sent[-1], {"type": "restore_tab"})
+        self.assertEqual(self.x.activated, [])  # an undo row in the panel: the browser has the focus already
+        self.panel.follow(TERM_XID)  # the find window, from a terminal
+        self.panel.restore_tab(self.ff)
+        self.assertEqual(self.x.activated, [FIREFOX_XID])
+
+    def test_debug_console_restores_the_tab_closed_last(self):
+        self.panel.on_stdin_line("restore")
+        self.panel.on_stdin_line("restore 7")  # (malformed: ignored)
+        self.assertEqual(self.ff.sent, [{"type": "restore_tab"}])
+
     def test_activate_raises_the_browser_that_owns_the_tab_when_listing_several(self):
         self.panel.follow(ZEN_XID)
         self.panel.follow(FIREFOX_XID)  # Firefox is in use; Zen was in use before

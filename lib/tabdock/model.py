@@ -81,7 +81,7 @@ def reopenable(tab):
 
 
 # What an extension may say it handles (`features` in its hello), beyond what every version did.
-FEATURES = ("close_tab", "pin_tab", "containers", "reopen_in_container")
+FEATURES = ("close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab")
 
 
 def supports(info, feature):

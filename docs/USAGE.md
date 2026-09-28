@@ -12,6 +12,17 @@
   Right-click a tab to pin or unpin it, reopen it in another container (Firefox cannot move a tab between
   containers, so the page loads anew there and its back/forward history stays behind), or close it. Pinned tabs wear a 📌. With workspaces in use, closing a
   workspace's only tab from the panel leaves the window open (see Workspaces).
+- **Reopen a closed tab:** a tab you close from the panel (its `✕`, a middle click or the menu) stays in its
+  place for 8 seconds, struck through, with a `↶` where the `✕` was; one click on it (a click sooner than half
+  a second after the close is ignored, so a double click on the `✕` does not undo itself) brings the tab back,
+  as Ctrl+Shift+T does in the browser: in its container and workspace, and in its own window. The row shows
+  only in the window and workspace it was closed in, and only while its tab is the one closed last: it goes
+  as soon as any other tab closes (in the browser, or when the panel reopens a page in another container), and
+  a tab closed in the browser itself gets none (use the browser's own Ctrl+Shift+T). After the click the row
+  stays, without its `↶`, until the tab is listed again. In the find window Ctrl+Shift+T reopens the tab closed
+  last, whoever closed it, then closes the window and raises the browser; it looks for the letter T, so on a
+  layout without one it does nothing. A browser whose extension is older than this shows no `↶` and the key
+  does nothing there.
 - **Tab groups:** a tab in one of Firefox's own tab groups wears the group's name in its colour.
 - **Find a tab:** the 🔍 in the header opens a small window beside the panel. What you type there narrows the
   list at once to the tabs whose title or address holds every word, from every workspace of the window (a tab
