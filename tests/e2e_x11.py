@@ -446,6 +446,43 @@ def main():
         ok("find: typing narrows the list at once, Enter picks the match, and the browser gets the keyboard back")
         collapse()
 
+        # -- the hotkey: `tabdock --find` (what a key bound in the window manager runs) from another app -------------
+        def hotkey_find():
+            done = subprocess.run([os.path.join(ROOT, "tabdock"), "--find"], env=panel_env, capture_output=True, text=True)
+            assert done.returncode == 0, done.stderr
+            wait_for(lambda: active_title() == "Find tab", "the find window, with the keyboard")
+
+        def active_window():
+            return int(run("xdotool", "getactivewindow").stdout)
+
+        run("xdotool", "windowactivate", "--sync", str(term_win))
+        ff.received()
+        hotkey_find()
+        wait_for(panel_mapped, "the panel opened for the find window")
+        run("xdotool", "key", "Down", "Down")
+        time.sleep(0.3)
+        screenshot(os.path.join(shots, "find-keys.png"))
+        run("xdotool", "key", "Return")
+        got = messages("activate_tab")
+        assert [m["tabId"] for m in got] == [2], got  # the second tab listed
+        wait_for(lambda: active_window() == ff_win, "the browser raised and given the keyboard")
+        ok("find key: `tabdock --find` opens the find window, Down Down Enter opens the second tab and raises the browser")
+        collapse()
+
+        run("xdotool", "windowactivate", "--sync", str(term_win))
+        hotkey_find()
+        run("xdotool", "key", "Down", "Escape")
+        wait_for(lambda: active_window() == term_win, "the keyboard back where it was")
+        assert not messages("activate_tab"), "Escape opened a tab"
+        hotkey_find()
+        done = subprocess.run([os.path.join(ROOT, "tabdock"), "--find"], env=panel_env)  # the same key again
+        assert done.returncode == 0
+        wait_for(lambda: find("Find tab") is None, "the find window closed by the second --find")
+        wait_for(lambda: active_window() == term_win, "the keyboard back where it was, again")
+        assert not messages("activate_tab"), "closing the window opened a tab"
+        ok("find key: Escape, and the same key again, close the window and give the keyboard back")
+        collapse()
+
         # -- several browsers: chips choose what is listed, "all" gives each browser a foldable section -----
         def rows_now():
             try:

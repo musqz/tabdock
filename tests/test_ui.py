@@ -1525,6 +1525,113 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(self.activated, [])
         self.assertEqual(self.listed_tabs(view), [10])  # everything again, the folded section folded again
 
+    def key(self, view, keyval):
+        """A key for the find window's entry, whether the panel handled it. (Not emitted: a key event with no window
+        makes GTK's own handler complain when the panel leaves it alone.)"""
+        event = Gdk.Event.new(Gdk.EventType.KEY_PRESS)
+        event.keyval = keyval
+        return view._on_find_key(view._dialog_entry, event)
+
+    def highlighted(self, view):
+        return [m["id"] for b, m in view._meta.items() if b.get_style_context().has_class("kbd")]
+
+    def test_find_arrow_keys_highlight_a_tab_and_enter_opens_that_one(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, DRAG_STATE)])
+        order = self.listed_tabs(view)
+        view.find_btn.clicked()
+        self.assertEqual(self.highlighted(view), [])
+        event = Gdk.Event.new(Gdk.EventType.KEY_PRESS)
+        event.keyval = Gdk.KEY_Down
+        view._dialog_entry.emit("key-press-event", event)  # the entry is wired to it; from nothing: the first tab
+        self.assertEqual(self.highlighted(view), [order[0]])
+        self.key(view, Gdk.KEY_Down)
+        self.key(view, Gdk.KEY_Down)
+        self.assertEqual(self.highlighted(view), [order[2]])
+        self.key(view, Gdk.KEY_Up)
+        self.assertEqual(self.highlighted(view), [order[1]])
+        view._dialog_entry.emit("activate")  # Enter
+        self.assertEqual(self.activated, [(conn, order[1], 2)])  # what a click on that row does
+        self.assertEqual(self.highlighted(view), [])
+        self.assertEqual(self.listed_tabs(view), order)
+
+    def test_find_highlight_stops_at_the_ends_and_pages_and_jumps(self):
+        view = self.make()
+        view.show([(object(), INFO, DRAG_STATE)])
+        order = self.listed_tabs(view)
+        view.find_btn.clicked()
+        self.key(view, Gdk.KEY_Up)  # from nothing: the last tab
+        self.assertEqual(self.highlighted(view), [order[-1]])
+        self.key(view, Gdk.KEY_Down)
+        self.assertEqual(self.highlighted(view), [order[-1]])  # no wrapping
+        self.key(view, Gdk.KEY_Page_Up)
+        self.assertEqual(self.highlighted(view), [order[0]])
+        self.key(view, Gdk.KEY_Up)
+        self.assertEqual(self.highlighted(view), [order[0]])
+        self.key(view, Gdk.KEY_Page_Down)
+        self.assertEqual(self.highlighted(view), [order[-1]])
+        self.key(view, Gdk.KEY_Home)
+        self.assertEqual(self.highlighted(view), [order[0]])
+        self.key(view, Gdk.KEY_End)
+        self.assertEqual(self.highlighted(view), [order[-1]])
+
+    def test_find_highlight_survives_typing_while_the_tab_still_matches(self):
+        view = self.make()
+        view.show([(object(), INFO, DRAG_STATE)])
+        view.find_btn.clicked()
+        self.key(view, Gdk.KEY_Down)
+        self.key(view, Gdk.KEY_Down)  # "p2", tab 3 (the tabs of the Personal container come last)
+        view._dialog_entry.set_text("p")  # p1, p2, p3 match
+        self.assertEqual(self.highlighted(view), [3])
+        view._dialog_entry.set_text("mail")  # the highlighted tab is not listed any more
+        self.assertEqual(self.highlighted(view), [])
+        self.key(view, Gdk.KEY_Down)  # so the arrows start from nothing again
+        self.assertEqual(self.highlighted(view), [2])
+
+    def test_find_enter_picks_the_first_match_when_the_highlighted_tab_is_gone(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, DRAG_STATE)])
+        view.find_btn.clicked()
+        self.key(view, Gdk.KEY_Down)
+        self.key(view, Gdk.KEY_Down)  # "p2", tab 3
+        view._dialog_entry.set_text("mail")
+        view._dialog_entry.emit("activate")
+        self.assertEqual(self.activated, [(conn, 2, 2)])
+
+    def test_find_highlights_nothing_for_other_keys_or_when_no_tab_is_listed(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        view.find_btn.clicked()
+        self.assertFalse(self.key(view, Gdk.KEY_a))
+        self.assertEqual(self.highlighted(view), [])
+        view._dialog_entry.set_text("nothing like this")
+        self.assertFalse(self.key(view, Gdk.KEY_Down))
+        self.assertEqual(self.highlighted(view), [])
+        self.assertIsNone(view._selected)
+
+    def test_find_from_the_hotkey_shows_a_hidden_panel_and_the_same_key_closes_it(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        view.set_hidden(True)
+        view.find()
+        self.assertFalse(view.hidden)
+        self.assertEqual(view._dialog.get_title(), "Find tab")
+        self.assertTrue(view.autohide.held)  # the panel opens and stays for it
+        view.find()
+        self.assertIsNone(view._dialog)
+        self.assertFalse(view.autohide.held)
+        self.assertEqual(self.activated, [])
+
+    def test_find_window_sits_beside_the_panel_even_while_it_is_unmapped(self):
+        view = self.make(side="left")
+        moved = []
+        with mock.patch.object(Gtk.Window, "move", lambda w, x, y: moved.append((w, x, y))):
+            view.find()
+        px, py, pw, _ph = geometry.dock_rect(view._monitor_rect(), "left", view.cfg["width"], True)
+        self.assertEqual([(x, y) for w, x, y in moved if w is view._dialog], [(px + pw + 8, py + 30)])
+
     def test_a_tab_in_a_firefox_tab_group_wears_the_groups_name_in_its_colour(self):
         view = self.make()
         tabs = [{**STATE["windows"][0]["tabs"][0], "groupId": 7}, STATE["windows"][0]["tabs"][1]]

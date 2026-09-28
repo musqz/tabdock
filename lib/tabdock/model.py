@@ -180,6 +180,14 @@ def tab_move_index(group, moved_id, before_id=None):
     return None if target == moved["index"] else target
 
 
+def step_index(current, count, step):
+    """Where the keyboard highlight goes from row `current` (None: nothing yet) after `step` rows of `count`.
+    It stops at the ends. From nothing, a step down lands on the first row and a step up on the last."""
+    if current is None:
+        return 0 if step > 0 else count - 1
+    return max(0, min(count - 1, current + step))
+
+
 ACCENTS = {
     "firefox": "#ff7139",
     "zen": "#9d7cd8",

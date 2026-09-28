@@ -1,6 +1,7 @@
 import argparse
 import os
 import signal
+import socket
 import sys
 
 import gi
@@ -58,6 +59,8 @@ class Panel:
             self.states[conn] = msg
             if conn in self._shown():
                 self._render()
+        elif kind == "find":  # from `tabdock --find`, a key bound in the window manager
+            self.view.find()
 
     def on_close(self, conn):
         self.browsers.pop(conn, None)
@@ -270,6 +273,20 @@ def _help_files():
     )
 
 
+def _send_find():
+    """`tabdock --find`: tell the running panel to open its find window."""
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        client.connect(config.socket_path())
+        client.sendall(b'{"type":"find"}\n')
+    except OSError:
+        print("tabdock: not running", file=sys.stderr)
+        return 1
+    finally:
+        client.close()
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="tabdock",
@@ -284,7 +301,16 @@ def main(argv=None):
         help="no GUI: print each snapshot to stdout, and read 'activate <tabId>', 'move <tabId> <index>' "
         "and 'order <cookieStoreId>,...' from stdin",
     )
+    parser.add_argument(
+        "--find",
+        action="store_true",
+        help="show the running panel's find window (bind it to a key in your window manager); "
+        "arrows and Enter then pick a tab, Escape closes it",
+    )
     args = parser.parse_args(argv)
+
+    if args.find:
+        return _send_find()
 
     try:
         cfg = config.load()

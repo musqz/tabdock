@@ -328,6 +328,32 @@ class HelpTest(unittest.TestCase):
             self.assertIn(f"move it to {config}", out)  # ...and where it belongs now
 
 
+class FindCommandTest(unittest.TestCase):
+    def find(self, path):
+        env = {**os.environ, "TABDOCK_SOCKET": path}
+        return subprocess.run([sys.executable, PANEL, "--find"], env=env, capture_output=True, text=True, timeout=TIMEOUT)
+
+    def test_no_panel_running_says_so_and_fails(self):
+        with tempfile.TemporaryDirectory() as home:
+            done = self.find(os.path.join(home, "nobody.sock"))
+            self.assertEqual(done.returncode, 1)
+            self.assertEqual(done.stderr, "tabdock: not running\n")
+
+    def test_it_sends_a_find_message_to_the_panel(self):
+        with tempfile.TemporaryDirectory() as home:
+            path = os.path.join(home, "panel.sock")
+            srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.addCleanup(srv.close)
+            srv.bind(path)
+            srv.listen(1)
+            srv.settimeout(TIMEOUT)
+            done = self.find(path)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            conn, _ = srv.accept()
+            self.addCleanup(conn.close)
+            self.assertEqual(conn.recv(100), b'{"type":"find"}\n')
+
+
 class PanelDebugTest(Base):
     def read_panel_until(self, panel, needle):
         deadline = time.monotonic() + TIMEOUT

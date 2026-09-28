@@ -18,6 +18,7 @@ from tabdock.model import (  # noqa: E402
     removal_text,
     reopenable,
     reordered,
+    step_index,
     tab_group,
     supports,
     tab_badge,
@@ -125,6 +126,20 @@ class ModelTest(unittest.TestCase):
         self.assertIsNone(tab_move_index(group, "B", "B"))  # onto itself
         self.assertIsNone(tab_move_index(group, "A", "B"))  # before its own next neighbour
         self.assertIsNone(tab_move_index(group, "C"))  # already last
+
+    def test_step_index_stops_at_the_ends(self):
+        self.assertEqual(step_index(1, 5, 1), 2)
+        self.assertEqual(step_index(1, 5, -1), 0)
+        self.assertEqual(step_index(0, 5, -1), 0)  # no wrapping
+        self.assertEqual(step_index(4, 5, 1), 4)
+        self.assertEqual(step_index(2, 5, 10), 4)  # a page too far lands on the last row
+        self.assertEqual(step_index(2, 5, -10), 0)
+
+    def test_step_index_from_nothing_goes_to_the_first_row_down_and_the_last_row_up(self):
+        self.assertEqual(step_index(None, 5, 1), 0)
+        self.assertEqual(step_index(None, 5, 10), 0)
+        self.assertEqual(step_index(None, 5, -1), 4)
+        self.assertEqual(step_index(None, 1, -1), 0)
 
     def test_window_of_tab(self):
         self.assertEqual(window_of_tab(STATE, 11), 2)
