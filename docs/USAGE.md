@@ -42,9 +42,6 @@
 - **Pin** reserves screen space on an **outer** monitor edge (the only edge X11 lets a window reserve
   space on, hence `monitor = "outer"` default); pinning an inner edge falls back to an overlay.
 - **Quit** (`✕`) stops the panel until you start it again; it never takes keyboard focus.
-- **Advanced:** a collapsed line at the bottom of the panel lists every known browser with a colour
-  swatch button, so a `[theme]` colour (see Configuration) can be set without editing `config.toml` or
-  needing that browser connected.
 
 ## Configuration
 
@@ -77,8 +74,10 @@ other = "#8f9bb3"     # any other browser, and the strip while none is connected
 ```
 
 Colours are `"#rrggbb"` or `"#rgb"`. On a dark accent the text turns white, and the browser's name in the
-header takes the usual text colour, so both stay readable. The header's right-click menu and the panel's
-Advanced section (see Behaviour) set these with a colour chooser instead of editing the file.
+header takes the usual text colour, so both stay readable. A right-click on the browser's name at the top left
+of the panel sets its colour with a colour chooser instead of editing the file. It needs one browser listed:
+under "All browsers" the name is not one browser's, so choose that browser's chip first (a click on the chip
+only lists it).
 
 Config is read at startup only: quit (`✕`) and restart from the menu to apply changes (a `[theme]` change
 from the colour chooser or a SIGHUP reload applies at once). The header also has live toggles (icons, pin,
