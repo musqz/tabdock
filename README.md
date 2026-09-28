@@ -10,6 +10,7 @@ Needs `python-gobject` (GTK 3) and `python-xlib`.
 ```bash
 ./install.sh                     # program -> ~/.local, browser manifest, "Tabdock" menu entry, a config
 packaging/sign-extension.sh      # signs the extension (safe prompts for your Mozilla credentials)
+
 ```
 
 Release Firefox and Zen only keep **signed** extensions, so it needs signing once (free, via
@@ -17,8 +18,13 @@ addons.mozilla.org, unlisted) before it survives a restart.
 
 `./install.sh --uninstall` removes exactly what was installed.
 
-**Arch Linux:** `cd packaging && makepkg -si` installs the latest release system-wide instead. Full
-signing steps, install locations and every way to start the panel: [docs/RELEASE.md](docs/RELEASE.md).
+**Arch Linux:** installs the latest release system-wide instead. 
+
+```
+cd packaging && makepkg -si # In this dir the *.xpi will be placed.
+```
+
+Import extension `tabdock-*.xpi` into browser.
 
 ## Docs
 
