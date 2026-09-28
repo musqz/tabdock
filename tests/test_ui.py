@@ -215,6 +215,15 @@ class DockViewTest(unittest.TestCase):
         self.assertIn("#8f9bb3", view._css_data)
         self.assertEqual(view.browser_name.get_text(), "")
 
+    def test_the_header_name_says_in_its_tooltip_that_a_right_click_sets_the_colour(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        self.assertEqual(view.browser_name.get_tooltip_text(), "Firefox 156.0 (pid 1)\nRight-click to set its colour (shared by every browser of its kind)")
+        view.show([(object(), INFO, STATE), (object(), {**INFO, "browser": "Zen"}, STATE)])
+        self.assertIn("Choose one browser", view.browser_name.get_tooltip_text())  # a right-click does nothing here
+        view.clear()
+        self.assertIsNone(view.browser_name.get_tooltip_text())  # nothing listed: nothing to colour
+
     def test_theme_colours_the_panel_instead_of_the_browser_colour(self):
         view = self.make(theme={"firefox": "#1e3a8a"})
         self.assertIn("#8f9bb3", view._css_data)  # nothing listed yet: the colour of any other browser

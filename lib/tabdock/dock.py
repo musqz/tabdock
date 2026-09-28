@@ -356,11 +356,11 @@ class DockView:
         if len(self.sources) == 1:
             conn, info, _state = self.sources[0]
             self.browser_name.set_text(self._name(conn, info))
-            self.browser_name.set_tooltip_text(browser_label(info))
+            self.browser_name.set_tooltip_text(f"{browser_label(info)}\nRight-click to set its colour (shared by every browser of its kind)")
             self._current_source = (conn, info)
         else:
             self.browser_name.set_text("All browsers")
-            self.browser_name.set_tooltip_text(None)
+            self.browser_name.set_tooltip_text("Choose one browser below, then right-click its name to set its colour")
             self._current_source = None
         # only the strip and the header wear it: no rebuild
         self._set_accent(accent(focus, self._colours) if focus else self._colours["other"])
@@ -381,6 +381,7 @@ class DockView:
         self._ws_buttons = []
         self._set_chips(mode, choices)
         self.browser_name.set_text("")
+        self.browser_name.set_tooltip_text(None)
         self._current_source = None
         self._set_accent(self._colours["other"])
         self._replace_rows([self._label(waiting_text(), "sp-empty", wrap=True)])
