@@ -53,6 +53,7 @@ from .model import (  # noqa: E402
     on_accent,
     ordered_containers,
     reordered,
+    step_index,
     tab_badge,
     tab_label,
     tab_move_index,
@@ -73,6 +74,7 @@ CSS = """
 .sp-row:hover {{ background-color: #2a2e38; }}
 .sp-row.active {{ background-color: #2f3542; border-left-color: {accent}; }}
 .sp-row.active label {{ font-weight: bold; }}
+.sp-row.kbd {{ background-color: #2a2e38; border-left-color: {accent}; }}
 .sp-tabbox {{ padding: 4px 10px 4px 19px; }}
 .sp-tab {{ padding: 0; }}
 .sp-badge {{ background-color: #e64553; color: #ffffff; font-weight: bold; font-size: 0.8em; padding: 0 5px; border-radius: 8px; }}
@@ -111,6 +113,15 @@ button.sp-btn.sp-swatch:hover {{ border-color: #7d8594; }}
 """
 
 
+# The keys of the find window that walk the tab rows: (rows to step, from nothing). Home and End step from
+# nothing, which lands on the first or the last row.
+FIND_KEYS = {
+    Gdk.KEY_Down: (1, False), Gdk.KEY_Up: (-1, False),
+    Gdk.KEY_Page_Down: (10, False), Gdk.KEY_Page_Up: (-10, False),
+    Gdk.KEY_Home: (1, True), Gdk.KEY_End: (-1, True),
+}
+
+
 def acc_class(colour):
     """The style class that carries one browser's colour, so several browsers can show at once."""
     return "acc-" + colour.lstrip("#")
@@ -122,6 +133,7 @@ def browser_css(colours):
     """The rules for each browser colour in `colours` (a text readable on it where it fills something)."""
     return "".join(
         f".sp-row.active.{acc_class(c)} {{ border-left-color: {c}; }}"
+        f".sp-row.kbd.{acc_class(c)} {{ border-left-color: {c}; }}"
         f".sp-row.drop-before.{acc_class(c)} {{ box-shadow: inset 0 2px 0 0 {c}; }}"
         f".sp-row.drop-after.{acc_class(c)} {{ box-shadow: inset 0 -2px 0 0 {c}; }}"
         f"button.sp-btn.sp-chip.{acc_class(c)} {{ border-color: {c}; }}"
@@ -207,6 +219,9 @@ class DockView:
         self._close_buttons = []  # (tab id, its ✕ button) of the rows built last
         self._query = ""  # what the find window has typed: only the tabs that match are listed, from every workspace
         self._first_match = None  # (conn, tab id, window id) of the first tab listed while finding
+        self._selected = None  # (conn, tab id) of the tab the arrow keys have highlighted while finding
+        self._find_dialog = None  # the find window, while it is up (self._dialog may be another window)
+        self._find_finish = None
         self._state = {}  # the state of the browser whose rows are being built
         self._middle = None  # the row a middle button went down on: releasing it there closes that tab
         self._holds = set()  # why the panel must stay open whatever the pointer does: "drag", "menu", "dialog"
@@ -663,6 +678,8 @@ class DockView:
         box.get_style_context().add_class(acc_class(colour))
         if active:
             box.get_style_context().add_class("active")
+        if kind == "tab" and (conn, ident) == self._selected:
+            box.get_style_context().add_class("kbd")
         box.add(child)
         self._meta[box] = {
             "kind": kind, "id": ident, "group": group, "conn": conn, "click": on_click,
@@ -1115,10 +1132,19 @@ class DockView:
             active=bool(tab.get("active")), pinned=pinned, menu=menu, closable="close_tab" in can,
         )
 
+    def find(self):
+        """The hotkey (`tabdock --find`): the find window, with the panel shown for it even while it is hidden.
+        The same key closes it again."""
+        if self._dialog is not None and self._dialog is self._find_dialog:
+            self._find_finish(False)
+            return
+        self.set_hidden(False)
+        self._find()
+
     def _find(self):
         """The find window: what is typed there narrows the list at once, to the tabs whose title or address has
-        every word of it, from every workspace; Enter picks the first one (switching to its workspace), Escape
-        gives the whole list back."""
+        every word of it, from every workspace. The arrow keys highlight a tab (see _on_find_key); Enter picks it,
+        or the first one when none is highlighted (switching to its workspace), Escape gives the whole list back."""
         entry = Gtk.Entry(placeholder_text="Title or address")
         entry.set_width_chars(28)
 
@@ -1128,17 +1154,59 @@ class DockView:
             self._rebuild()
 
         def answer(accepted):
+            box = next((b for b in self._tab_rows() if self._tab_key(b) == self._selected), None)
+            pick = self._meta[box]["click"] if box is not None else None  # what a click on that row does
             first = self._first_match
             self._query = ""
+            self._selected = None
             self._last = None
             self._rebuild()
-            if accepted and first is not None:
+            if accepted and pick is not None:
+                pick()
+            elif accepted and first is not None:
                 self.on_activate(*first)
 
         finish, _ok = self._small_window("Find tab", entry, "Go", answer, focus=entry, beside=True)
+        self._find_dialog, self._find_finish = self._dialog, finish
         entry.connect("changed", narrow)
         entry.connect("activate", lambda _e: finish(True))
+        entry.connect("key-press-event", self._on_find_key)
         self._dialog_entry = entry
+
+    def _tab_rows(self):
+        return [b for b in self._row_order if self._meta[b]["kind"] == "tab"]
+
+    def _tab_key(self, box):
+        return self._meta[box]["conn"], self._meta[box]["id"]
+
+    def _on_find_key(self, _entry, event):
+        """Down, Up, Page Down, Page Up, Home and End walk the tab rows while the find window has the keyboard."""
+        if event.keyval not in FIND_KEYS or event.state & Gtk.accelerator_get_default_mod_mask():
+            return False
+        rows = self._tab_rows()
+        if not rows:
+            return False
+        keys = [self._tab_key(b) for b in rows]
+        step, from_nothing = FIND_KEYS[event.keyval]
+        current = None if from_nothing or self._selected not in keys else keys.index(self._selected)
+        self._select(rows[step_index(current, len(rows), step)])
+        return True
+
+    def _select(self, box):
+        """Highlight one tab row, in place: a rebuild would reset the scroll. The row is scrolled into view."""
+        self._selected = self._tab_key(box)
+        for row in self._row_order:
+            context = row.get_style_context()
+            (context.add_class if row is box else context.remove_class)("kbd")
+        pos = box.translate_coordinates(self.list, 0, 0)
+        if pos is None:
+            return
+        adj = self.scroll.get_vadjustment()
+        top, bottom = pos[1], pos[1] + box.get_allocated_height()
+        if top < adj.get_value():
+            adj.set_value(top)
+        elif bottom > adj.get_value() + adj.get_page_size():
+            adj.set_value(bottom - adj.get_page_size())
 
     def _close_tab(self, conn, tab_id):
         self._command(conn, {"type": "close_tab", "tabId": tab_id})
@@ -1347,9 +1415,8 @@ class DockView:
         self._dialog_ok = ok
         self._hold("dialog", True)
         box.show_all()
-        if beside:
-            px, py = self.win.get_position()
-            pw, _ph = self.win.get_size()
+        if beside:  # where the panel is, or is about to be: it may still be unmapped, and its position stale
+            px, py, pw, _ph = geometry.dock_rect(self._monitor_rect(), self.cfg["side"], self.cfg["width"], True)
             dw = dialog.get_preferred_size()[1].width
             dialog.set_position(Gtk.WindowPosition.NONE)
             dialog.move(px + pw + 8 if self.cfg["side"] == "left" else max(0, px - dw - 8), py + 30)

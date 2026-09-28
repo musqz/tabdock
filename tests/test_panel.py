@@ -37,6 +37,9 @@ class FakeView:
     def set_hidden(self, hidden):
         self.calls.append(("hidden", hidden))
 
+    def find(self):
+        self.calls.append(("find",))
+
     def reconfigure(self, cfg):
         self.calls.append(("reconfigure",))
 
@@ -408,6 +411,10 @@ class PanelTest(unittest.TestCase):
         self.panel.command(self.zen, {"type": "move_tab", "tabId": 1, "index": 2})
         self.assertEqual(self.zen.sent, [{"type": "move_tab", "tabId": 1, "index": 2}])
         self.assertEqual(self.ff.sent, [])
+
+    def test_a_find_message_opens_the_find_window(self):
+        self.panel.on_message(FakeConn(), {"type": "find"})
+        self.assertEqual(self.view.calls, [("find",)])
 
     def test_debug_console_activate(self):
         self.panel.on_stdin_line("activate 7")

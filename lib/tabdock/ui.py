@@ -16,5 +16,8 @@ class ConsoleView:
     def set_hidden(self, hidden):
         pass
 
+    def find(self):
+        pass
+
     def reconfigure(self, cfg):
         pass

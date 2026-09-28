@@ -15,8 +15,21 @@
 - **Tab groups:** a tab in one of Firefox's own tab groups wears the group's name in its colour.
 - **Find a tab:** the 🔍 in the header opens a small window beside the panel. What you type there narrows the
   list at once to the tabs whose title or address holds every word, from every workspace of the window (a tab
-  of another workspace says which); Enter goes to the first one, switching workspace if needed, and Escape
-  gives the whole list back.
+  of another workspace says which); Enter goes to the highlighted tab (see the next item), or to the first
+  one when none is, switching workspace if needed, and Escape gives the whole list back.
+- **Find from the keyboard:** `tabdock --find` shows the panel and the find window from whatever has the
+  focus, so a key bound to it walks you through the tabs without the mouse. Down and Up highlight a tab
+  (from nothing, the first or the last), Page Down and Page Up move ten, Home and End go to the first and
+  the last, Enter opens the highlighted tab and raises its browser, Escape closes the window and gives the
+  keyboard back. The same key closes the window too. The panel has to be running (`tabdock: not running`,
+  exit 1, otherwise). tabdock binds nothing itself and `install.sh` leaves `rc.xml` alone; in Openbox, add
+  this inside `<keyboard>` in `~/.config/openbox/rc.xml`, then run `openbox --reconfigure`:
+
+  ```xml
+  <keybind key="W-grave">
+    <action name="Execute"><command>tabdock --find</command></action>
+  </keybind>
+  ```
 - **Edit containers:** right-click a container section to rename it, change its colour or icon, make a new
   container, or remove it. Removing asks first, with Cancel as the default: its tabs close (in every window and
   workspace) and Firefox deletes its cookies, which logs you out of the sites you used in it.
