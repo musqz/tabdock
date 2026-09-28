@@ -27,6 +27,7 @@ from tabdock.model import (  # noqa: E402
     waiting_text,
     window_of_tab,
     workspace_label,
+    workspace_step,
 )
 
 
@@ -134,6 +135,17 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(step_index(4, 5, 1), 4)
         self.assertEqual(step_index(2, 5, 10), 4)  # a page too far lands on the last row
         self.assertEqual(step_index(2, 5, -10), 0)
+
+    def test_workspace_step_moves_the_focused_windows_workspace_and_stops_at_the_ends(self):
+        state = {"focusedWindowId": 2, "workspaces": [{"id": "a"}, {"id": "b"}, {"id": "c"}],
+                 "windows": [{"id": 1, "workspaceId": "a", "tabs": []}, {"id": 2, "workspaceId": "b", "tabs": []}]}
+        self.assertEqual(workspace_step(state, 1), (2, "c"))
+        self.assertEqual(workspace_step(state, -1), (2, "a"))
+        self.assertIsNone(workspace_step(state, 1, "c"))  # counting from another one, the last: nowhere to go
+        self.assertEqual(workspace_step(state, -1, "c"), (2, "b"))
+        self.assertIsNone(workspace_step({**state, "workspaces": []}, 1))
+        self.assertIsNone(workspace_step({**state, "windows": []}, 1))
+        self.assertIsNone(workspace_step({**state, "windows": [{"id": 2, "tabs": []}]}, 1))  # shows none it knows
 
     def test_step_index_from_nothing_goes_to_the_first_row_down_and_the_last_row_up(self):
         self.assertEqual(step_index(None, 5, 1), 0)

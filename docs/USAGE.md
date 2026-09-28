@@ -21,8 +21,10 @@
   focus, so a key bound to it walks you through the tabs without the mouse. Down and Up highlight a tab
   (from nothing, the first or the last), Page Down and Page Up move ten, Home and End go to the first and
   the last, Enter opens the highlighted tab and raises its browser, Escape closes the window and gives the
-  keyboard back. The same key closes the window too. The panel has to be running (`tabdock: not running`,
-  exit 1, otherwise). tabdock binds no key itself: see Hotkey below.
+  keyboard back. While nothing is typed, Left and Right switch to the previous and the next workspace (with
+  several browsers listed, the one in use); once you type they move the text cursor again. The same key
+  closes the window too. The panel has to be running (`tabdock: not running`, exit 1, otherwise). tabdock
+  binds no key itself: see Hotkey below.
 - **Edit containers:** right-click a container section to rename it, change its colour or icon, make a new
   container, or remove it. Removing asks first, with Cancel as the default: its tabs close (in every window and
   workspace) and Firefox deletes its cookies, which logs you out of the sites you used in it.

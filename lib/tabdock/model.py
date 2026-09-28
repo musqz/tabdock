@@ -188,6 +188,18 @@ def step_index(current, count, step):
     return max(0, min(count - 1, current + step))
 
 
+def workspace_step(state, step, here=None):
+    """(window id, workspace id) to switch the focused window to, `step` workspaces away from `here` (default: the
+    one it shows), stopping at the ends. None without such a window or workspace, or with nowhere to go."""
+    window = focused_window(state)
+    ids = [ws["id"] for ws in workspaces(state)]
+    here = here or (window or {}).get("workspaceId")
+    if window is None or here not in ids:
+        return None
+    index = step_index(ids.index(here), len(ids), step)
+    return None if ids[index] == here else (window["id"], ids[index])
+
+
 ACCENTS = {
     "firefox": "#ff7139",
     "zen": "#9d7cd8",

@@ -1643,6 +1643,76 @@ class DockViewTest(unittest.TestCase):
         self.assertFalse(self.key(view, Gdk.KEY_End, Gdk.ModifierType.CONTROL_MASK))
         self.assertEqual(self.highlighted(view), [])
 
+    def on_workspace(self, ws_id):
+        window = self.WS_STATE["windows"][0]
+        return {**self.WS_STATE, "windows": [{**window, "workspaceId": ws_id}]}
+
+    def test_find_left_and_right_switch_workspace_while_nothing_is_typed_and_stop_at_the_ends(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, self.WS_STATE)])  # default, Work (shown), Play
+        view.find_btn.clicked()
+        self.key(view, Gdk.KEY_Down)
+        self.assertEqual(len(self.highlighted(view)), 1)
+        self.assertTrue(self.key(view, Gdk.KEY_Right))
+        self.assertEqual(self.commands, [{"type": "switch_workspace", "windowId": 2, "workspaceId": "ws-2"}])
+        self.assertEqual(self.command_conns, [conn])
+        self.assertEqual(self.highlighted(view), [])  # the tabs listed are about to change
+        view.show([(conn, INFO, self.on_workspace("ws-2"))])  # the browser has switched
+        self.assertTrue(self.key(view, Gdk.KEY_KP_Right))  # the last one: nowhere to go
+        self.assertEqual(len(self.commands), 1)
+        self.assertTrue(self.key(view, Gdk.KEY_Left))
+        self.assertEqual(self.commands[-1], {"type": "switch_workspace", "windowId": 2, "workspaceId": "ws-1"})
+        view.show([(conn, INFO, self.on_workspace("default"))])
+        self.key(view, Gdk.KEY_Left)  # the first one
+        self.assertEqual(len(self.commands), 2)
+
+    def test_find_keys_pressed_before_the_browser_reports_the_switch_count_from_the_one_asked_for(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])  # default, Work (shown), Play
+        view.find_btn.clicked()
+        for keyval in (Gdk.KEY_Right, Gdk.KEY_Right, Gdk.KEY_Left):  # ...or a held key repeating
+            self.key(view, keyval)
+        self.assertEqual([m["workspaceId"] for m in self.commands], ["ws-2", "ws-1"])  # no second, useless ws-2
+
+    def test_find_blanks_alone_are_nothing_typed_so_left_and_right_still_switch_workspace(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        view.find_btn.clicked()
+        view._dialog_entry.set_text("  ")
+        self.assertTrue(self.key(view, Gdk.KEY_Right))
+        self.assertEqual(len(self.commands), 1)
+
+    def test_find_left_and_right_are_the_carets_once_something_is_typed(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        view.find_btn.clicked()
+        view._dialog_entry.set_text("home")
+        self.assertFalse(self.key(view, Gdk.KEY_Right))
+        self.assertFalse(self.key(view, Gdk.KEY_Left))
+        self.assertEqual(self.commands, [])
+        view._dialog_entry.set_text("")  # emptied again: they switch workspace again
+        self.assertTrue(self.key(view, Gdk.KEY_Right))
+        self.assertEqual(len(self.commands), 1)
+
+    def test_find_left_and_right_do_nothing_where_the_panel_shows_no_workspaces(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])  # an extension without workspaces
+        view.find_btn.clicked()
+        self.assertTrue(self.key(view, Gdk.KEY_Right))  # taken all the same: nothing typed to move through
+        view.show([(object(), {**INFO, "browser": "Zen"}, self.WS_STATE)])  # Zen has workspaces of its own
+        self.key(view, Gdk.KEY_Right)
+        self.assertEqual(self.commands, [])
+
+    def test_find_left_and_right_switch_the_workspace_of_the_browser_in_use_among_several(self):
+        view = self.make()
+        first, second = object(), object()
+        other = {**INFO, "browserPid": 2}
+        view.show([(first, INFO, self.WS_STATE), (second, other, self.WS_STATE)], "all", (), other)
+        view.find_btn.clicked()
+        self.key(view, Gdk.KEY_Right)
+        self.assertEqual(self.command_conns, [second])
+
     def test_a_closed_window_leaves_nothing_of_itself_behind(self):
         view = self.make()
         view.show([(object(), INFO, STATE)])

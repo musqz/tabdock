@@ -59,6 +59,7 @@ from .model import (  # noqa: E402
     tab_move_index,
     waiting_text,
     workspace_label,
+    workspace_step,
     workspaces,
 )
 
@@ -126,6 +127,8 @@ FIND_KEYS = {
 # With one of these down, Home and End are the entry's caret keys (Shift+Home selects). Super is not one of them:
 # it is still down from the hotkey.
 CARET_MODS = Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK
+# The keys that switch workspace (workspaces to step), while the find window's entry is empty.
+WORKSPACE_KEYS = {Gdk.KEY_Left: -1, Gdk.KEY_Right: 1, Gdk.KEY_KP_Left: -1, Gdk.KEY_KP_Right: 1}
 
 
 def acc_class(colour):
@@ -210,6 +213,8 @@ class DockView:
         self._dump_path = os.environ.get("TABDOCK_LAYOUT_DUMP")  # a test hook: off unless set at start
         self._dump_pending = False
         self.sources = []  # [(conn, hello, state)] of the browsers listed
+        self._focus = None  # the hello of the browser in use, when several are listed
+        self._ws_pending = None  # the workspace the last Left or Right asked for, until the browser reports its state
         # icons are known by _icon_key(url); all in memory only: nothing about your tabs is written to disk
         self._icons = {}  # -> 16 px pixbuf, least recently used first
         self._failed = {}  # -> when it did not work (tried again after ICON_RETRY_S)
@@ -371,10 +376,12 @@ class DockView:
             self._deferred = (sources, mode, choices, focus)  # rows are being pressed or dragged: redraw after the drop
             return
         self._deferred = None
+        self._ws_pending = None
         self.sources = list(sources)
         self._names = {conn: label for conn, label, _colour in choices}
         if focus is None and len(self.sources) == 1:
             focus = self.sources[0][1]
+        self._focus = focus
         if len(self.sources) == 1:
             conn, info, _state = self.sources[0]
             self.browser_name.set_text(self._name(conn, info))
@@ -1149,8 +1156,9 @@ class DockView:
 
     def _find(self):
         """The find window: what is typed there narrows the list at once, to the tabs whose title or address has
-        every word of it, from every workspace. The arrow keys highlight a tab (see _on_find_key); Enter picks it,
-        or the first one when none is highlighted (switching to its workspace), Escape gives the whole list back."""
+        every word of it, from every workspace. Down and Up highlight a tab and Left and Right switch workspace (see
+        _on_find_key); Enter picks the highlighted tab, or the first one when none is (switching to its workspace),
+        Escape gives the whole list back."""
         entry = Gtk.Entry(placeholder_text="Title or address")
         entry.set_width_chars(28)
 
@@ -1164,6 +1172,7 @@ class DockView:
             pick = self._meta[box]["click"] if box is not None else None  # what a click on that row does
             first = self._first_match
             self._find_dialog = None
+            self._ws_pending = None
             self._query = ""
             self._selected = None
             self._last = None
@@ -1186,13 +1195,20 @@ class DockView:
     def _tab_key(self, box):
         return self._meta[box]["conn"], self._meta[box]["id"]
 
-    def _on_find_key(self, _entry, event):
+    def _on_find_key(self, entry, event):
         """Down, Up, Page Down, Page Up, Home and End walk the tab rows while the find window has the keyboard.
         The arrows are always taken, even with nothing to walk: GTK would move the focus off the entry with them.
         Home and End stay the entry's caret keys when chorded (Shift+Home selects text) or when no tab is listed.
+        Left and Right switch workspace, but only while nothing is typed: they are the caret's after that, and the
+        list spans every workspace then anyway.
         The hotkey's Super may still be down, so it changes none of this, and Enter still picks."""
         if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and event.state & Gtk.accelerator_get_default_mod_mask():
             self._dialog_finish(True)  # (the entry's own "activate" needs every modifier up)
+            return True
+        if event.keyval in WORKSPACE_KEYS:
+            if entry.get_text().strip():  # (as _rebuild counts a query: blanks alone list nothing more)
+                return False
+            self._step_workspace(WORKSPACE_KEYS[event.keyval])
             return True
         if event.keyval not in FIND_KEYS:
             return False
@@ -1205,6 +1221,22 @@ class DockView:
             current = None if from_nothing or self._selected not in keys else keys.index(self._selected)
             self._select(rows[step_index(current, len(rows), step)])
         return True
+
+    def _step_workspace(self, step):
+        """Switch the window to the workspace `step` away, stopping at the ends, as a click on its chip does: of the
+        browser listed, or of the one in use among several. The tabs listed change, so no tab stays highlighted."""
+        source = next(
+            (s for s in self.sources if (len(self.sources) == 1 or s[1] is self._focus) and offers_workspaces(s[1], s[2])),
+            None,
+        )
+        target = source and workspace_step(source[2], step, self._ws_pending)
+        if not target:
+            return
+        self._ws_pending = target[1]  # (keys pressed before the browser reports the switch count from here)
+        self._selected = None
+        for row in self._row_order:
+            row.get_style_context().remove_class("kbd")
+        self._command(source[0], {"type": "switch_workspace", "windowId": target[0], "workspaceId": target[1]})
 
     def _select(self, box):
         """Highlight one tab row, in place: a rebuild would reset the scroll. The row is scrolled into view."""
