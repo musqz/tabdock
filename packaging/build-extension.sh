@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds an unsigned, reproducible tabdock-<version>.xpi from extension/, containing
-# exactly the files the manifest references. Sign it as described in docs/RELEASE.md.
+# exactly the files the manifest references. Sign it with packaging/sign-extension.sh.
 #
 #   packaging/build-extension.sh              -> web-ext-artifacts/tabdock-<version>.xpi
 #   OUT_DIR=/some/dir packaging/build-extension.sh

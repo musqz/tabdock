@@ -10,7 +10,7 @@ DEFAULTS = {
     "width": 320,
     "follow": "last",
     "view": "auto",
-    "icons": False,  # site icons before the tab titles: off until asked for, the panel downloads them (see the README)
+    "icons": False,  # site icons before the tab titles: off until asked for, the panel downloads them (see docs/USAGE.md)
     "badges": True,  # a tab's leading "(3)" unread count, shown as a small badge instead of plain text
     "pinned": False,
     "start_with_browser": True,  # read by the native-messaging relay, not by the panel itself

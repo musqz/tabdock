@@ -438,7 +438,7 @@ class DockView:
         self.icons_btn.set_tooltip_text(
             "Site icons are shown. Click to hide them and stop downloading" if on
             else "Show each tab's site icon. The panel downloads the icons itself, from your own address "
-                 "and DNS, not through the browser's proxy (see the README)"
+                 "and DNS, not through the browser's proxy (see docs/USAGE.md)"
         )
 
     def _on_icons_toggled(self, button):

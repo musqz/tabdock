@@ -2,65 +2,28 @@
 
 ## Unreleased
 
-- After a package upgrade from before 0.5.0, pacman says to install the new extension again in each browser.
-  Only the package's install note changed: no new signing.
+- Replace `docs/RELEASE.md` with a shorter `docs/INSTALL.md`, and trim the other docs.
+- After a package upgrade from before 0.5.0, pacman says to install the new extension again.
 
 ## 0.5.0
 
-Sign this version's extension and install it in each browser (docs/RELEASE.md): it adds the `restore_tab` command
-for the undo row. The permissions are the same as 0.4.0's. Until then the panel works as before, without the undo
-row and its Ctrl+Shift+T (it offers only what the installed extension says it handles).
+Install the new signed extension in each browser (`docs/INSTALL.md`). Only the undo row needs it (new `restore_tab`
+command, permissions unchanged); everything else is panel only.
 
-- The `+` on a section brings the browser forward with the new tab, so what you type next goes to its address
-  bar, even from another app or the find window. Only the panel changed: a panel restart is enough, no new signing.
-
-- A tab closed from the panel stays in its place for 8 seconds, struck through, with a `↶` where its `✕` was:
-  one click reopens it (the browser's own Ctrl+Shift+T: in its container and workspace). Ctrl+Shift+T does the
-  same in the find window, which it closes, raising the browser. This one changes the extension: sign the new
-  version and install it in each browser (docs/RELEASE.md). A browser with an older extension shows no `↶` and
-  the key does nothing there.
-
-- `tabdock --find` shows the panel and its find window from any app, so a key bound to it in your window
-  manager (an Openbox `<keybind>` is in the usage doc) opens the tab list at the keyboard: Down and Up (Page
-  Down, Page Up, Home, End) highlight a tab, Enter opens it, Escape gives the keyboard back. Only the panel
-  changed: a panel restart is enough, no new signing.
-
-- In the find window, Left and Right switch to the previous and the next workspace while nothing is typed
-  (the browser in use, when several are listed); they move the text cursor once you type. Only the panel
-  changed: a panel restart is enough, no new signing.
-
-- `./install.sh` puts a config to edit at `~/.config/tabdock/config.toml` (the example, every option explained)
-  when you have none, and says where it is. It never overwrites yours, and makes none while your config is still
-  in `~/.config/openbox-sidepanel/` (a new one would be read instead of it). `--uninstall` removes it only while
-  it is still the example; one with your settings stays. The Arch package says where to copy it from.
-
-- A `[theme]` section in `config.toml` sets the accent colour, the orange (for Firefox) of the strip, the
-  header's line and browser name, buttons that are on, the active tab's bar, the chips and the drop marker:
-  `accent = "#4c9aff"` for every browser, or one browser's own (`firefox = "#4c9aff"`, and `zen`, `firedragon`,
-  `librewolf`, `waterfox`, `floorp`, `other`), which wins over `accent`. On a dark accent the text turns white,
-  and the browser's name in the header takes the usual text colour, so both stay readable. A reload (SIGHUP)
-  applies it too. Only the panel changed: `./install.sh` and a panel restart are enough, no new signing.
-
-- Packaging: the PKGBUILD compares the release's `manifest.json` with the sources by what it says, not byte by
-  byte. Mozilla's signing lays it out anew (one value per line, no final newline), so `makepkg` refused the
-  correctly signed v0.4.0 extension as "signed from other code". Every other file is still compared exactly,
-  and a manifest that says anything else is still refused. No new signing or tag is needed for 0.4.0.
-
-- A `config.toml` that fails to parse now shows the offending line along with the TOML error, not just its
-  line and column. Only the panel changed: a panel restart is enough, no new signing.
-
-- Right-click the browser's name in the header (with one browser listed) to pick its `[theme]` colour with a
-  colour chooser, instead of editing `config.toml` by hand. The name's tooltip says so, and under "All
-  browsers" says to choose one first. It applies at once and is written to the config file in place, every
-  other line (comments included) left untouched. Only the panel changed: a panel restart is enough, no new
-  signing.
-
-- Midori is a known browser now (its own accent colour, a `midori` `[theme]` key), detected the same way
-  as the others. Only the panel changed: a panel restart is enough, no new signing.
+- Undo a close: a tab closed from the panel stays 8 s, struck through, with a `↶` where its `✕` was; Ctrl+Shift+T
+  does the same in the find window.
+- The `+` on a section brings the browser forward with the new tab.
+- `tabdock --find` opens the find window from any app (Openbox `<keybind>` in `docs/USAGE.md`): arrows pick a tab,
+  Left/Right switch workspace, Enter opens, Escape closes.
+- `[theme]` in `config.toml` sets the accent colours; right-click the browser's name (one browser listed) to pick one.
+- `./install.sh` puts a config example at `~/.config/tabdock/config.toml` if you have none.
+- A `config.toml` that fails to parse shows the offending line.
+- Midori is a known browser (`midori` `[theme]` key).
+- Packaging: the PKGBUILD compares `manifest.json` by content, since Mozilla's signing rewrites its layout.
 
 ## 0.4.0
 
-Sign this version's extension and install it in each browser (docs/RELEASE.md): it asks for three new
+Sign this version's extension and install it in each browser (`docs/INSTALL.md`): it asks for three new
 permissions, `tabHide`, `sessions` and `tabGroups`. The command is `tabdock` now; see the rename below.
 
 - Firefox's own tab groups show in the panel: a grouped tab wears its group's name, in the group's colour, after

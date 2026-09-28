@@ -1,188 +1,107 @@
 # Using tabdock
 
-## Behaviour
+## The panel
 
-- **Collapsed:** a 3 px strip tinted in the active browser's colour (Firefox orange, Zen purple,
-  FireDragon red, Waterfox teal, LibreWolf blue, Floorp gold, Midori green). Hover to open (~120 ms);
-  leaving closes it (~400 ms).
-- **Open:** the header names the active browser; below it, one collapsible section per container
-  (colour, icon, name, tab count) with its tabs, site icons optional (see Site icons). Click a tab to
-  activate it. The `+` on a section opens a new tab there and brings the browser forward, where the tab's
-  address bar is ready: type a search or an address at once.
-- **Close and pin:** a hovered tab shows a `✕`; middle-click closes a tab too, as in the browser's tab strip.
-  Right-click a tab to pin or unpin it, reopen it in another container (Firefox cannot move a tab between
-  containers, so the page loads anew there and its back/forward history stays behind), or close it. Pinned tabs wear a 📌. With workspaces in use, closing a
-  workspace's only tab from the panel leaves the window open (see Workspaces).
-- **Reopen a closed tab:** a tab you close from the panel (its `✕`, a middle click or the menu) stays in its
-  place for 8 seconds, struck through, with a `↶` where the `✕` was; one click on it (a click sooner than half
-  a second after the close is ignored, so a double click on the `✕` does not undo itself) brings the tab back,
-  as Ctrl+Shift+T does in the browser: in its container and workspace, and in its own window. The row shows
-  only in the window and workspace it was closed in, and only while its tab is the one closed last: it goes
-  as soon as any other tab closes (in the browser, or when the panel reopens a page in another container), and
-  a tab closed in the browser itself gets none (use the browser's own Ctrl+Shift+T). After the click the row
-  stays, without its `↶`, until the tab is listed again. In the find window Ctrl+Shift+T reopens the tab closed
-  last, whoever closed it, then closes the window and raises the browser; it looks for the letter T, so on a
-  layout without one it does nothing. A browser whose extension is older than this shows no `↶` and the key
-  does nothing there.
-- **Tab groups:** a tab in one of Firefox's own tab groups wears the group's name in its colour.
-- **Find a tab:** the 🔍 in the header opens a small window beside the panel. What you type there narrows the
-  list at once to the tabs whose title or address holds every word, from every workspace of the window (a tab
-  of another workspace says which); Enter goes to the highlighted tab (see the next item), or to the first
-  one when none is, switching workspace if needed, and Escape gives the whole list back.
-- **Find from the keyboard:** `tabdock --find` shows the panel and the find window from whatever has the
-  focus, so a key bound to it walks you through the tabs without the mouse. Down and Up highlight a tab
-  (from nothing, the first or the last), Page Down and Page Up move ten, Home and End go to the first and
-  the last, Enter opens the highlighted tab and raises its browser, Escape closes the window and gives the
-  keyboard back. While nothing is typed, Left and Right switch to the previous and the next workspace (with
-  several browsers listed, the one in use); once you type they move the text cursor again. The same key
-  closes the window too. The panel has to be running (`tabdock: not running`, exit 1, otherwise). tabdock
-  binds no key itself: see Hotkey below.
-- **Edit containers:** right-click a container section to rename it, change its colour or icon, make a new
-  container, or remove it. Removing asks first, with Cancel as the default: its tabs close (in every window and
-  workspace) and Firefox deletes its cookies, which logs you out of the sites you used in it.
-- **Drag to reorder:** container sections and tabs within their own container. Order is remembered per
-  browser profile (Firefox can't reorder containers itself). "No container" always stays first.
-- **Workspaces:** chips above the tabs; each browser window shows one workspace and the others' tabs are
-  hidden in the browser's own tab strip too. Click to switch, `+` for a new one, right-click to rename it,
-  give it an icon, a colour or a container for its new tabs, or remove it; right-click a tab to move it to
-  another; Ctrl+Alt+PageDown/PageUp and Ctrl+Alt+1…9 switch from the keyboard. See Workspaces below.
-- **Several browsers:** chips under the header choose what's listed — `auto` (current browser), one
-  chip per browser, or `all` (every browser, foldable, its own colour band). Clicking a tab in another
-  browser activates it and raises its window. `view = "all"` starts in that view.
-- **Follows the active window.** `follow = "last"` (default) keeps showing the last browser while you
-  use other apps; `follow = "hide"` removes the panel instead.
-- **Pin** reserves screen space on an **outer** monitor edge (the only edge X11 lets a window reserve
-  space on, hence `monitor = "outer"` default); pinning an inner edge falls back to an overlay.
-- **Quit** (`✕`) stops the panel until you start it again; it never takes keyboard focus.
+- **Collapsed:** a 3 px strip in the active browser's colour. Hover opens it (~120 ms), leaving closes it (~400 ms).
+- **Open:** the header names the browser; below it a section per container (colour, icon, name, tab count) with
+  its tabs. Click a tab to activate it. The `+` on a section opens a tab there and brings the browser forward with
+  the address bar ready.
+- **Close and pin:** `✕` on a hovered tab, or middle-click. Right-click a tab: pin, reopen in another container
+  (the page reloads, its history stays behind), move to a workspace, close. Pinned tabs wear a 📌.
+- **Undo a close:** a tab closed from the panel stays for 8 s, struck through, with a `↶` where its `✕` was.
+  Click it to bring the tab back (container, workspace and window as before). It goes when another tab closes,
+  and shows only where it was closed. A click within 0.5 s is ignored, so a double click on `✕` can't undo itself.
+  Tabs closed in the browser get none: use its Ctrl+Shift+T.
+- **Find a tab:** the 🔍 opens a small window beside the panel. Typing narrows the list to tabs whose title or
+  address holds every word, across all workspaces. Enter opens the first match, Escape gives the list back.
+- **From the keyboard:** `tabdock --find` shows the panel and that window from any app (see Hotkey); the same
+  key closes it again. There: Down/Up highlight a tab, Page Down/Up move ten, Home/End jump, Enter opens it,
+  Escape closes. While nothing is typed, Left/Right switch workspace. Ctrl+Shift+T reopens the last closed tab.
+- **Containers:** right-click a section to rename it, change colour or icon, make a new one, or remove it
+  (asks first; its tabs close and Firefox deletes its cookies).
+- **Reorder:** drag sections, and tabs within their container. The order is kept per browser profile.
+- **Several browsers:** chips under the header pick `auto` (browser in use), one browser, or `all`.
+  Clicking a tab of another browser raises it.
+- **Tab groups:** a tab in a Firefox tab group shows the group's name in its colour.
+- **Pin** keeps the panel open and reserves space on an outer screen edge (an inner edge becomes an overlay).
+  `⇄` flips the side, `✕` quits until the next browser start. The panel never takes keyboard focus.
 
 ## Configuration
 
-`./install.sh` puts [../configs/config.toml](../configs/config.toml), every option explained, at
-`~/.config/tabdock/config.toml` when you have none, and never overwrites yours. With the Arch package,
-copy `/usr/share/tabdock/configs/config.toml` there. `tabdock -h` shows the path it reads; one still in
-`~/.config/openbox-sidepanel/` from before the rename is used until you move it:
+`./install.sh` copies [configs/config.toml](../configs/config.toml) (every option explained) to
+`~/.config/tabdock/config.toml` if you have none; the Arch package ships it at
+`/usr/share/tabdock/configs/config.toml`. `tabdock -h` shows the path. The file is read at start; SIGHUP reloads it.
 
 | key | default | meaning |
 |-----|---------|---------|
-| `side` | `"left"` | screen edge, `"left"` or `"right"` |
+| `side` | `"left"` | `"left"` or `"right"` |
 | `monitor` | `"outer"` | `"outer"` (screen's outer edge for `side`), `"primary"`, or an `xrandr` output name |
-| `width` | `320` | expanded width in px (100-1000) |
-| `follow` | `"last"` | `"last"` or `"hide"` while a non-browser window is active |
-| `view` | `"auto"` | `"auto"` (browser in use) or `"all"` (every open browser) at startup; chips switch it live |
-| `icons` | `false` | site icons before tab titles — the panel fetches them itself, outside the browser's proxy/DNS; read Site icons below first |
-| `badges` | `true` | a leading unread count in a tab title (`"(3) Inbox"`) gets a small badge |
+| `width` | `320` | px, 100-1000 |
+| `follow` | `"last"` | while a non-browser window is active: `"last"` keeps the last browser, `"hide"` hides |
+| `view` | `"auto"` | `"auto"` or `"all"` at start |
+| `icons` | `false` | site icons before titles (see Site icons); the header's `icons` button switches them for the session |
+| `badges` | `true` | badge for an unread count in a title, `"(3) Inbox"` |
 | `pinned` | `false` | start pinned |
-| `start_with_browser` | `true` | start the panel when a browser with the extension opens and none is running |
+| `start_with_browser` | `true` | start the panel when a browser with the extension opens |
 
-A `[theme]` section, last in the file, sets the accent colour instead of each browser's own (Firefox orange,
-Zen purple, ...). The accent is on the strip, the header's line and browser name, buttons that are on, the
-active tab's bar and the chips:
+**Colours:** each browser has its own (Firefox orange, Zen purple, FireDragon red, Waterfox teal, LibreWolf blue,
+Floorp gold, Midori green). Override in `[theme]`, last in the file, or right-click the browser's name at the top
+left of the panel (one browser listed; under "All browsers" pick its chip first):
 
 ```toml
 [theme]
-accent = "#4c9aff"    # every browser in this one colour
-firefox = "#4c9aff"   # or one browser (also zen, firedragon, librewolf, waterfox, floorp, midori); wins over accent
+accent = "#4c9aff"    # every browser
+firefox = "#4c9aff"   # or one browser (zen, firedragon, librewolf, waterfox, floorp, midori); wins over accent
 other = "#8f9bb3"     # any other browser, and the strip while none is connected
 ```
 
-Colours are `"#rrggbb"` or `"#rgb"`. On a dark accent the text turns white, and the browser's name in the
-header takes the usual text colour, so both stay readable. A right-click on the browser's name at the top left
-of the panel sets its colour with a colour chooser instead of editing the file. It needs one browser listed:
-under "All browsers" the name is not one browser's, so choose that browser's chip first (a click on the chip
-only lists it).
+Colours are `"#rrggbb"` or `"#rgb"`; on a dark accent the text turns white.
 
-Config is read at startup only: quit (`✕`) and restart from the menu to apply changes (a `[theme]` change
-from the colour chooser or a SIGHUP reload applies at once). The header also has live toggles (icons, pin,
-side, quit) that last until the next restart.
-
-### Site icons
-
-Off by default (`icons = true`, or the header toggle for the session). `data:` icons need no network;
-anything else is downloaded by the **panel itself**, not the browser — bypassing the browser's proxy,
-VPN, DoH and per-container settings, and covering private-window tabs if the extension is allowed there.
-Leave it off if that matters to you.
-
-Safeguards: `https:` only, no cookies/referrer, public addresses only (checked after redirects and DNS,
-max 3 redirects), 256 KB / 10 s hard limits, sniffed and decoded (PNG/ICO/GIF, or a self-contained SVG)
-in a sandboxed child process with memory/CPU limits, memory-only cache (nothing written to disk). A tab
-without an icon says why on hover.
+**Site icons** are off by default. `data:` icons need no network; every other icon is downloaded by the **panel
+itself**, not the browser: from your own address and DNS, outside the browser's proxy, VPN, DoH and per-container
+settings, for every listed tab, private-window tabs included if the extension is allowed there. Leave it off if
+that matters to you. Limits: `https:` only, no cookies or referrer, public addresses only (checked again after
+redirects and DNS), 256 KB and 10 s, decoded in a sandboxed child process, kept in memory only. A tab without an
+icon says why on hover.
 
 ### Workspaces
 
-Zen-style and exclusive: each browser window shows one workspace, and the tabs of the others are hidden
-(`tabs.hide`), in Firefox's own tab strip as well as in the panel. Nothing changes until you make a second
-workspace with `+`: until then no tab is ever hidden, and your existing tabs become the "Default" workspace.
+Exclusive, Zen style: a window shows one workspace and the other tabs are hidden (`tabs.hide`), in Firefox's tab
+strip too. Nothing changes until you add a second one with `+`; your tabs are then "Default".
 
-- **Switching** goes back to the tab you used last in that workspace (a new tab if it has none).
-- **New tabs** join the workspace their window shows, and so does a tab dragged in from another window. A
-  new window starts in the workspace of the window you were in.
-- **Pinned tabs** can't be hidden by Firefox, so they show in every workspace. Unpinning one puts it in the
-  workspace you unpinned it in.
-- **Removing** a workspace closes nothing: its tabs move to the workspace next to it (the menu says which).
-  The last workspace stays.
-- **Icon and colour:** right-click a chip → *Icon* (a few to pick from, or *Other…* for any emoji) and
-  *Colour* (the colours containers have). The chip shows the icon before the name and a bar in the colour.
-- **A container for its new tabs:** right-click a chip → *New tabs in* → a container. While that workspace
-  shows, a new tab (Ctrl+T, the `+` in the tab strip) opens in that container: Firefox cannot move a tab
-  into a container, so the extension reopens the new tab there at once. Links keep the container of the page
-  they come from, and the panel's own `+` on a container section opens exactly there ("No container"
-  included). Removing the container clears the choice; private windows cannot hold containers, so nothing
-  changes there.
-- **Keyboard:** Ctrl+Alt+PageDown / Ctrl+Alt+PageUp go to the next / previous workspace (round the list),
-  Ctrl+Alt+1 … 9 to the first … ninth. Change or clear them in `about:addons` → gear icon → *Manage Extension
-  Shortcuts*. (Not Ctrl+Alt+arrows: Openbox's default configuration switches desktops with those.) They do
-  nothing until there is a second workspace, and never in Zen, where you may want to clear them.
-- **Restarts:** workspaces, the tabs in each and what every window shows survive a browser restart
-  (restoring the previous session). Disabling or removing the extension shows every hidden tab again.
-- **Zen** has workspaces of its own, so the panel offers none there, and the extension never hides a tab in it.
-- Firefox tells you once that an extension is hiding tabs, and still lists hidden tabs under "List all
-  tabs" (the `⌄` at the end of the tab strip). Picking one from there switches to its workspace.
-
-**Set `browser.tabs.closeWindowWithLastTab` to `false`** in `about:config` if you use workspaces. (Closing a tab
-from the panel is always safe: when it is the only one the window shows, the workspace gets a new tab first.) Firefox
-does not count hidden tabs when it decides whether a tab is the window's last: with the default `true`,
-closing the last tab of a workspace closes the whole window, and the other workspaces' tabs with it (they
-come back with History → Recently Closed Windows, or Restore Previous Session if it was the last window). With
-`false`, Firefox leaves a new tab instead and the workspace stays. An extension can neither read nor change
-this setting, nor stop a window from closing.
+- Click a chip to switch, right-click to rename, set icon or colour, choose a container for its new tabs, or remove
+  it (its tabs move to the neighbour; the last one stays). Right-click a tab to move it.
+- New tabs and dragged-in tabs join the workspace the window shows. Pinned tabs show in every workspace.
+- Ctrl+Alt+PageDown/PageUp and Ctrl+Alt+1…9 switch (change them in `about:addons` → Manage Extension Shortcuts).
+- Workspaces survive browser restarts. Disabling or removing the extension shows every hidden tab again.
+  Zen has its own workspaces, so the panel offers none there.
+- Set `browser.tabs.closeWindowWithLastTab` to `false` in `about:config`: Firefox ignores hidden tabs when it counts
+  a window's last tab, so with `true` closing a workspace's last tab in the browser closes the window and the other
+  workspaces' tabs (History → Recently Closed Windows brings them back). Closing from the panel is always safe: the
+  workspace gets a new tab first.
 
 ### Hotkey
 
-tabdock grabs no key; the window manager runs `tabdock --find` for one you choose, and `install.sh` leaves
-your `rc.xml` alone. In Openbox add a `<keybind>` to the `<keyboard>` section of `~/.config/openbox/rc.xml`
-(copy `/etc/xdg/openbox/rc.xml` there first if you have none), then run `openbox --reconfigure`:
+tabdock grabs no key. Bind `tabdock --find` in your window manager. In Openbox, inside `<keyboard>` in
+`~/.config/openbox/rc.xml`, then `openbox --reconfigure`:
 
 ```xml
-<openbox_config xmlns="http://openbox.org/3.4/rc">
-  <!-- ... -->
-  <keyboard>
-    <!-- ... -->
-    <keybind key="W-grave">
-      <action name="Execute">
-        <command>tabdock --find</command>
-      </action>
-    </keybind>
-  </keyboard>
-  <!-- ... -->
-</openbox_config>
+<keybind key="W-grave">
+  <action name="Execute"><command>tabdock --find</command></action>
+</keybind>
 ```
 
-`W-grave` is Super+`` ` ``. In a key name `W-` is Super, `A-` Alt, `C-` Ctrl and `S-` Shift, and the key
-itself is an X keysym (`xev` prints them). Pick one no other `<keybind>` uses. Any other window manager works
-the same way: bind a key to the command `tabdock --find`.
+`W-` is Super, `A-` Alt, `C-` Ctrl, `S-` Shift; `xev` prints key names. The panel must be running.
 
 ### Multiple monitors
 
-`monitor = "outer"` (default) puts the panel on the outer monitor for `side` — the only edge X11 lets a
-pinned window reserve space on — in any layout, including reversed. `⇄` hops edges; the panel follows
-monitor changes without a restart. Use `"primary"` or an output name to pin a specific monitor instead
-(a pin there becomes an overlay).
+`monitor = "outer"` puts the panel on the screen's outer edge for `side`, the only edge X11 can reserve space on.
+Use `"primary"` or an output name to choose another (a pin there is an overlay). The panel follows monitor changes.
 
 ## Troubleshooting
 
-- **Panel doesn't appear when a browser opens:** run `tabdock` in a terminal to see why (a bad
-  `config.toml` is reported there); the browser-launched copy logs to `$XDG_RUNTIME_DIR/tabdock.log`.
-- **"Waiting for a browser with the Tabdock extension":** extension not installed/enabled, or the
-  native-messaging manifest is missing — see [RELEASE.md](RELEASE.md).
-- **Panel only opens on part of the edge:** another tool's invisible hotspot windows are catching the
-  pointer first. Find them: `xwininfo -root -tree | grep -E ' (2x[0-9]+|[0-9]+x2)\+'`.
+- **No panel when a browser opens:** run `tabdock` in a terminal (a bad `config.toml` is reported there). A panel
+  the browser started logs to `$XDG_RUNTIME_DIR/tabdock.log`.
+- **"Waiting for a browser with the Tabdock extension":** see [INSTALL.md](INSTALL.md).
+- **Panel reacts on part of the edge only:** invisible windows of another tool catch the pointer.
+  `xwininfo -root -tree | grep -E ' (2x[0-9]+|[0-9]+x2)\+'` lists them.
