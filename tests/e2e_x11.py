@@ -607,6 +607,32 @@ def main():
         assert received(ff, "switch_workspace") == [{"type": "switch_workspace", "windowId": 1, "workspaceId": "default"}]
         ok("workspaces: chips above the tabs, only the shown workspace's tabs listed, a click switches")
 
+        # the find key: Left and Right switch workspace while nothing is typed. A browser reports each switch in a
+        # new state, so this plays it: the window shows Work (the last of two), then Default, then Work again
+        def browser_shows(ws_id, tabs):
+            window = ws_state["windows"][0]
+            ff.send({**ws_state, "windows": [{**window, "workspaceId": ws_id}]})
+            wait_for(lambda: count("tab") == tabs, f"the tabs of {ws_id} listed")
+
+        hotkey_find()
+        run("xdotool", "key", "Left")
+        assert received(ff, "switch_workspace") == [{"type": "switch_workspace", "windowId": 1, "workspaceId": "default"}]
+        browser_shows("default", 1)
+        run("xdotool", "key", "Left")
+        assert not received(ff, "switch_workspace"), "Left went past the first workspace"
+        run("xdotool", "key", "Right")
+        assert received(ff, "switch_workspace") == [{"type": "switch_workspace", "windowId": 1, "workspaceId": "ws-1"}]
+        browser_shows("ws-1", 3)
+        run("xdotool", "key", "Right")
+        assert not received(ff, "switch_workspace"), "Right went past the last workspace"
+        run("xdotool", "type", "--delay", "30", "a")
+        run("xdotool", "key", "Left")
+        assert not received(ff, "switch_workspace"), "Left switched workspace with text typed"
+        run("xdotool", "key", "Escape")
+        wait_for(lambda: find("Find tab") is None, "the find window closed")
+        ok("find key: Left and Right switch workspace while the box is empty, and are the text cursor's once typed")
+        expand()
+
         row = next(r for r in of_kind("tab") if r["id"] == 2)
         run("xdotool", "mousemove", str(row["x"] + 60), str(row["y"] + row["h"] // 2))
         time.sleep(0.3)

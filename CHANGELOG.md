@@ -7,6 +7,10 @@
   Down, Page Up, Home, End) highlight a tab, Enter opens it, Escape gives the keyboard back. Only the panel
   changed: a panel restart is enough, no new signing.
 
+- In the find window, Left and Right switch to the previous and the next workspace while nothing is typed
+  (the browser in use, when several are listed); they move the text cursor once you type. Only the panel
+  changed: a panel restart is enough, no new signing.
+
 - `./install.sh` puts a config to edit at `~/.config/tabdock/config.toml` (the example, every option explained)
   when you have none, and says where it is. It never overwrites yours, and makes none while your config is still
   in `~/.config/openbox-sidepanel/` (a new one would be read instead of it). `--uninstall` removes it only while
