@@ -32,7 +32,8 @@
   line and column. Only the panel changed: a panel restart is enough, no new signing.
 
 - Right-click the browser's name in the header (with one browser listed) to pick its `[theme]` colour with a
-  colour chooser, instead of editing `config.toml` by hand. It applies at once and is written to the config file in place, every
+  colour chooser, instead of editing `config.toml` by hand. The name's tooltip says so, and under "All
+  browsers" says to choose one first. It applies at once and is written to the config file in place, every
   other line (comments included) left untouched. Only the panel changed: a panel restart is enough, no new
   signing.
 
