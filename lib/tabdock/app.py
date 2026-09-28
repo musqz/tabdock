@@ -63,7 +63,9 @@ class Panel:
             self.view.find()
 
     def on_close(self, conn):
-        self.browsers.pop(conn, None)
+        if conn not in self.browsers:
+            return  # never said hello (`tabdock --find`): nothing to forget, nothing to redraw
+        self.browsers.pop(conn)
         self.states.pop(conn, None)
         self.browser_xids.pop(conn, None)
         if self.mode is conn:
