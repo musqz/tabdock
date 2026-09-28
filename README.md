@@ -24,6 +24,4 @@ extensions). `./install.sh --uninstall` removes exactly what it installed.
 - [docs/USAGE.md](docs/USAGE.md) — how it behaves, configuration
 - [docs/PROTOCOL.md](docs/PROTOCOL.md) — the panel/extension/relay wire protocol
 
-<img width="320" height="1440" alt="Image" src="https://github.com/user-attachments/assets/764e92bf-bfef-45dd-8a08-6cd2d1bb4fdc" />
 
-<img width="320" height="1440" alt="Image" src="https://github.com/user-attachments/assets/a7a5d1f0-794a-4a29-b622-d81934ae400d" />
