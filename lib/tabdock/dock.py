@@ -27,11 +27,9 @@ from gi.repository import Gdk, GdkX11, GLib, Gtk, Pango  # noqa: E402,F401
 from . import config, favicons, geometry  # noqa: E402
 from .autohide import Autohide  # noqa: E402
 from .model import (  # noqa: E402
-    ACCENTS,
     DARK_TEXT,
     DEFAULT_ACCENT,
     FEATURES,
-    KNOWN_BROWSERS,
     NO_CONTAINER,
     WS_COLORS,
     accent,
@@ -107,10 +105,6 @@ button.sp-btn.sp-ws.selected {{ background-color: #2f3542; color: #fff; font-wei
 button.sp-btn.sp-close {{ opacity: 0; padding: 0 4px; }}
 .sp-row:hover button.sp-btn.sp-close {{ opacity: 1; }}
 button.sp-btn.sp-close:hover {{ color: #ff6b6b; }}
-.sp-advanced {{ background-color: #1b1d23; padding: 2px 8px 6px 8px; }}
-.sp-advrow {{ padding: 3px 0; }}
-button.sp-btn.sp-swatch {{ min-width: 30px; min-height: 14px; border-radius: 4px; border: 1px solid #454b58; padding: 0; }}
-button.sp-btn.sp-swatch:hover {{ border-color: #7d8594; }}
 """
 
 
@@ -152,7 +146,6 @@ def browser_css(colours):
         f".sp-bhead.{acc_class(c)}:hover {{ background-color: shade({c}, 1.15); }}"
         f".sp-bhead.{acc_class(c)} .sp-bandlabel {{ color: {on_accent(c)}; }}"
         f"button.sp-btn.sp-ws.selected.{acc_class(c)} {{ box-shadow: inset 0 -2px 0 0 {c}; }}"
-        f"button.sp-btn.sp-swatch.{acc_class(c)} {{ background-color: {c}; }}"
         for c in sorted(set(colours))
     )
 
@@ -315,31 +308,9 @@ class DockView:
         self.list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.scroll.add(self.list)
 
-        # every known browser's colour, reachable without depending on a right-click landing on the
-        # header (which the config.toml editing story already covers, but a button never misses)
-        self.advanced = Gtk.Expander(label="Advanced")
-        self.advanced.get_style_context().add_class("sp-advanced")
-        adv_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self._swatches = {}
-        names = dict(KNOWN_BROWSERS)
-        for key in (*ACCENTS, "other"):
-            name = names.get(key, "Other")
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            row.get_style_context().add_class("sp-advrow")
-            row.pack_start(Gtk.Label(label=name, xalign=0), True, True, 0)
-            swatch = self._button("", f"{name} colour", Gtk.Button)
-            swatch.get_style_context().add_class("sp-swatch")
-            swatch.connect("clicked", lambda _b, key=key, name=name: self._pick_colour(key, name))
-            self._swatches[key] = swatch
-            row.pack_end(swatch, False, False, 0)
-            adv_box.pack_start(row, False, False, 0)
-        self.advanced.add(adv_box)
-        self._refresh_swatches()
-
         self.content.pack_start(header, False, False, 0)
         self.content.pack_start(self.chips, False, False, 0)
         self.content.pack_start(self.scroll, True, True, 0)
-        self.content.pack_start(self.advanced, False, False, 0)
         self.win.get_child().add(self.content)
         self.win.get_child().show_all()  # the panel window itself is only shown while expanded
         self.strip.get_child().show()
@@ -491,17 +462,8 @@ class DockView:
             self._colours = colours
             self._per_browser.load_from_data((browser_css(colours.values()) + WS_CSS).encode())
             self._last = None
-            self._refresh_swatches()
             if not self.sources:
                 self._set_accent(colours["other"])  # (nothing listed: no show() to come)
-
-    def _refresh_swatches(self):
-        """The Advanced section's colour buttons, in the current [theme] colours."""
-        for key, button in self._swatches.items():
-            ctx = button.get_style_context()
-            for cls in [c for c in ctx.list_classes() if c.startswith("acc-")]:
-                ctx.remove_class(cls)
-            ctx.add_class(acc_class(self._colours[key]))
 
     # -- windows -------------------------------------------------------------------
 

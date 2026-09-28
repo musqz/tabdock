@@ -31,18 +31,13 @@
 - A `config.toml` that fails to parse now shows the offending line along with the TOML error, not just its
   line and column. Only the panel changed: a panel restart is enough, no new signing.
 
-- Right-click the browser's name in the header to pick its `[theme]` colour with a colour chooser, instead
-  of editing `config.toml` by hand. It applies at once and is written to the config file in place, every
+- Right-click the browser's name in the header (with one browser listed) to pick its `[theme]` colour with a
+  colour chooser, instead of editing `config.toml` by hand. It applies at once and is written to the config file in place, every
   other line (comments included) left untouched. Only the panel changed: a panel restart is enough, no new
   signing.
 
 - Midori is a known browser now (its own accent colour, a `midori` `[theme]` key), detected the same way
   as the others. Only the panel changed: a panel restart is enough, no new signing.
-
-- An "Advanced" section at the bottom of the panel lists every browser tabdock knows, each with a colour
-  swatch button that opens the same colour chooser (see above) — a second way to reach it that doesn't
-  depend on a browser being connected or the header name being right-clicked. Only the panel changed: a
-  panel restart is enough, no new signing.
 
 ## 0.4.0
 
