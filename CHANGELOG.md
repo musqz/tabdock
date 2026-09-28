@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- After a package upgrade from before 0.5.0, pacman says to install the new extension again in each browser.
+  Only the package's install note changed: no new signing.
+
 ## 0.5.0
 
 Sign this version's extension and install it in each browser (docs/RELEASE.md): it adds the `restore_tab` command

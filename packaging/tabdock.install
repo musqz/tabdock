@@ -18,4 +18,12 @@ post_upgrade() {
     (its x button), then start tabdock.
 EOF
     fi
+    # 0.5.0 is the first version whose extension changed since 0.4.0 (it can undo a closed tab)
+    if (( $(vercmp "${2%-*}" 0.5.0) < 0 )); then
+        cat <<'EOF'
+==> This version has a new extension: install it again in each browser, about:addons -> gear icon ->
+    "Install Add-on From File..." -> /usr/share/tabdock/tabdock.xpi. Until then the panel works as
+    before, without the undo row for a closed tab.
+EOF
+    fi
 }

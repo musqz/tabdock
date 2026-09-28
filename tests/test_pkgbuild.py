@@ -1,6 +1,7 @@
 """packaging/PKGBUILD's prepare() and package(), run the way makepkg runs them, against this checkout."""
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -8,6 +9,7 @@ import zipfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 PKGBUILD = os.path.join(ROOT, "packaging", "PKGBUILD")
+INSTALL = os.path.join(ROOT, "packaging", "tabdock.install")
 SHARE = "/usr/share/tabdock"
 
 with open(os.path.join(ROOT, "VERSION")) as f:
@@ -138,6 +140,31 @@ class PkgbuildTest(unittest.TestCase):
         self.assertIn("Exec=/usr/bin/tabdock\n", entry)
         self.assertIn(f"Icon={SHARE}/icon.png\n", entry)
         self.assertNotIn("@", entry)
+
+
+@unittest.skipUnless(shutil.which("vercmp"), "needs pacman's vercmp")
+class InstallScriptTest(unittest.TestCase):
+    def upgrade(self, old):
+        """What pacman prints after upgrading from `old` to this version (post_upgrade gets the new one first)."""
+        done = subprocess.run(["bash", "-euo", "pipefail", "-c", 'source "$1"; post_upgrade "$2" "$3"', "bash",
+                               INSTALL, f"{VERSION}-1", old], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout
+
+    def test_an_upgrade_from_0_4_0_says_to_install_the_new_extension(self):
+        out = self.upgrade("0.4.0-1")
+        self.assertIn("This version has a new extension", out)
+        self.assertIn("/usr/share/tabdock/tabdock.xpi", out)
+        self.assertNotIn("sidepanel", out)
+
+    def test_an_upgrade_from_0_3_1_says_both_things(self):
+        out = self.upgrade("0.3.1-1")
+        self.assertIn('The command is "tabdock" now', out)
+        self.assertIn("This version has a new extension", out)
+
+    def test_a_reinstall_or_a_later_upgrade_says_nothing(self):
+        self.assertEqual(self.upgrade("0.5.0-1"), "")
+        self.assertEqual(self.upgrade("0.5.1-1"), "")
 
 
 if __name__ == "__main__":
