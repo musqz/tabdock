@@ -7,7 +7,8 @@
   leaving closes it (~400 ms).
 - **Open:** the header names the active browser; below it, one collapsible section per container
   (colour, icon, name, tab count) with its tabs, site icons optional (see Site icons). Click a tab to
-  activate it.
+  activate it. The `+` on a section opens a new tab there and brings the browser forward, where the tab's
+  address bar is ready: type a search or an address at once.
 - **Close and pin:** a hovered tab shows a `✕`; middle-click closes a tab too, as in the browser's tab strip.
   Right-click a tab to pin or unpin it, reopen it in another container (Firefox cannot move a tab between
   containers, so the page loads anew there and its back/forward history stays behind), or close it. Pinned tabs wear a 📌. With workspaces in use, closing a

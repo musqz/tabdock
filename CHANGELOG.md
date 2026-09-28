@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The `+` on a section brings the browser forward with the new tab, so what you type next goes to its address
+  bar, even from another app or the find window. Only the panel changed: a panel restart is enough, no new signing.
+
 - A tab closed from the panel stays in its place for 8 seconds, struck through, with a `↶` where its `✕` was:
   one click reopens it (the browser's own Ctrl+Shift+T: in its container and workspace). Ctrl+Shift+T does the
   same in the find window, which it closes, raising the browser. This one changes the extension: sign the new

@@ -513,6 +513,20 @@ def main():
         ok("find key: Ctrl+Shift+T asks the browser to reopen the closed tab, closes the window and raises the browser")
         collapse()
 
+        # a "+" brings the browser forward, where the new tab's address bar is waiting for what you type
+        run("xdotool", "windowactivate", "--sync", str(term_win))
+        expand()
+        plus = wait_for(settled_layout, "row positions of the expanded panel")[("section", "firefox-default")]
+        ff.received()
+        run("xdotool", "mousemove", str(plus["x"] + plus["w"] - 20), str(plus["y"] + plus["h"] // 2))
+        time.sleep(0.3)
+        run("xdotool", "click", "1")
+        got = messages("new_tab")
+        assert got == [{"type": "new_tab", "cookieStoreId": "firefox-default", "windowId": 1}], got
+        wait_for(lambda: active_window() == ff_win, "the browser brought forward for the new tab")
+        ok('new tab: the "+" of a section brings the browser forward')
+        collapse()
+
         # -- several browsers: chips choose what is listed, "all" gives each browser a foldable section -----
         def rows_now():
             try:
