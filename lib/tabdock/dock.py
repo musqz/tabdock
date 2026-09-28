@@ -201,12 +201,12 @@ def _schedule(ms, fn):
 
 
 class DockView:
-    def __init__(self, cfg, on_activate, on_quit, xconn=None, on_command=None, on_choose=None, on_restore=None):
+    def __init__(self, cfg, on_activate, on_quit, xconn=None, on_command=None, on_choose=None, on_raise=None):
         self.cfg = dict(cfg)
         self.on_activate = on_activate
         self.on_command = on_command  # on_command(conn, message): what a drop asks the browser to do
         self.on_choose = on_choose  # on_choose("auto" | "all" | conn): a chip was clicked
-        self.on_restore = on_restore  # on_restore(conn): reopen the tab that browser closed last, and bring it forward
+        self.on_raise = on_raise  # on_raise(conn): bring that browser's window forward (a tab was made or brought back)
         self.x = xconn
         self._meta = {}  # row widget -> what it stands for (kind, id, group, conn, click handler, draggable)
         self._row_order = []  # row widgets in display order
@@ -1004,10 +1004,7 @@ class DockView:
                 "+", "New tab" if cid == NO_CONTAINER else f"New tab in {container['name']}", Gtk.Button
             )
             button.get_style_context().add_class("sp-newtab")
-            button.connect(
-                "clicked",
-                lambda _b: self._command(conn, {"type": "new_tab", "cookieStoreId": cid, "windowId": window_id}),
-            )
+            button.connect("clicked", lambda _b: self._new_tab(conn, cid, window_id))
             box.pack_start(button, False, False, 0)
         return self._row(
             box, "section", cid, None, conn, browser_colour, (lambda: self._toggle(key)) if tabs else (lambda: None),
@@ -1214,9 +1211,13 @@ class DockView:
         in use."""
         return next((s for s in self.sources if len(self.sources) == 1 or s[1] is self._focus), None)
 
+    def _raise(self, conn):
+        if self.on_raise is not None:
+            self.on_raise(conn)
+
     def _restore(self, conn):
-        if self.on_restore is not None:
-            self.on_restore(conn)
+        self._command(conn, {"type": "restore_tab"})
+        self._raise(conn)  # (the tab comes back there, even when asked from the find window in a terminal)
 
     def _restore_tab(self):
         """Reopen the tab closed last, in the find window's browser. False, and nothing sent, when its extension
@@ -1256,6 +1257,12 @@ class DockView:
             adj.set_value(top)
         elif bottom > adj.get_value() + adj.get_page_size():
             adj.set_value(bottom - adj.get_page_size())
+
+    def _new_tab(self, conn, store, window_id):
+        """A "+". The browser puts the cursor in a new tab's address bar (a tab made without an address does), so
+        bring its window forward: what you type next is a search or an address there."""
+        self._command(conn, {"type": "new_tab", "cookieStoreId": store, "windowId": window_id})
+        self._raise(conn)
 
     def _close_tab(self, conn, tab_id):
         self._note_closed(conn, tab_id)

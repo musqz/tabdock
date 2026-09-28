@@ -99,16 +99,13 @@ class Panel:
 
     def activate_tab(self, conn, tab_id, window_id):
         conn.send({"type": "activate_tab", "tabId": tab_id, "windowId": window_id})
-        self._raise(conn)
+        self.raise_browser(conn)
 
-    def restore_tab(self, conn):
-        conn.send({"type": "restore_tab"})
-        self._raise(conn)  # the tab comes back in that browser, even when asked from the find window in a terminal
-
-    def _raise(self, conn):
+    def raise_browser(self, conn):
         xid = self._window_of(conn)
-        if self.x and xid and xid != self.active:
-            self.x.activate(xid)  # that browser is not the focused window: bring it forward
+        # self.active leaves out our own windows, so a find or rename window holding the keyboard is checked apart
+        if self.x and xid and (xid != self.active or self.x.active_window() in self.view.xids):
+            self.x.activate(xid)  # the browser is not the focused window: bring it forward
 
     def choose(self, mode):
         """A chip was clicked: "auto" follows the browser in use, "all" lists every browser, and a
@@ -177,7 +174,7 @@ class Panel:
         elif len(parts) == 2 and parts[0] in ("pin", "unpin") and parts[1].isdigit():
             self.command(self.current, {"type": "pin_tab", "tabId": int(parts[1]), "pinned": parts[0] == "pin"})
         elif parts == ["restore"]:
-            self.restore_tab(self.current)
+            self.command(self.current, {"type": "restore_tab"})
         elif len(parts) == 3 and parts[0] == "reopen" and parts[1].isdigit():
             self.command(self.current, {"type": "reopen_in_container", "tabId": int(parts[1]), "cookieStoreId": parts[2]})
         elif parts[0] in CONTAINER_VERBS:
@@ -357,7 +354,7 @@ def main(argv=None):
 
         panel.view = DockView(
             cfg, panel.activate_tab, loop.quit, x,
-            on_command=panel.command, on_choose=panel.choose, on_restore=panel.restore_tab,
+            on_command=panel.command, on_choose=panel.choose, on_raise=panel.raise_browser,
         )
 
     if x is not None:

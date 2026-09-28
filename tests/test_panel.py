@@ -58,6 +58,10 @@ class FakeX:
         self.activated = []
         self.clients = []  # XIDs bottom to top, as _NET_CLIENT_LIST_STACKING gives them
         self.pids = {}  # xid -> pid, asked for lazily
+        self.focused = None  # the window that really has the keyboard (the panel only remembers browsers and apps)
+
+    def active_window(self):
+        return self.focused
 
     def window_info(self, xid):
         return self.WINDOWS[xid]
@@ -263,13 +267,18 @@ class PanelTest(unittest.TestCase):
         self.panel.choose(FakeConn())
         self.assertEqual(self.panel.mode, "auto")
 
-    def test_restoring_a_tab_is_sent_and_raises_the_browser_only_when_it_was_not_focused(self):
+    def test_raise_browser_brings_it_forward_only_when_it_was_not_focused(self):
         self.panel.follow(FIREFOX_XID)
-        self.panel.restore_tab(self.ff)
-        self.assertEqual(self.ff.sent[-1], {"type": "restore_tab"})
-        self.assertEqual(self.x.activated, [])  # an undo row in the panel: the browser has the focus already
+        self.panel.raise_browser(self.ff)
+        self.assertEqual(self.x.activated, [])  # a "+" in the panel: the browser has the focus already
         self.panel.follow(TERM_XID)  # the find window, from a terminal
-        self.panel.restore_tab(self.ff)
+        self.panel.raise_browser(self.ff)
+        self.assertEqual(self.x.activated, [FIREFOX_XID])
+
+    def test_raise_browser_also_when_our_own_window_has_the_keyboard(self):
+        self.panel.follow(FIREFOX_XID)  # the browser was in use, then the find window took the keyboard
+        self.x.focused = PANEL_XID
+        self.panel.raise_browser(self.ff)
         self.assertEqual(self.x.activated, [FIREFOX_XID])
 
     def test_debug_console_restores_the_tab_closed_last(self):

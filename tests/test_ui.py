@@ -122,18 +122,23 @@ class DockViewTest(unittest.TestCase):
         self.commands = []
         self.command_conns = []
         self.chosen = []
-        self.restored = []
+        self.raised = []
         view = DockView(
             {**DEFAULTS, **cfg},
             lambda *a: self.activated.append(a),
             lambda: self.quit_calls.append(1),
             on_command=lambda conn, message: (self.commands.append(message), self.command_conns.append(conn)),
             on_choose=self.chosen.append,
-            on_restore=self.restored.append,
+            on_raise=self.raised.append,
         )
         self.addCleanup(view.win.destroy)
         self.addCleanup(view.strip.destroy)
         return view
+
+    @property
+    def restored(self):
+        """The browsers asked to reopen the tab they closed last."""
+        return [c for m, c in zip(self.commands, self.command_conns) if m["type"] == "restore_tab"]
 
     def row_texts(self, view):
         return [label_of(r).get_text() for r in view.list.get_children()]
@@ -313,6 +318,7 @@ class DockViewTest(unittest.TestCase):
         new_tab_button_of(row).clicked()
         self.assertEqual(self.commands, [{"type": "new_tab", "cookieStoreId": "firefox-container-1", "windowId": 2}])
         self.assertEqual(self.command_conns, [conn])
+        self.assertEqual(self.raised, [conn])  # the browser comes forward: its address bar is ready for typing
 
     def test_new_tab_button_is_absent_for_a_container_the_browser_no_longer_lists(self):
         # A deleted container's leftover tabs still get a section (model.group_tabs), but
@@ -1745,6 +1751,7 @@ class DockViewTest(unittest.TestCase):
         view._ghost["t"] -= 1
         undo.clicked()
         self.assertEqual(self.restored, [conn])
+        self.assertEqual(self.raised, [conn])
 
     def test_after_the_click_the_row_stays_without_its_arrow_until_the_tab_is_listed_again(self):
         view = self.make()
@@ -1848,6 +1855,7 @@ class DockViewTest(unittest.TestCase):
         ctrl_shift = Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.SHIFT_MASK
         self.assertTrue(self.key(view, Gdk.KEY_T, ctrl_shift | Gdk.ModifierType.SUPER_MASK))  # Super still down
         self.assertEqual(self.restored, [conn])
+        self.assertEqual(self.raised, [conn])  # from a terminal, the tab must not come back behind it
         self.assertIsNone(view._dialog)
         self.assertEqual(self.activated, [])
         view.find_btn.clicked()
