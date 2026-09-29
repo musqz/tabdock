@@ -10,7 +10,7 @@ const HOST = "openbox_sidepanel";
 const RECONNECT_MS = 3000; // only needed if the relay process itself died
 const DEBOUNCE_MS = 50;
 // What this extension does beyond what every version did, told to the panel in "hello": it offers only those.
-const FEATURES = ["close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab"];
+const FEATURES = ["close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab", "bookmarks"];
 
 let port = null;
 let panelUp = false; // relay has a panel connected (set by resync, cleared by panel_disconnected)
@@ -564,6 +564,26 @@ async function resync() {
   send(await snapshot());
 }
 
+// -- bookmarks ------------------------------------------------------------------------------------
+// Read only when the panel asks, and only once the user granted the optional permission on the options page.
+
+function bookmarkNode(node) {
+  if (node.type === "separator") return null;
+  if (node.type === "folder") {
+    return { title: node.title || "", children: (node.children || []).map(bookmarkNode).filter(Boolean) };
+  }
+  return /^https?:/i.test(node.url || "") ? { title: node.title || node.url, url: node.url } : null;
+}
+
+async function sendBookmarks() {
+  if (!browser.bookmarks) {
+    send({ type: "bookmarks", granted: false });
+    return;
+  }
+  const [root] = await browser.bookmarks.getTree();
+  send({ type: "bookmarks", granted: true, tree: (root.children || []).map(bookmarkNode).filter(Boolean) });
+}
+
 async function onCommand(msg) {
   try {
     switch (msg.type) {
@@ -578,6 +598,19 @@ async function onCommand(msg) {
         orderLoaded = true;
         await browser.storage.local.set({ containerOrder });
         push();
+        break;
+      case "get_bookmarks":
+        await sendBookmarks();
+        break;
+      case "open_options":
+        await browser.runtime.openOptionsPage();
+        break;
+      case "open_url":
+        if (typeof msg.url === "string" && /^https?:/i.test(msg.url)) {
+          const inWindow = Number.isInteger(msg.windowId);
+          await browser.tabs.create(inWindow ? { url: msg.url, windowId: msg.windowId } : { url: msg.url });
+          if (inWindow) await browser.windows.update(msg.windowId, { focused: true });
+        }
         break;
       case "move_tab":
         // index is the tab's final position in its window; tabs.onMoved then triggers a snapshot
@@ -719,6 +752,9 @@ if (browser.contextualIdentities) {
 if (browser.tabGroups) {
   for (const event of ["onCreated", "onUpdated", "onRemoved", "onMoved"]) browser.tabGroups[event].addListener(push);
 }
+browser.permissions.onAdded.addListener((p) => {
+  if (p.permissions.includes("bookmarks") && panelUp) sendBookmarks().catch((e) => console.error("tabdock: bookmarks failed", e));
+});
 browser.commands.onCommand.addListener((name) => track(() => onShortcut(name)));
 
 serial(loadWorkspaces).catch((e) => console.error("tabdock: loading workspaces failed", e));

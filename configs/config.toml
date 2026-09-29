@@ -46,6 +46,11 @@ icons = false
 # way for another reason (a year, a numbered list) and gets mistaken for one.
 badges = true
 
+# A Bookmarks view under the tabs (Tabs / Bookmarks buttons at the bottom of the panel). Off by default.
+# Also tick "Allow tabdock to read bookmarks" in the tabdock extension's options in each browser
+# (about:addons -> tabdock -> Preferences). Bookmarks go to the panel on this computer only.
+bookmarks = false
+
 # Start the panel when a browser with the extension opens and no panel is running (a browser start
 # is enough, no autostart needed). A panel you quit with the X button is not restarted until the next
 # browser start. false = only start it yourself (app menu, autostart line, keybinding).

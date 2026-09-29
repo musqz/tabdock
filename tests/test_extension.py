@@ -96,7 +96,8 @@ class BuildTest(unittest.TestCase):
             with zipfile.ZipFile(xpi) as z:
                 self.assertIsNone(z.testzip())
                 self.assertEqual(
-                    sorted(z.namelist()), ["background.js", "icons/icon-48.png", "icons/icon-96.png", "manifest.json"]
+                    sorted(z.namelist()),
+                    ["background.js", "icons/icon-48.png", "icons/icon-96.png", "manifest.json", "options.html", "options.js"],
                 )  # manifest at the archive root, no stray files (icon.svg source stays out)
                 self.assertEqual(json.loads(z.read("manifest.json"))["name"], "Tabdock")
 

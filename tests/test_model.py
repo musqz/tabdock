@@ -6,6 +6,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from tabdock.model import (  # noqa: E402
+    bookmark_rows,
     colour_name,
     edits_workspaces,
     format_state,
@@ -290,6 +291,31 @@ class ModelTest(unittest.TestCase):
         self.assertTrue(text.startswith("Waiting for a browser with the Tabdock extension"))
         self.assertIn("about:addons", text)
         self.assertTrue(text.endswith(xpi.name))
+
+
+class BookmarkRowsTest(unittest.TestCase):
+    TREE = [
+        {"title": "Bar", "children": [
+            {"title": "Arch wiki", "url": "https://wiki.archlinux.org"},
+            {"title": "Dev", "children": [{"title": "Python docs", "url": "https://docs.python.org"}]},
+        ]},
+        {"title": "Loose", "url": "https://example.org"},
+    ]
+
+    def test_lists_folders_and_their_bookmarks_in_order(self):
+        rows = bookmark_rows(self.TREE)
+        self.assertEqual([(d, n["title"], p) for d, n, p in rows],
+                         [(0, "Bar", "/Bar"), (1, "Arch wiki", None), (1, "Dev", "/Bar/Dev"),
+                          (2, "Python docs", None), (0, "Loose", None)])
+
+    def test_a_folded_folder_hides_what_is_inside(self):
+        rows = bookmark_rows(self.TREE, folded={"/Bar"})
+        self.assertEqual([n["title"] for _d, n, _p in rows], ["Bar", "Loose"])
+
+    def test_a_query_lists_matches_flat_even_in_folded_folders(self):
+        rows = bookmark_rows(self.TREE, "python", folded={"/Bar"})
+        self.assertEqual([(d, n["title"], p) for d, n, p in rows], [(0, "Python docs", None)])
+        self.assertEqual(bookmark_rows(self.TREE, "nothing like it"), [])
 
 
 if __name__ == "__main__":

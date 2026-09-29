@@ -81,7 +81,7 @@ def reopenable(tab):
 
 
 # What an extension may say it handles (`features` in its hello), beyond what every version did.
-FEATURES = ("close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab")
+FEATURES = ("close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab", "bookmarks")
 
 
 def supports(info, feature):
@@ -116,6 +116,34 @@ def matches(tab, query):
     """Whether every word of `query` is in the tab's title or address, whatever the case."""
     text = f'{tab.get("title") or ""} {tab.get("url") or ""}'.casefold()
     return all(word in text for word in query.casefold().split())
+
+
+def bookmark_rows(tree, query="", folded=()):
+    """[(depth, node, path)] of the bookmark tree ({"title", "url"} or {"title", "children"} nodes) in display order.
+    `path` names a folder (its titles joined with "/") for `folded`. With a query only the bookmarks that match
+    are listed, flat: a search never hides a match inside a folded folder."""
+    rows = []
+    if query.strip():
+        def walk(nodes):
+            for node in nodes:
+                if "children" in node:
+                    walk(node["children"])
+                elif matches(node, query):
+                    rows.append((0, node, None))
+        walk(tree)
+        return rows
+
+    def walk(nodes, depth, parent):
+        for node in nodes:
+            if "children" in node:
+                path = f'{parent}/{node["title"]}'
+                rows.append((depth, node, path))
+                if path not in folded:
+                    walk(node["children"], depth + 1, path)
+            else:
+                rows.append((depth, node, None))
+    walk(tree, 0, "")
+    return rows
 
 
 def group_tabs(state, every_workspace=False):

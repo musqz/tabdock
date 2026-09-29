@@ -19,6 +19,8 @@ src, out_dir = sys.argv[1:3]
 with open(os.path.join(src, "manifest.json")) as f:
     manifest = json.load(f)
 files = ["manifest.json", *manifest["background"]["scripts"], *manifest["icons"].values()]
+page = manifest["options_ui"]["page"]
+files += [page, page.replace(".html", ".js")]
 
 os.makedirs(out_dir, exist_ok=True)
 out = os.path.join(out_dir, f"tabdock-{manifest['version']}.xpi")
