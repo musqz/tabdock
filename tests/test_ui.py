@@ -1595,7 +1595,7 @@ class DockViewTest(unittest.TestCase):
         view.show([(conn, INFO, self.WS_STATE)])  # Work shows tabs 2 and 3 (pinned); tab 1 "home" is in Default
         self.assertEqual(sorted(self.listed_tabs(view)), [2, 3])
         view.find_btn.clicked()
-        self.assertEqual(view._dialog.get_title(), "Find tab")
+        self.assertEqual(view._dialog.get_title(), "Find")
         self.assertTrue(view.autohide.held)
         view._dialog_entry.set_text("HOME")
         self.assertEqual(self.listed_tabs(view), [1])  # from another workspace, whatever the case
@@ -1662,7 +1662,6 @@ class DockViewTest(unittest.TestCase):
                 {"title": "Python wiki", "url": "https://wiki.python.org"}]
         view.show_bookmarks(conn, {"type": "bookmarks", "granted": True, "tree": tree})
         view.find_btn.clicked()
-        self.assertEqual(view._dialog.get_title(), "Find bookmark")
         view._dialog_entry.set_text("python")
         self.key(view, Gdk.KEY_Down)
         self.key(view, Gdk.KEY_Down)
@@ -1671,6 +1670,41 @@ class DockViewTest(unittest.TestCase):
         self.key(view, Gdk.KEY_Down)
         view._dialog_entry.emit("activate")
         self.assertEqual(self.commands[-1]["url"], "https://wiki.python.org")
+
+    def selected_views(self, view):
+        return [k for k, b in view._find_view_buttons if b.get_style_context().has_class("selected")]
+
+    def test_find_switches_view_with_ctrl_digits_and_keeps_what_is_typed(self):
+        view = self.make(bookmarks=True, history=True)
+        conn = object()
+        info = {**INFO, "features": [*INFO["features"], "bookmarks", "history"]}
+        view.show([(conn, info, STATE)])
+        view.find_btn.clicked()
+        self.assertEqual(self.selected_views(view), ["tabs"])
+        self.assertEqual([k for k, b in view._find_view_buttons if b.get_visible()], ["tabs", "bookmarks", "history"])
+        view._dialog_entry.set_text("python")
+        ctrl = Gdk.ModifierType.CONTROL_MASK
+        self.assertTrue(self.key(view, Gdk.KEY_2, ctrl))
+        self.assertEqual((view._view, self.selected_views(view)), ("bookmarks", ["bookmarks"]))
+        view.show_bookmarks(conn, {"type": "bookmarks", "granted": True, "tree": [
+            {"title": "Python docs", "url": "https://docs.python.org"}, {"title": "Other", "url": "https://o.example"}]})
+        self.assertEqual(self.row_texts(view), ["Python docs"])  # the typed word filters the new view
+        self.key(view, Gdk.KEY_3, ctrl)
+        self.assertEqual(self.commands[-1], {"type": "search_history", "query": "python"})
+        self.key(view, Gdk.KEY_1, ctrl)
+        self.assertEqual(view._view, "tabs")
+        self.assertFalse(self.key(view, Gdk.KEY_2))  # without Ctrl it is just a digit for the entry
+        self.key(view, Gdk.KEY_3, ctrl)
+        view._dialog_finish(False)  # closing the find window gives the panel back the view it had
+        self.assertEqual(view._view, "tabs")
+
+    def test_find_offers_no_switch_without_bookmarks_or_history(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        view.find_btn.clicked()
+        self.assertFalse(view._find_switch.get_visible())
+        self.key(view, Gdk.KEY_2, Gdk.ModifierType.CONTROL_MASK)
+        self.assertEqual(view._view, "tabs")
 
     def test_find_arrow_keys_pass_a_bookmark_saved_in_two_folders(self):
         view, conn = self.bookmark_view()
@@ -2054,7 +2088,7 @@ class DockViewTest(unittest.TestCase):
         self.assertTrue(view.autohide.held)  # the panel stays open for the window that replaced it
         self.assertEqual(self.activated, [])
         view.find()  # the hotkey opens the find window again, not "closes" the rename window
-        self.assertEqual(view._dialog.get_title(), "Find tab")
+        self.assertEqual(view._dialog.get_title(), "Find")
 
     def test_the_find_button_again_starts_a_fresh_find(self):
         view = self.make()
@@ -2076,7 +2110,7 @@ class DockViewTest(unittest.TestCase):
         view.set_hidden(True)
         view.find()
         self.assertFalse(view.hidden)
-        self.assertEqual(view._dialog.get_title(), "Find tab")
+        self.assertEqual(view._dialog.get_title(), "Find")
         self.assertTrue(view.autohide.held)  # the panel opens and stays for it
         view.find()
         self.assertIsNone(view._dialog)
