@@ -16,7 +16,7 @@
   address holds every word, across all workspaces. Enter opens the first match, Escape gives the list back.
 - **From the keyboard:** `tabdock --find` shows the panel and that window from any app (see Hotkey); the same
   key closes it again. There: Down/Up highlight a tab (a bookmark or visit in those views), Page Down/Up move ten,
-  Home/End jump, Enter opens it, Escape closes. Ctrl+1/2/3 (or the buttons at the top of the window)
+  Home/End jump, Enter opens it (a bookmark folder: opens or closes it), Escape closes. Ctrl+1/2/3 (or the buttons at the top of the window)
   search Tabs, Bookmarks or History, whichever are on. While nothing is typed, Left/Right switch view and Ctrl+Left/Right switch workspace. Ctrl+Shift+T reopens the last closed tab.
 - **Containers:** right-click a section to rename it, change colour or icon, make a new one, or remove it
   (asks first; its tabs close and Firefox deletes its cookies).
