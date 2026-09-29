@@ -143,6 +143,43 @@ class DockViewTest(unittest.TestCase):
     def row_texts(self, view):
         return [label_of(r).get_text() for r in view.list.get_children()]
 
+    def bookmark_view(self, **cfg):
+        view = self.make(bookmarks=True, **cfg)
+        conn = object()
+        view.show([(conn, {**INFO, "features": [*INFO["features"], "bookmarks"]}, STATE)])
+        return view, conn
+
+    def test_no_view_buttons_without_the_option_or_an_extension_that_can(self):
+        view = self.make()
+        view.show([(object(), {**INFO, "features": ["bookmarks"]}, STATE)])
+        self.assertFalse(view.views.get_visible())
+        view = self.make(bookmarks=True)
+        view.show([(object(), INFO, STATE)])
+        self.assertFalse(view.views.get_visible())
+
+    def test_bookmarks_view_asks_for_them_lists_folders_and_opens_a_bookmark(self):
+        view, conn = self.bookmark_view()
+        self.assertTrue(view.views.get_visible())
+        view._set_view("bookmarks")
+        self.assertEqual(self.commands, [{"type": "get_bookmarks"}])
+        self.assertIn("Loading", self.row_texts(view)[0])
+        tree = [{"title": "Bar", "children": [{"title": "Arch wiki", "url": "https://wiki.archlinux.org"}]}]
+        view.show_bookmarks(conn, {"type": "bookmarks", "granted": True, "tree": tree})
+        self.assertEqual(self.row_texts(view), ["▾ Bar", "Arch wiki"])
+        click(view.list.get_children()[1])
+        self.assertEqual(self.commands[-1]["type"], "open_url")
+        self.assertEqual(self.commands[-1]["url"], "https://wiki.archlinux.org")
+        self.assertEqual(self.raised, [conn])
+        click(view.list.get_children()[0])  # folds the folder
+        self.assertEqual(len(view.list.get_children()), 1)
+
+    def test_bookmarks_without_the_permission_lead_to_the_options(self):
+        view, conn = self.bookmark_view()
+        view._set_view("bookmarks")
+        view.show_bookmarks(conn, {"type": "bookmarks", "granted": False})
+        click(view.list.get_children()[0])
+        self.assertEqual(self.commands[-1], {"type": "open_options"})
+
     def test_starts_as_a_strip_with_the_panel_unmapped(self):
         view = self.make()
         self.assertFalse(view.autohide.expanded)

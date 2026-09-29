@@ -59,6 +59,8 @@ class Panel:
             self.states[conn] = msg
             if conn in self._shown():
                 self._render()
+        elif kind == "bookmarks" and conn in self.browsers:
+            self.view.show_bookmarks(conn, msg)
         elif kind == "find":  # from `tabdock --find`, a key bound in the window manager
             self.view.find()
 

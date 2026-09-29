@@ -41,6 +41,7 @@
 | `view` | `"auto"` | `"auto"` or `"all"` at start |
 | `icons` | `false` | site icons before titles (see Site icons); the header's `icons` button switches them for the session |
 | `badges` | `true` | badge for an unread count in a title, `"(3) Inbox"` |
+| `bookmarks` | `false` | Tabs / Bookmarks buttons at the bottom of the panel (see Bookmarks) |
 | `pinned` | `false` | start pinned |
 | `start_with_browser` | `true` | start the panel when a browser with the extension opens |
 
@@ -56,6 +57,16 @@ other = "#8f9bb3"     # any other browser, and the strip while none is connected
 ```
 
 Colours are `"#rrggbb"` or `"#rgb"`; on a dark accent the text turns white.
+
+**Bookmarks** are off by default. Turn them on:
+
+1. Install the new extension (`docs/INSTALL.md`).
+2. `about:addons` → tabdock → *Preferences* → tick *Allow tabdock to read bookmarks*.
+3. Set `bookmarks = true` in the config and restart the panel.
+
+*Tabs* and *Bookmarks* buttons appear at the bottom of the panel. Click a folder to fold it, a bookmark to open it in a
+new tab. Find searches the bookmarks while that view is up. Only `http(s)` bookmarks are listed. Bookmarks go to the
+panel on this computer only.
 
 **Site icons** are off by default. `data:` icons need no network; every other icon is downloaded by the **panel
 itself**, not the browser: from your own address and DNS, outside the browser's proxy, VPN, DoH and per-container

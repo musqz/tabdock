@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Replace `docs/RELEASE.md` with a shorter `docs/INSTALL.md`, and trim the other docs.
+- Add an opt-in Bookmarks view (`bookmarks = true`); it needs the new extension and its permission ticked in the extension's options.
 - After a package upgrade from before 0.5.0, pacman says to install the new extension again.
 
 ## 0.5.0

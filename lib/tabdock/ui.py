@@ -16,6 +16,9 @@ class ConsoleView:
     def set_hidden(self, hidden):
         pass
 
+    def show_bookmarks(self, conn, msg):
+        pass
+
     def find(self):
         pass
 

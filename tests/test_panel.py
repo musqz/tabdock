@@ -40,6 +40,9 @@ class FakeView:
     def find(self):
         self.calls.append(("find",))
 
+    def show_bookmarks(self, conn, msg):
+        self.calls.append(("bookmarks", conn, msg))
+
     def reconfigure(self, cfg):
         self.calls.append(("reconfigure",))
 
@@ -104,6 +107,12 @@ class PanelTest(unittest.TestCase):
         self.assertEqual(self.shown(), [])
         self.panel.on_message(self.ff, state(TAB))
         self.assertEqual(self.shown(), ["Firefox"])
+
+    def test_bookmarks_go_to_the_view_only_from_a_known_browser(self):
+        msg = {"type": "bookmarks", "granted": True, "tree": []}
+        self.panel.on_message(self.zen, msg)
+        self.panel.on_message(FakeConn(), msg)  # never said hello
+        self.assertEqual(self.view.calls, [("bookmarks", self.zen, msg)])
 
     def test_follows_the_active_browser_window(self):
         self.panel.follow(ZEN_XID)

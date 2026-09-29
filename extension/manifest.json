@@ -20,6 +20,8 @@
     }
   },
   "permissions": ["tabs", "cookies", "contextualIdentities", "nativeMessaging", "storage", "tabHide", "sessions", "tabGroups"],
+  "optional_permissions": ["bookmarks"],
+  "options_ui": { "page": "options.html", "open_in_tab": true },
   "background": {
     "scripts": ["background.js"],
     "persistent": true
