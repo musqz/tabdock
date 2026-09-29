@@ -3,21 +3,36 @@
 An autohiding X11/Openbox side panel that mirrors the tabs and containers of Firefox-based browsers, two-way,
 through a small WebExtension. Chromium-based browsers are not supported.
 
-## Install
+## Installing 2 way's
 
 Needs `python-gobject` (GTK 3) and `python-xlib`.
 
+### 1. Manual installation
+
 ```bash
-./install.sh     # program -> ~/.local, browser manifest, "Tabdock" menu entry, a config
+git clone https://github.com/musqz/tabdock.git
+cd tabdock
+./install.sh
 ```
 
-Then save the signed `tabdock-*.xpi` from the [latest release](https://github.com/musqz/tabdock/releases/latest)
-(right-click → *Save Link As…*) and load it in each browser: `about:addons` → gear → *Install Add-on From File…*.
+Then save the signed `tabdock-*.xpi` from the [latest release](https://github.com/musqz/tabdock/releases/latest).
 
+_(right-click → *Save Link As…*)_ and load it in each browser: `about:addons` → gear → *Install Add-on From File…*.
+
+#### Uninstall manual installation
 `./install.sh --uninstall` removes what it installed.
 
-**Arch Linux:** `cd packaging && makepkg -si` installs the latest release system-wide; the extension is then
-`/usr/share/tabdock/tabdock.xpi`.
+### 2. Arch Linux: installs the latest release system-wide
+
+```
+git clone https://github.com/musqz/tabdock.git
+cd packaging && makepkg -si
+```
+
+The extension can be find
+```
+/usr/share/tabdock/tabdock.xpi
+```
 
 ## Docs
 
