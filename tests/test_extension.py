@@ -56,6 +56,9 @@ class ManifestTest(unittest.TestCase):
         for size, rel in self.manifest["icons"].items():
             self.assertEqual(png_size(os.path.join(EXT, rel)), (int(size), int(size)), rel)
 
+    def test_optional_permissions_stay_minimal(self):
+        self.assertEqual(self.manifest["optional_permissions"], ["bookmarks"])
+
     def test_workspace_shortcuts_are_changeable_keys_that_do_not_collide(self):
         commands = self.manifest["commands"]
         self.assertEqual(list(commands), ["next-workspace", "previous-workspace", *(f"workspace-{n}" for n in range(1, 10))])

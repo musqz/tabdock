@@ -580,8 +580,13 @@ async function sendBookmarks() {
     send({ type: "bookmarks", granted: false });
     return;
   }
-  const [root] = await browser.bookmarks.getTree();
-  send({ type: "bookmarks", granted: true, tree: (root.children || []).map(bookmarkNode).filter(Boolean) });
+  try {
+    const [root] = await browser.bookmarks.getTree();
+    send({ type: "bookmarks", granted: true, tree: (root.children || []).map(bookmarkNode).filter(Boolean) });
+  } catch (e) {
+    console.error("tabdock: bookmarks failed", e);
+    send({ type: "bookmarks", granted: true, error: true });
+  }
 }
 
 async function onCommand(msg) {
@@ -753,7 +758,10 @@ if (browser.tabGroups) {
   for (const event of ["onCreated", "onUpdated", "onRemoved", "onMoved"]) browser.tabGroups[event].addListener(push);
 }
 browser.permissions.onAdded.addListener((p) => {
-  if (p.permissions.includes("bookmarks") && panelUp) sendBookmarks().catch((e) => console.error("tabdock: bookmarks failed", e));
+  if (p.permissions.includes("bookmarks") && panelUp) sendBookmarks();
+});
+browser.permissions.onRemoved.addListener((p) => {
+  if (p.permissions.includes("bookmarks") && panelUp) send({ type: "bookmarks", granted: false });
 });
 browser.commands.onCommand.addListener((name) => track(() => onShortcut(name)));
 

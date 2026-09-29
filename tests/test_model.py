@@ -305,15 +305,21 @@ class BookmarkRowsTest(unittest.TestCase):
     def test_lists_folders_and_their_bookmarks_in_order(self):
         rows = bookmark_rows(self.TREE)
         self.assertEqual([(d, n["title"], p) for d, n, p in rows],
-                         [(0, "Bar", "/Bar"), (1, "Arch wiki", None), (1, "Dev", "/Bar/Dev"),
+                         [(0, "Bar", "/0"), (1, "Arch wiki", None), (1, "Dev", "/0/1"),
                           (2, "Python docs", None), (0, "Loose", None)])
 
     def test_a_folded_folder_hides_what_is_inside(self):
-        rows = bookmark_rows(self.TREE, folded={"/Bar"})
+        rows = bookmark_rows(self.TREE, folded={"/0"})
         self.assertEqual([n["title"] for _d, n, _p in rows], ["Bar", "Loose"])
 
+    def test_folders_with_the_same_title_fold_apart(self):
+        tree = [{"title": "Dev", "children": [{"title": "a", "url": "https://a"}]},
+                {"title": "Dev", "children": [{"title": "b", "url": "https://b"}]}]
+        rows = bookmark_rows(tree, folded={"/0"})
+        self.assertEqual([n["title"] for _d, n, _p in rows], ["Dev", "Dev", "b"])
+
     def test_a_query_lists_matches_flat_even_in_folded_folders(self):
-        rows = bookmark_rows(self.TREE, "python", folded={"/Bar"})
+        rows = bookmark_rows(self.TREE, "python", folded={"/0"})
         self.assertEqual([(d, n["title"], p) for d, n, p in rows], [(0, "Python docs", None)])
         self.assertEqual(bookmark_rows(self.TREE, "nothing like it"), [])
 

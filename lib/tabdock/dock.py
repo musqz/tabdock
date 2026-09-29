@@ -237,6 +237,8 @@ class DockView:
         self._close_buttons = []  # (tab id, its ✕ button) of the rows built last
         self._view = "tabs"  # "tabs" or "bookmarks" (only while cfg["bookmarks"] is on and the extension can)
         self._bookmarks = {}  # conn -> the extension's last "bookmarks" message
+        self._asked = set()  # conns get_bookmarks was sent to and no answer came back yet
+        self._scroll_top = False  # the next list starts at the top (a view was switched)
         self._first_bookmark = None  # (conn, url, window id) of the first bookmark listed while finding
         self._query = ""  # what the find window has typed: only the tabs that match are listed, from every workspace
         self._first_match = None  # (conn, tab id, window id) of the first tab listed while finding
@@ -250,7 +252,7 @@ class DockView:
         self._menu = None  # the context menu up (kept referenced while it is shown)
         self._dialog = None  # the window asking for a workspace name, while it is up
         self._dialog_finish = None  # finish(accepted) of that window
-        self.collapsed = set()  # (browser pid, cookieStoreId) of folded container sections; (pid, None) a folded browser
+        self.collapsed = set()  # (browser pid, cookieStoreId) of folded container sections; (pid, None) a folded browser; (pid, "/0/2") a folded bookmarks folder
         self.hidden = False
         self._last = None  # what the last render showed, to skip identical ones
         self._accent = None
@@ -385,6 +387,9 @@ class DockView:
         if focus is None and len(self.sources) == 1:
             focus = self.sources[0][1]
         self._focus = focus
+        for gone in [c for c in self._bookmarks if c not in self._names]:  # a browser that left: forget its bookmarks
+            del self._bookmarks[gone]
+        self._asked &= set(self._names)
         if len(self.sources) == 1:
             conn, info, _state = self.sources[0]
             self.browser_name.set_text(self._name(conn, info))
@@ -396,7 +401,9 @@ class DockView:
             self._current_source = None
         # only the strip and the header wear it: no rebuild
         self._set_accent(accent(focus, self._colours) if focus else self._colours["other"])
-        snapshot = (self.sources, frozenset(self.collapsed), mode, tuple(choices))
+        listed = self.sources if self._view == "tabs" else [  # bookmarks do not change with the tabs
+            (c, i, (focused_window(s) or {}).get("id")) for c, i, s in self.sources]
+        snapshot = (listed, frozenset(self.collapsed), mode, tuple(choices))
         if snapshot != self._last:
             self._last = snapshot
             self._set_chips(mode, choices)
@@ -492,8 +499,11 @@ class DockView:
         self._warned_monitor = False
         self.set_pinned(self.cfg["pinned"])  # syncs the button, autohide and strut in one place
         self.icons_btn.set_active(self.cfg["icons"])  # (the toggle handler redraws when it changed)
+        was = self._view
         self._set_views()
         self._last = None
+        if self._view != was and self.sources:
+            self._rebuild()
         self._place()  # side, width or monitor may have changed too
         colours = accents(self.cfg.get("theme"))
         if colours != self._colours:  # new [theme] colours: the next show() rebuilds the rows in them
@@ -657,7 +667,7 @@ class DockView:
 
     def _bookmark_source(self):
         """(conn, hello, state) whose bookmarks the Bookmarks view shows, or None when there is no such view."""
-        source = self._keyboard_source()
+        source = self._keyboard_source() if len(self.sources) == 1 else None  # one browser's bookmarks, never a mix
         return source if source and self.cfg["bookmarks"] and supports(source[1], "bookmarks") else None
 
     def _set_views(self):
@@ -675,14 +685,22 @@ class DockView:
         if source is None or view == self._view:
             return
         self._view = view
+        self._scroll_top = True
         if view == "bookmarks":
-            self._command(source[0], {"type": "get_bookmarks"})  # fresh each time: the panel keeps no copy in sync
+            self._ask_bookmarks(source[0])  # fresh each time: the panel keeps no copy in sync
         self._set_views()
         self._last = None
         self._rebuild()
 
+    def _ask_bookmarks(self, conn):
+        self._asked.add(conn)
+        self._command(conn, {"type": "get_bookmarks"})
+
     def show_bookmarks(self, conn, msg):
         """The extension's answer to get_bookmarks (or its news that the permission was just granted)."""
+        if not self.cfg["bookmarks"]:
+            return  # granted in the browser, but not switched on here: nothing is kept
+        self._asked.discard(conn)
         self._bookmarks[conn] = msg
         if self._view == "bookmarks":
             self._last = None
@@ -694,11 +712,16 @@ class DockView:
         browser = info.get("browserPid") or info.get("browser")
         msg = self._bookmarks.get(conn)
         if msg is None:
+            if conn not in self._asked:  # the browser changed under the view, or the panel restarted
+                self._ask_bookmarks(conn)
             return [self._label("Loading bookmarks…", "sp-empty", wrap=True)]
+        if msg.get("error"):
+            return [self._label("The browser could not list its bookmarks", "sp-empty", wrap=True)]
         if not msg.get("granted"):
             text = "tabdock may not read bookmarks yet. Click here and tick “Allow tabdock to read bookmarks”."
             row = self._row(self._label(text, "sp-empty", wrap=True), "bookmark_help", None, None, conn, colour,
-                            lambda: self._command(conn, {"type": "open_options"}), draggable=False)
+                            lambda: (self._command(conn, {"type": "open_options"}), self._raise(conn)),
+                            draggable=False)
             return [row]
         window = focused_window(state)
         query = self._query
@@ -999,7 +1022,8 @@ class DockView:
 
     def _replace_rows(self, rows):
         adj = self.scroll.get_vadjustment()
-        value = adj.get_value()
+        value = 0 if self._scroll_top else adj.get_value()
+        self._scroll_top = False
         for child in self.list.get_children():
             self.list.remove(child)
         for row in rows:
@@ -1021,9 +1045,7 @@ class DockView:
         self._first_bookmark = None
         source = self._bookmark_source()
         if self._view == "bookmarks" and source is not None:
-            rows = self._bookmark_list(*source)
-            self._row_order = [r for r in rows if r in self._meta]
-            self._replace_rows(rows)
+            self._replace_rows(self._bookmark_list(*source))
             return
         many = len(self.sources) > 1
         rows = []
