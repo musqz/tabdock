@@ -19,6 +19,9 @@ class ConsoleView:
     def show_bookmarks(self, conn, msg):
         pass
 
+    def show_history(self, conn, msg):
+        pass
+
     def find(self):
         pass
 

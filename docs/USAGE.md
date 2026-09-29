@@ -15,8 +15,9 @@
 - **Find a tab:** the 🔍 opens a small window beside the panel. Typing narrows the list to tabs whose title or
   address holds every word, across all workspaces. Enter opens the first match, Escape gives the list back.
 - **From the keyboard:** `tabdock --find` shows the panel and that window from any app (see Hotkey); the same
-  key closes it again. There: Down/Up highlight a tab, Page Down/Up move ten, Home/End jump, Enter opens it,
-  Escape closes. While nothing is typed, Left/Right switch workspace. Ctrl+Shift+T reopens the last closed tab.
+  key closes it again. There: Down/Up highlight a tab (a bookmark or visit in those views), Page Down/Up move ten,
+  Home/End jump, Enter opens it, Escape closes. Ctrl+1/2/3 (or the buttons at the top of the window)
+  search Tabs, Bookmarks or History, whichever are on. While nothing is typed, Left/Right switch view and Ctrl+Left/Right switch workspace. Ctrl+Shift+T reopens the last closed tab.
 - **Containers:** right-click a section to rename it, change colour or icon, make a new one, or remove it
   (asks first; its tabs close and Firefox deletes its cookies).
 - **Reorder:** drag sections, and tabs within their container. The order is kept per browser profile.
@@ -42,6 +43,7 @@
 | `icons` | `false` | site icons before titles (see Site icons); the header's `icons` button switches them for the session |
 | `badges` | `true` | badge for an unread count in a title, `"(3) Inbox"` |
 | `bookmarks` | `false` | Tabs / Bookmarks buttons at the bottom of the panel (see Bookmarks) |
+| `history` | `false` | a History view in the same buttons (see Bookmarks) |
 | `pinned` | `false` | start pinned |
 | `start_with_browser` | `true` | start the panel when a browser with the extension opens |
 
@@ -58,15 +60,16 @@ other = "#8f9bb3"     # any other browser, and the strip while none is connected
 
 Colours are `"#rrggbb"` or `"#rgb"`; on a dark accent the text turns white.
 
-**Bookmarks** are off by default. Turn them on:
+**Bookmarks and history** are off by default. Turn them on:
 
 1. Install the new extension (`docs/INSTALL.md`).
-2. `about:addons` → tabdock → *Preferences* → tick *Allow tabdock to read bookmarks*.
-3. Set `bookmarks = true` in the config and restart the panel.
+2. `about:addons` → tabdock → *Preferences* → tick *Allow tabdock to read bookmarks* and/or *history*.
+3. Set `bookmarks = true` and/or `history = true` in the config and restart the panel.
 
-*Tabs* and *Bookmarks* buttons appear at the bottom of the panel. Click a folder to fold it, a bookmark to open it in a
-new tab. Find searches the bookmarks while that view is up. Only `http(s)` bookmarks are listed. Bookmarks go to the
-panel on this computer only.
+*Tabs*, *Bookmarks* and *History* buttons appear at the bottom of the panel (with one browser listed). Click a
+folder to fold it, a bookmark or visit to open it in a new tab. Find searches the view that is up; in *History* it
+searches all of the browser's history, the list shows the newest 200. Only `http(s)` pages are listed. Nothing leaves
+your computer.
 
 **Site icons** are off by default. `data:` icons need no network; every other icon is downloaded by the **panel
 itself**, not the browser: from your own address and DNS, outside the browser's proxy, VPN, DoH and per-container

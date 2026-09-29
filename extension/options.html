@@ -3,6 +3,7 @@
 <title>Tabdock</title>
 <body>
 <h1>Tabdock</h1>
-<p><label><input type="checkbox" id="bookmarks"> Allow tabdock to read bookmarks</label></p>
-<p>Bookmarks go to the panel on this computer only. Set <code>bookmarks = true</code> in <code>~/.config/tabdock/config.toml</code> to show them.</p>
+<p><label><input type="checkbox" data-permission="bookmarks"> Allow tabdock to read bookmarks</label></p>
+<p><label><input type="checkbox" data-permission="history"> Allow tabdock to read history</label></p>
+<p>They go to the panel on this computer only. Set <code>bookmarks = true</code> or <code>history = true</code> in <code>~/.config/tabdock/config.toml</code> to show them.</p>
 <script src="options.js"></script>

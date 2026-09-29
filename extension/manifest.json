@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Tabdock",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Shows your tabs and containers in the tabdock desktop panel. Talks only to a local helper; nothing leaves your computer.",
   "icons": {
     "48": "icons/icon-48.png",
@@ -20,7 +20,7 @@
     }
   },
   "permissions": ["tabs", "cookies", "contextualIdentities", "nativeMessaging", "storage", "tabHide", "sessions", "tabGroups"],
-  "optional_permissions": ["bookmarks"],
+  "optional_permissions": ["bookmarks", "history"],
   "options_ui": { "page": "options.html", "open_in_tab": true },
   "background": {
     "scripts": ["background.js"],

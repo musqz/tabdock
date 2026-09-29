@@ -14,7 +14,7 @@ directions, with two additions: it sends `resync` to the extension whenever the 
 
 | type    | fields | notes |
 |---------|--------|-------|
-| `hello` | `browser`, `version`, `features`, `browserPid` (added by relay) | sent on every resync, before `state`. `browser` is what `getBrowserInfo()` reports, which is unreliable (Zen says "Firefox"), so the panel names the browser from `/proc/<browserPid>/exe` and only falls back to this. `features` lists what the extension handles beyond what every version did (`close_tab`, `pin_tab`, `containers`, `reopen_in_container`, `restore_tab`, `bookmarks`): the panel offers only those, so an older extension (no `features`) never gets a `✕` or a menu item that does nothing |
+| `hello` | `browser`, `version`, `features`, `browserPid` (added by relay) | sent on every resync, before `state`. `browser` is what `getBrowserInfo()` reports, which is unreliable (Zen says "Firefox"), so the panel names the browser from `/proc/<browserPid>/exe` and only falls back to this. `features` lists what the extension handles beyond what every version did (`close_tab`, `pin_tab`, `containers`, `reopen_in_container`, `restore_tab`, `bookmarks`, `history`): the panel offers only those, so an older extension (no `features`) never gets a `✕` or a menu item that does nothing |
 | `state` | `focusedWindowId`, `containerOrder[]`, `containers[]`, `groups[]`, `workspaces[]`, `windows[]` | full snapshot, debounced 50 ms after any change |
 
 `containers[]`: `{cookieStoreId, name, color, colorCode, icon}`.
@@ -49,6 +49,7 @@ offers no workspaces in Zen (it has its own) or from an older extension (no `wor
 | `activate_tab` | `tabId`, `windowId` | activates the tab and focuses its window |
 | `close_tab` | `tabId` | closes the tab (`tabs.remove`). With workspaces in use, when it is the only tab its window shows (every other one hidden), the window's workspace gets a new tab first, so Firefox does not close the window and the other workspaces' tabs with it (`browser.tabs.closeWindowWithLastTab`) |
 | `get_bookmarks` | (none) | the extension answers with `bookmarks`: `{granted: false}` while the optional `bookmarks` permission is not granted, else `{granted: true, tree}`, nodes `{title, children}` (folder) or `{title, url}` (`http(s)` only). It sends the same unasked when the permission is granted |
+| `search_history` | `query` | the extension answers with `history`: `{granted: false}` while the optional `history` permission is not granted, else `{granted: true, query, items}`, at most 200 `{title, url, lastVisitTime}` (`http(s)` only, newest first) for pages matching `query` (all when empty). It sends `history` with an empty `query` unasked when the permission is granted, and `{granted: false}` when it is removed; `error: true` means the browser could not list it |
 | `open_url` | `url` (`http(s)`), `windowId` | opens the page in a new tab of that window and focuses it |
 | `open_options` | (none) | opens the extension's options page (where the permission is granted) |
 | `restore_tab` | (none) | reopens the tab (or window) closed last, as Ctrl+Shift+T does (`sessions.restore()`): in its container, and back in its workspace, which the window then shows because the restored tab is the active one. Only an extension that lists `restore_tab` in its `features` gets it |

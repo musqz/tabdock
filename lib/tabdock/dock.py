@@ -16,6 +16,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime
 
 import gi
 
@@ -45,6 +46,7 @@ from .model import (  # noqa: E402
     supports,
     focused_window,
     bookmark_rows,
+    day_label,
     group_tabs,
     heir,
     matches,
@@ -116,6 +118,12 @@ button.sp-btn.sp-reopen:hover {{ color: #ffffff; }}
 """
 
 
+# The rows the find window's keys walk: the tabs, or the bookmarks or visits listed while one of those views is up.
+FIND_KINDS = ("tab", "bookmark", "history")
+
+# Ctrl + one of these switches the view the find window searches: Tabs, Bookmarks, History.
+FIND_VIEW_KEYS = {Gdk.KEY_1: "tabs", Gdk.KEY_2: "bookmarks", Gdk.KEY_3: "history"}
+
 # The keys of the find window that walk the tab rows: (rows to step, from nothing). Home and End step from
 # nothing, which lands on the first or the last row.
 FIND_KEYS = {
@@ -131,7 +139,7 @@ FIND_KEYS = {
 CARET_MODS = Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK
 # Ctrl+Shift+T reopens the closed tab, as in the browser (Super may still be down from the hotkey).
 RESTORE_MODS = Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK
-# The keys that switch workspace (workspaces to step), while the find window's entry is empty.
+# The keys that switch view, or with Ctrl workspace (steps), while the find window's entry is empty.
 WORKSPACE_KEYS = {Gdk.KEY_Left: -1, Gdk.KEY_Right: 1, Gdk.KEY_KP_Left: -1, Gdk.KEY_KP_Right: 1}
 
 
@@ -235,11 +243,11 @@ class DockView:
         self._chip_buttons = []  # (key, button)
         self._ws_buttons = []  # (conn, workspace id or None for "+", button) of the rows built last
         self._close_buttons = []  # (tab id, its ✕ button) of the rows built last
-        self._view = "tabs"  # "tabs" or "bookmarks" (only while cfg["bookmarks"] is on and the extension can)
-        self._bookmarks = {}  # conn -> the extension's last "bookmarks" message
-        self._asked = set()  # conns get_bookmarks was sent to and no answer came back yet
+        self._view = "tabs"  # "tabs", "bookmarks" or "history" (those two only while cfg[view] is on and the extension can)
+        self._lists = {}  # (view, conn) -> the extension's last "bookmarks" or "history" message
+        self._asked = set()  # (view, conn) asked for and not answered yet
         self._scroll_top = False  # the next list starts at the top (a view was switched)
-        self._first_bookmark = None  # (conn, url, window id) of the first bookmark listed while finding
+        self._first_url = None  # (conn, url, window) of the first bookmark or visit listed while finding
         self._query = ""  # what the find window has typed: only the tabs that match are listed, from every workspace
         self._first_match = None  # (conn, tab id, window id) of the first tab listed while finding
         self._ghost = None  # the tab just closed from the panel: {conn, id, title, group, position, t}
@@ -333,7 +341,9 @@ class DockView:
         self.views = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.views.get_style_context().add_class("sp-views")
         self._view_buttons = []
-        for key, label in (("tabs", "Tabs"), ("bookmarks", "Bookmarks")):
+        self._find_view_buttons = []  # the same buttons in the find window, while it is up
+        self._find_switch = None  # the box holding them
+        for key, label in (("tabs", "Tabs"), ("bookmarks", "Bookmarks"), ("history", "History")):
             button = self._button(label, f"Show the {label.lower()}", Gtk.Button)
             button.get_style_context().add_class("sp-view")
             button.connect("clicked", lambda _b, key=key: self._set_view(key))
@@ -387,9 +397,9 @@ class DockView:
         if focus is None and len(self.sources) == 1:
             focus = self.sources[0][1]
         self._focus = focus
-        for gone in [c for c in self._bookmarks if c not in self._names]:  # a browser that left: forget its bookmarks
-            del self._bookmarks[gone]
-        self._asked &= set(self._names)
+        for gone in [k for k in self._lists if k[1] not in self._names]:  # a browser that left: forget its lists
+            del self._lists[gone]
+        self._asked = {k for k in self._asked if k[1] in self._names}
         if len(self.sources) == 1:
             conn, info, _state = self.sources[0]
             self.browser_name.set_text(self._name(conn, info))
@@ -417,6 +427,7 @@ class DockView:
         self._clear_ghost()  # (its timer would rebuild the list over the waiting text)
         self.sources = []
         self._names = {}
+        self._lists, self._asked = {}, set()
         self._last = None
         self._meta, self._row_order = {}, []
         self._ws_buttons = []
@@ -500,6 +511,7 @@ class DockView:
         self.set_pinned(self.cfg["pinned"])  # syncs the button, autohide and strut in one place
         self.icons_btn.set_active(self.cfg["icons"])  # (the toggle handler redraws when it changed)
         was = self._view
+        self._lists = {k: v for k, v in self._lists.items() if self.cfg[k[0]]}
         self._set_views()
         self._last = None
         if self._view != was and self.sources:
@@ -665,67 +677,94 @@ class DockView:
             (ctx.add_class if key == mode else ctx.remove_class)("selected")
         self.chips.set_visible(len(self._choices) > 1)
 
-    def _bookmark_source(self):
-        """(conn, hello, state) whose bookmarks the Bookmarks view shows, or None when there is no such view."""
-        source = self._keyboard_source() if len(self.sources) == 1 else None  # one browser's bookmarks, never a mix
-        return source if source and self.cfg["bookmarks"] and supports(source[1], "bookmarks") else None
+    def _view_source(self, view):
+        """(conn, hello, state) whose `view` ("bookmarks" or "history") is on offer, or None: the option is off, the
+        extension cannot, or several browsers are listed (one browser's list, never a mix)."""
+        source = self._keyboard_source() if len(self.sources) == 1 else None
+        return source if source and self.cfg[view] and supports(source[1], view) else None
 
     def _set_views(self):
-        """Show the Tabs / Bookmarks buttons only when Bookmarks is on; fall back to the tabs when it is not."""
-        available = self._bookmark_source() is not None
-        if not available:
+        """Show the Tabs / Bookmarks / History buttons for the views on offer; fall back to the tabs when the one up is not."""
+        offered = {view for view in ("bookmarks", "history") if self._view_source(view) is not None}
+        if self._view not in offered:
             self._view = "tabs"
-        self.views.set_visible(available)
-        for key, button in self._view_buttons:
+        self.views.set_visible(bool(offered))
+        if self._find_switch is not None:
+            self._find_switch.set_visible(bool(offered))
+        for key, button in (*self._view_buttons, *self._find_view_buttons):
+            button.set_visible(key == "tabs" or key in offered)
             ctx = button.get_style_context()
             (ctx.add_class if key == self._view else ctx.remove_class)("selected")
 
     def _set_view(self, view):
-        source = self._bookmark_source()
-        if source is None or view == self._view:
+        if view == self._view or (view != "tabs" and self._view_source(view) is None):
             return
         self._view = view
         self._scroll_top = True
-        if view == "bookmarks":
-            self._ask_bookmarks(source[0])  # fresh each time: the panel keeps no copy in sync
+        if view != "tabs":
+            conn = self._view_source(view)[0]
+            if view == "history":
+                self._lists.pop((view, conn), None)  # a list of another search must not show meanwhile
+            self._ask(view, conn)  # fresh each time: the panel keeps no copy in sync
         self._set_views()
         self._last = None
         self._rebuild()
 
-    def _ask_bookmarks(self, conn):
-        self._asked.add(conn)
-        self._command(conn, {"type": "get_bookmarks"})
+    def _ask(self, view, conn):
+        self._asked.add((view, conn))
+        if view == "bookmarks":
+            self._command(conn, {"type": "get_bookmarks"})
+        else:
+            self._command(conn, {"type": "search_history", "query": self._query.strip()})
+
+    def _got(self, view, conn, msg):
+        if not self.cfg[view]:
+            return  # granted in the browser, but not switched on here: nothing is kept
+        if view == "history" and msg.get("granted") and msg.get("query", "") != self._query.strip():
+            if not (self._lists.get((view, conn)) or {}).get("granted", True):
+                self._ask(view, conn)  # the permission was just granted: the news carries no search
+            return  # else the answer to a search typed since
+        self._asked.discard((view, conn))
+        self._lists[(view, conn)] = msg
+        if self._view == view:
+            self._last = None
+            self._rebuild()
 
     def show_bookmarks(self, conn, msg):
         """The extension's answer to get_bookmarks (or its news that the permission was just granted)."""
-        if not self.cfg["bookmarks"]:
-            return  # granted in the browser, but not switched on here: nothing is kept
-        self._asked.discard(conn)
-        self._bookmarks[conn] = msg
-        if self._view == "bookmarks":
-            self._last = None
-            self._rebuild()
+        self._got("bookmarks", conn, msg)
+
+    def show_history(self, conn, msg):
+        """The extension's answer to search_history (or its news that the permission was just granted)."""
+        self._got("history", conn, msg)
+
+    def _list_message(self, view, conn, colour):
+        """(msg, None) once the extension has answered with a list to show, else (None, the rows saying why not)."""
+        msg = self._lists.get((view, conn))
+        if msg is None:
+            if (view, conn) not in self._asked:  # the browser changed under the view, or the panel restarted
+                self._ask(view, conn)
+            return None, [self._label(f"Loading {view}…", "sp-empty", wrap=True)]
+        if msg.get("error"):
+            return None, [self._label(f"The browser could not list its {view}", "sp-empty", wrap=True)]
+        if not msg.get("granted"):
+            text = f"tabdock may not read {view} yet. Click here and tick “Allow tabdock to read {view}”."
+            row = self._row(self._label(text, "sp-empty", wrap=True), "view_help", None, None, conn, colour,
+                            lambda: (self._command(conn, {"type": "open_options"}), self._raise(conn)),
+                            draggable=False)
+            return None, [row]
+        return msg, None
 
     def _bookmark_list(self, conn, info, state):
         """The rows of the Bookmarks view for one browser."""
         colour = accent(info, self._colours)
         browser = info.get("browserPid") or info.get("browser")
-        msg = self._bookmarks.get(conn)
+        msg, rows = self._list_message("bookmarks", conn, colour)
         if msg is None:
-            if conn not in self._asked:  # the browser changed under the view, or the panel restarted
-                self._ask_bookmarks(conn)
-            return [self._label("Loading bookmarks…", "sp-empty", wrap=True)]
-        if msg.get("error"):
-            return [self._label("The browser could not list its bookmarks", "sp-empty", wrap=True)]
-        if not msg.get("granted"):
-            text = "tabdock may not read bookmarks yet. Click here and tick “Allow tabdock to read bookmarks”."
-            row = self._row(self._label(text, "sp-empty", wrap=True), "bookmark_help", None, None, conn, colour,
-                            lambda: (self._command(conn, {"type": "open_options"}), self._raise(conn)),
-                            draggable=False)
-            return [row]
+            return rows
         window = focused_window(state)
         query = self._query
-        folded = {key[1] for key in self.collapsed if key[0] == browser and isinstance(key[1], str)}
+        folded = {key[1] for key in self.collapsed if key[0] == browser}
         rows = []
         for depth, node, path in bookmark_rows(msg.get("tree", []), query, folded):
             if path is not None:
@@ -744,12 +783,45 @@ class DockView:
             box.get_style_context().add_class("sp-tabbox")
             box.set_margin_start(12 * depth)
             box.pack_start(label, True, True, 0)
-            rows.append(self._row(box, kind, node.get("url"), None, conn, colour, click, draggable=False))
-            if kind == "bookmark" and self._first_bookmark is None and query.strip():
-                self._first_bookmark = (conn, node["url"], window)
+            # (position, url): the same page in two folders is two rows, and the arrow keys tell them apart
+            rows.append(self._row(box, kind, (len(rows), node.get("url")), None, conn, colour, click, draggable=False))
+            if kind == "bookmark" and self._first_url is None and query.strip():
+                self._first_url = (conn, node["url"], window)
         if not rows:
             text = f"No bookmark matches “{query.strip()}”" if query.strip() else "No bookmarks"
             rows.append(self._label(text, "sp-empty", wrap=True))
+        return rows
+
+    def _history_list(self, conn, info, state):
+        """The rows of the History view for one browser: the newest visits, under a heading for each day."""
+        colour = accent(info, self._colours)
+        msg, rows = self._list_message("history", conn, colour)
+        if msg is None:
+            return rows
+        window = focused_window(state)
+        query = self._query.strip()
+        rows = []
+        day = None
+        for item in msg.get("items", []):
+            when = datetime.fromtimestamp(item.get("lastVisitTime", 0) / 1000)
+            if when.date() != day:
+                day = when.date()
+                heading = self._label(day_label(day, datetime.now().date()), "sp-section")
+                heading.get_style_context().add_class("sp-sectionbox")
+                rows.append(heading)
+            label = self._label(item["title"], "sp-tab")
+            label.set_tooltip_text(f'{item["title"]}\n{item["url"]}')
+            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            box.get_style_context().add_class("sp-tabbox")
+            box.pack_start(label, True, True, 0)
+            box.pack_end(self._label(when.strftime("%H:%M"), "sp-where"), False, False, 0)
+            url = item["url"]
+            rows.append(self._row(box, "history", url, None, conn, colour,
+                                  lambda url=url: self._open_url(conn, url, window), draggable=False))
+            if self._first_url is None and query and msg.get("query", "") == query:
+                self._first_url = (conn, url, window)
+        if not rows:
+            rows.append(self._label(f"No history matches “{query}”" if query else "No history", "sp-empty", wrap=True))
         return rows
 
     def _open_url(self, conn, url, window):
@@ -793,7 +865,7 @@ class DockView:
         box.get_style_context().add_class(acc_class(colour))
         if active:
             box.get_style_context().add_class("active")
-        if kind == "tab" and (conn, ident) == self._selected:
+        if kind in FIND_KINDS and (conn, ident) == self._selected:
             box.get_style_context().add_class("kbd")
         box.add(child)
         self._meta[box] = {
@@ -1042,10 +1114,10 @@ class DockView:
         self._close_buttons = []
         self._waiting = {}  # the old rows are about to go: only the rows built below wait for an icon
         self._first_match = None
-        self._first_bookmark = None
-        source = self._bookmark_source()
-        if self._view == "bookmarks" and source is not None:
-            self._replace_rows(self._bookmark_list(*source))
+        self._first_url = None
+        source = self._view_source(self._view) if self._view != "tabs" else None
+        if source is not None:
+            self._replace_rows((self._bookmark_list if self._view == "bookmarks" else self._history_list)(*source))
             return
         many = len(self.sources) > 1
         rows = []
@@ -1267,42 +1339,85 @@ class DockView:
 
     def _find(self):
         """The find window: what is typed there narrows the list at once, to the tabs whose title or address has
-        every word of it, from every workspace. Down and Up highlight a tab and Left and Right switch workspace (see
+        every word of it, from every workspace. Down and Up highlight a tab, Left and Right switch view and Ctrl+Left and Ctrl+Right workspace (see
         _on_find_key); Enter picks the highlighted tab, or the first one when none is (switching to its workspace),
         Escape gives the whole list back."""
+        previous = self._view
         entry = Gtk.Entry(placeholder_text="Title or address")
-        entry.set_width_chars(28)
+        entry.set_width_chars(36)
+        switch = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        buttons = []
+        for key, label in (("tabs", "Tabs"), ("bookmarks", "Bookmarks"), ("history", "History")):
+            button = self._button(label, f"{label}  (Ctrl+{'123'[len(buttons)]})", Gtk.Button)
+            button.get_style_context().add_class("sp-view")
+            button.connect("clicked", lambda _b, key=key: self._find_view(key))
+            switch.pack_start(button, False, False, 0)
+            buttons.append((key, button))
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        content.pack_start(switch, False, False, 0)
+        content.pack_start(entry, False, False, 0)
 
         def narrow(_entry):
             self._query = entry.get_text()
             self._last = None
-            self._rebuild()
+            source = self._view_source("history") if self._view == "history" else None
+            if source is not None:
+                self._first_url = None  # what was listed answers an older search
+                self._ask("history", source[0])  # the browser searches all of its history; the answer redraws
+            else:
+                self._rebuild()
 
         def answer(accepted):
-            box = next((b for b in self._tab_rows() if self._tab_key(b) == self._selected), None)
+            box = next((b for b in self._find_rows() if self._tab_key(b) == self._selected), None)
             pick = self._meta[box]["click"] if box is not None else None  # what a click on that row does
             first = self._first_match
-            first_bookmark = self._first_bookmark
+            first_url = self._first_url
+            self._find_switch, self._find_view_buttons = None, []
+            source = self._view_source("history") if self._view == "history" and self._query.strip() else None
+            if source is not None:
+                self._lists.pop(("history", source[0]), None)  # the answer to the search: _rebuild asks for the whole list
+                self._asked.discard(("history", source[0]))
             self._find_dialog = None
             self._ws_pending = None
             self._query = ""
             self._selected = None
             self._last = None
+            if self._view != previous:
+                self._set_view(previous)  # a find only changes what is searched, not the view the panel shows
             self._rebuild()
             if accepted and pick is not None:
                 pick()
             elif accepted and first is not None:
                 self.on_activate(*first)
-            elif accepted and first_bookmark is not None:
-                conn, url, window = first_bookmark
+            elif accepted and first_url is not None:
+                conn, url, window = first_url
                 self._open_url(conn, url, window)
 
-        finish, _ok = self._small_window("Find tab", entry, "Go", answer, focus=entry, beside=True)
+        finish, _ok = self._small_window("Find", content, "Go", answer, focus=entry, beside=True)
         self._find_dialog = self._dialog
+        self._find_switch, self._find_view_buttons = switch, buttons
+        self._set_views()  # hides the buttons of the views not on offer
         entry.connect("changed", narrow)
         entry.connect("activate", lambda _e: finish(True))
         entry.connect("key-press-event", self._on_find_key)
         self._dialog_entry = entry
+
+    def _step_view(self, step):
+        """Search the view `step` away (Tabs, Bookmarks, History: those on offer), stopping at the ends."""
+        order = [v for v in ("tabs", "bookmarks", "history") if v == "tabs" or self._view_source(v) is not None]
+        at = order.index(self._view) + step if self._view in order else -1
+        if 0 <= at < len(order):
+            self._find_view(order[at])
+
+    def _find_view(self, view):
+        """Search another view (its buttons in the find window, Ctrl+1/2/3); what is typed stays and filters it."""
+        if view == self._view or (view != "tabs" and self._view_source(view) is None):
+            return
+        self._selected = None
+        self._set_view(view)
+
+    def _find_rows(self):
+        return [b for b in self._row_order if self._meta[b]["kind"] in FIND_KINDS]
 
     def _tab_rows(self):
         return [b for b in self._row_order if self._meta[b]["kind"] == "tab"]
@@ -1314,8 +1429,8 @@ class DockView:
         """Down, Up, Page Down, Page Up, Home and End walk the tab rows while the find window has the keyboard.
         The arrows are always taken, even with nothing to walk: GTK would move the focus off the entry with them.
         Home and End stay the entry's caret keys when chorded (Shift+Home selects text) or when no tab is listed.
-        Left and Right switch workspace, but only while nothing is typed: they are the caret's after that, and the
-        list spans every workspace then anyway. Ctrl+Shift+T reopens the tab closed last, as in the browser, and
+        Left and Right switch view (Tabs, Bookmarks, History), Ctrl+Left and Ctrl+Right switch workspace, but only
+        while nothing is typed: they are the caret's after that, and the list spans every workspace then anyway. Ctrl+Shift+T reopens the tab closed last, as in the browser, and
         closes the window.
         The hotkey's Super may still be down, so it changes none of this, and Enter still picks."""
         if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and event.state & Gtk.accelerator_get_default_mod_mask():
@@ -1325,15 +1440,25 @@ class DockView:
             if self._restore_tab():
                 self._dialog_finish(False)  # the tab is back: the keyboard goes on to the browser
             return True
+        if event.keyval in FIND_VIEW_KEYS and event.state & CARET_MODS == Gdk.ModifierType.CONTROL_MASK:
+            self._find_view(FIND_VIEW_KEYS[event.keyval])
+            return True
         if event.keyval in WORKSPACE_KEYS:
             if entry.get_text().strip():  # (as _rebuild counts a query: blanks alone list nothing more)
                 return False
-            self._step_workspace(WORKSPACE_KEYS[event.keyval])
+            mods = event.state & CARET_MODS
+            if mods == Gdk.ModifierType.CONTROL_MASK:
+                if self._view == "tabs":  # elsewhere the list would not show the switch
+                    self._step_workspace(WORKSPACE_KEYS[event.keyval])
+            elif not mods:
+                self._step_view(WORKSPACE_KEYS[event.keyval])
+            else:
+                return False  # Shift and Alt chords are the caret's
             return True
         if event.keyval not in FIND_KEYS:
             return False
         step, from_nothing = FIND_KEYS[event.keyval]
-        rows = self._tab_rows()
+        rows = self._find_rows()
         if from_nothing and (not rows or event.state & CARET_MODS):
             return False
         if rows:

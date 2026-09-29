@@ -29,6 +29,7 @@ A newer extension adds features; an older one keeps working and the panel offers
 
 Permissions: `tabs`, `contextualIdentities` + `cookies` (containers), `nativeMessaging`, `storage` (container order,
 workspaces), `tabHide` (workspaces), `sessions` (remember workspaces), `tabGroups` (group names).
+Optional, ticked in the extension's preferences: `bookmarks`, `history` (the panel's Bookmarks and History views).
 Nothing leaves your computer.
 
 ## Update

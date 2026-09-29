@@ -81,7 +81,7 @@ def reopenable(tab):
 
 
 # What an extension may say it handles (`features` in its hello), beyond what every version did.
-FEATURES = ("close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab", "bookmarks")
+FEATURES = ("close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab", "bookmarks", "history")
 
 
 def supports(info, feature):
@@ -120,7 +120,7 @@ def matches(tab, query):
 
 def bookmark_rows(tree, query="", folded=()):
     """[(depth, node, path)] of the bookmark tree ({"title", "url"} or {"title", "children"} nodes) in display order.
-    `path` names a folder (its indexes joined with "/") for `folded`. With a query only the bookmarks that match
+    `path` names a folder (its ids joined with "/") for `folded`. With a query only the bookmarks that match
     are listed, flat: a search never hides a match inside a folded folder."""
     rows = []
     if query.strip():
@@ -136,7 +136,7 @@ def bookmark_rows(tree, query="", folded=()):
     def walk(nodes, depth, parent):
         for at, node in enumerate(nodes):
             if "children" in node:
-                path = f"{parent}/{at}"
+                path = f'{parent}/{node.get("id", at)}'  # the browser's id, so a moved folder keeps its fold
                 rows.append((depth, node, path))
                 if path not in folded:
                     walk(node["children"], depth + 1, path)
@@ -144,6 +144,15 @@ def bookmark_rows(tree, query="", folded=()):
                 rows.append((depth, node, None))
     walk(tree, 0, "")
     return rows
+
+
+def day_label(day, today):
+    """A date's heading in the history: Today, Yesterday, or the weekday and date."""
+    if day == today:
+        return "Today"
+    if (today - day).days == 1:
+        return "Yesterday"
+    return day.strftime("%a %d %b %Y")
 
 
 def group_tabs(state, every_workspace=False):

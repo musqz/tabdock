@@ -61,6 +61,8 @@ class Panel:
                 self._render()
         elif kind == "bookmarks" and conn in self.browsers:
             self.view.show_bookmarks(conn, msg)
+        elif kind == "history" and conn in self.browsers:
+            self.view.show_history(conn, msg)
         elif kind == "find":  # from `tabdock --find`, a key bound in the window manager
             self.view.find()
 

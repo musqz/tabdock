@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from tabdock.model import (  # noqa: E402
     bookmark_rows,
+    day_label,
     colour_name,
     edits_workspaces,
     format_state,
@@ -293,6 +294,17 @@ class ModelTest(unittest.TestCase):
         self.assertTrue(text.endswith(xpi.name))
 
 
+class DayLabelTest(unittest.TestCase):
+    def test_names_today_and_yesterday_and_dates_the_rest(self):
+        from datetime import date
+
+        today = date(2026, 9, 29)
+        self.assertEqual(day_label(today, today), "Today")
+        self.assertEqual(day_label(date(2026, 9, 28), today), "Yesterday")
+        older = date(2026, 9, 1)
+        self.assertEqual(day_label(older, today), older.strftime("%a %d %b %Y"))  # in the user's locale
+
+
 class BookmarkRowsTest(unittest.TestCase):
     TREE = [
         {"title": "Bar", "children": [
@@ -317,6 +329,11 @@ class BookmarkRowsTest(unittest.TestCase):
                 {"title": "Dev", "children": [{"title": "b", "url": "https://b"}]}]
         rows = bookmark_rows(tree, folded={"/0"})
         self.assertEqual([n["title"] for _d, n, _p in rows], ["Dev", "Dev", "b"])
+
+    def test_a_folder_is_folded_by_its_id_not_its_place(self):
+        tree = [{"id": "x", "title": "Dev", "children": [{"title": "a", "url": "https://a"}]}]
+        self.assertEqual(bookmark_rows(tree)[0][2], "/x")
+        self.assertEqual(len(bookmark_rows([{"id": "new", "title": "N", "children": []}, *tree], folded={"/x"})), 2)  # N and Dev; "a" stays hidden
 
     def test_a_query_lists_matches_flat_even_in_folded_folders(self):
         rows = bookmark_rows(self.TREE, "python", folded={"/0"})
