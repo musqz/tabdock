@@ -11,10 +11,10 @@ Needs `python-gobject` (GTK 3) and `python-xlib`.
 ./install.sh     # program -> ~/.local, browser manifest, "Tabdock" menu entry, a config
 ```
 
-Then install the signed `tabdock-*.xpi` from the [latest release](https://github.com/musqz/tabdock/releases/latest)
-in each browser: `about:addons` → gear → *Install Add-on From File…* (Firefox-based browsers keep only signed
-extensions). Download it with right-click → *Save Link As…*; clicking the link makes the browser try to install
-it directly, which can fail. `./install.sh --uninstall` removes exactly what it installed.
+Then save the signed `tabdock-*.xpi` from the [latest release](https://github.com/musqz/tabdock/releases/latest)
+(right-click → *Save Link As…*) and load it in each browser: `about:addons` → gear → *Install Add-on From File…*.
+
+`./install.sh --uninstall` removes what it installed.
 
 **Arch Linux:** `cd packaging && makepkg -si` installs the latest release system-wide; the extension is then
 `/usr/share/tabdock/tabdock.xpi`.
