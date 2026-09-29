@@ -570,7 +570,7 @@ async function resync() {
 function bookmarkNode(node) {
   if (node.type === "separator") return null;
   if (node.type === "folder") {
-    return { title: node.title || "", children: (node.children || []).map(bookmarkNode).filter(Boolean) };
+    return { id: node.id, title: node.title || "", children: (node.children || []).map(bookmarkNode).filter(Boolean) };
   }
   return /^https?:/i.test(node.url || "") ? { title: node.title || node.url, url: node.url } : null;
 }
@@ -585,7 +585,7 @@ async function sendBookmarks() {
     send({ type: "bookmarks", granted: true, tree: (root.children || []).map(bookmarkNode).filter(Boolean) });
   } catch (e) {
     console.error("tabdock: bookmarks failed", e);
-    send({ type: "bookmarks", granted: true, error: true });
+    send({ type: "bookmarks", granted: await browser.permissions.contains({ permissions: ["bookmarks"] }), error: true });
   }
 }
 
@@ -593,6 +593,7 @@ async function sendBookmarks() {
 // The newest visits, or the ones matching a search the panel typed (the browser searches all of its history).
 
 const HISTORY_MAX = 200;
+const LISTS = new Set(["get_bookmarks", "search_history"]);
 
 async function sendHistory(query) {
   if (!browser.history) {
@@ -607,7 +608,7 @@ async function sendHistory(query) {
     send({ type: "history", granted: true, query, items });
   } catch (e) {
     console.error("tabdock: history failed", e);
-    send({ type: "history", granted: true, error: true, query });
+    send({ type: "history", granted: await browser.permissions.contains({ permissions: ["history"] }), error: true, query });
   }
 }
 
@@ -714,7 +715,7 @@ async function onCommand(msg) {
         console.warn("tabdock: unknown command", msg.type);
     }
   } catch (e) {
-    console.error("tabdock: command failed", msg, e);
+    console.error("tabdock: command failed", msg.type, e); // not msg: it may hold a search or a URL
   }
 }
 
@@ -732,7 +733,9 @@ function connect() {
     scheduleReconnect();
     return;
   }
-  port.onMessage.addListener((msg) => serial(() => onCommand(msg)));
+  // a list of bookmarks or a search of the history does not touch the workspace bookkeeping: it must not queue behind
+  // (or hold up) the snapshots, one search per keystroke
+  port.onMessage.addListener((msg) => (LISTS.has(msg.type) ? onCommand(msg) : serial(() => onCommand(msg))));
   port.onDisconnect.addListener((p) => {
     console.warn("tabdock: relay disconnected", p.error && p.error.message);
     port = null;

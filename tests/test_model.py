@@ -330,6 +330,11 @@ class BookmarkRowsTest(unittest.TestCase):
         rows = bookmark_rows(tree, folded={"/0"})
         self.assertEqual([n["title"] for _d, n, _p in rows], ["Dev", "Dev", "b"])
 
+    def test_a_folder_is_folded_by_its_id_not_its_place(self):
+        tree = [{"id": "x", "title": "Dev", "children": [{"title": "a", "url": "https://a"}]}]
+        self.assertEqual(bookmark_rows(tree)[0][2], "/x")
+        self.assertEqual(len(bookmark_rows([{"id": "new", "title": "N", "children": []}, *tree], folded={"/x"})), 2)  # N and Dev; "a" stays hidden
+
     def test_a_query_lists_matches_flat_even_in_folded_folders(self):
         rows = bookmark_rows(self.TREE, "python", folded={"/0"})
         self.assertEqual([(d, n["title"], p) for d, n, p in rows], [(0, "Python docs", None)])

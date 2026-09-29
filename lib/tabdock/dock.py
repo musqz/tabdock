@@ -419,6 +419,7 @@ class DockView:
         self._clear_ghost()  # (its timer would rebuild the list over the waiting text)
         self.sources = []
         self._names = {}
+        self._lists, self._asked = {}, set()
         self._last = None
         self._meta, self._row_order = {}, []
         self._ws_buttons = []
@@ -502,6 +503,7 @@ class DockView:
         self.set_pinned(self.cfg["pinned"])  # syncs the button, autohide and strut in one place
         self.icons_btn.set_active(self.cfg["icons"])  # (the toggle handler redraws when it changed)
         was = self._view
+        self._lists = {k: v for k, v in self._lists.items() if self.cfg[k[0]]}
         self._set_views()
         self._last = None
         if self._view != was and self.sources:
@@ -706,7 +708,9 @@ class DockView:
         if not self.cfg[view]:
             return  # granted in the browser, but not switched on here: nothing is kept
         if view == "history" and msg.get("granted") and msg.get("query", "") != self._query.strip():
-            return  # the answer to a search typed since
+            if not (self._lists.get((view, conn)) or {}).get("granted", True):
+                self._ask(view, conn)  # the permission was just granted: the news carries no search
+            return  # else the answer to a search typed since
         self._asked.discard((view, conn))
         self._lists[(view, conn)] = msg
         if self._view == view:
@@ -747,7 +751,7 @@ class DockView:
             return rows
         window = focused_window(state)
         query = self._query
-        folded = {key[1] for key in self.collapsed if key[0] == browser and isinstance(key[1], str)}
+        folded = {key[1] for key in self.collapsed if key[0] == browser}
         rows = []
         for depth, node, path in bookmark_rows(msg.get("tree", []), query, folded):
             if path is not None:
@@ -800,7 +804,7 @@ class DockView:
             url = item["url"]
             rows.append(self._row(box, "history", url, None, conn, colour,
                                   lambda url=url: self._open_url(conn, url, window), draggable=False))
-            if self._first_url is None and query:
+            if self._first_url is None and query and msg.get("query", "") == query:
                 self._first_url = (conn, url, window)
         if not rows:
             rows.append(self._label(f"No history matches “{query}”" if query else "No history", "sp-empty", wrap=True))
@@ -1332,6 +1336,7 @@ class DockView:
             self._last = None
             source = self._view_source("history") if self._view == "history" else None
             if source is not None:
+                self._first_url = None  # what was listed answers an older search
                 self._ask("history", source[0])  # the browser searches all of its history; the answer redraws
             else:
                 self._rebuild()
@@ -1341,15 +1346,16 @@ class DockView:
             pick = self._meta[box]["click"] if box is not None else None  # what a click on that row does
             first = self._first_match
             first_url = self._first_url
-            source = self._view_source("history") if self._view == "history" else None
+            source = self._view_source("history") if self._view == "history" and self._query.strip() else None
+            if source is not None:
+                self._lists.pop(("history", source[0]), None)  # the answer to the search: _rebuild asks for the whole list
+                self._asked.discard(("history", source[0]))
             self._find_dialog = None
             self._ws_pending = None
             self._query = ""
             self._selected = None
             self._last = None
             self._rebuild()
-            if source is not None:
-                self._ask("history", source[0])  # the whole list again
             if accepted and pick is not None:
                 pick()
             elif accepted and first is not None:

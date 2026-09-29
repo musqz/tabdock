@@ -120,7 +120,7 @@ def matches(tab, query):
 
 def bookmark_rows(tree, query="", folded=()):
     """[(depth, node, path)] of the bookmark tree ({"title", "url"} or {"title", "children"} nodes) in display order.
-    `path` names a folder (its indexes joined with "/") for `folded`. With a query only the bookmarks that match
+    `path` names a folder (its ids joined with "/") for `folded`. With a query only the bookmarks that match
     are listed, flat: a search never hides a match inside a folded folder."""
     rows = []
     if query.strip():
@@ -136,7 +136,7 @@ def bookmark_rows(tree, query="", folded=()):
     def walk(nodes, depth, parent):
         for at, node in enumerate(nodes):
             if "children" in node:
-                path = f"{parent}/{at}"
+                path = f'{parent}/{node.get("id", at)}'  # the browser's id, so a moved folder keeps its fold
                 rows.append((depth, node, path))
                 if path not in folded:
                     walk(node["children"], depth + 1, path)

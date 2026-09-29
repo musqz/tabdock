@@ -204,6 +204,27 @@ class DockViewTest(unittest.TestCase):
         view.show_history(conn, {"type": "history", "granted": True, "query": "ar", "items": []})
         self.assertIn("Loading", self.row_texts(view)[0])
 
+    def test_history_enter_never_opens_the_answer_to_an_older_search(self):
+        view, conn = self.history_view()
+        view._set_view("history")
+        view._query = "a"
+        item = {"title": "A", "url": "https://a.example", "lastVisitTime": 1}
+        view.show_history(conn, {"type": "history", "granted": True, "query": "a", "items": [item]})
+        self.assertEqual(view._first_url[1], "https://a.example")
+        view._query = "ar"  # typed since: what is listed answers "a"
+        view._first_url = None
+        view._rebuild()
+        self.assertIsNone(view._first_url)
+
+    def test_history_granted_while_a_search_is_typed_asks_again(self):
+        view, conn = self.history_view()
+        view._set_view("history")
+        view.show_history(conn, {"type": "history", "granted": False})
+        view._query = "abc"
+        self.commands.clear()
+        view.show_history(conn, {"type": "history", "granted": True, "query": "", "items": []})
+        self.assertEqual(self.commands, [{"type": "search_history", "query": "abc"}])
+
     def test_history_is_not_kept_while_the_option_is_off(self):
         view, conn = self.bookmark_view()  # history stays off
         view.show_history(conn, {"type": "history", "granted": True, "query": "", "items": []})
