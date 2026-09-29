@@ -47,6 +47,8 @@ class ConfigTest(unittest.TestCase):
         self.assertIs(config.validate({"icons": True})["icons"], True)
         self.assertIs(config.DEFAULTS["bookmarks"], False)  # reads bookmarks: never without being asked
         self.assertIs(config.validate({"bookmarks": True})["bookmarks"], True)
+        self.assertIs(config.DEFAULTS["history"], False)  # reads the browsing history: never without being asked
+        self.assertIs(config.validate({"history": True})["history"], True)
         self.assertIs(config.DEFAULTS["badges"], True)  # reads only the title the browser already reports
         self.assertIs(config.validate({"badges": False})["badges"], False)
 
@@ -58,6 +60,7 @@ class ConfigTest(unittest.TestCase):
             {"icons": "yes"},
             {"icons": 1},
             {"bookmarks": "yes"},
+            {"history": 1},
             {"badges": "yes"},
             {"badges": 1},
             {"width": 50},
