@@ -162,9 +162,12 @@ class InstallScriptTest(unittest.TestCase):
         self.assertIn('The command is "tabdock" now', out)
         self.assertIn("This version has a new extension", out)
 
+    def test_an_upgrade_from_0_5_0_says_to_install_the_new_extension(self):
+        self.assertIn("This version has a new extension", self.upgrade("0.5.0-1"))
+
     def test_a_reinstall_or_a_later_upgrade_says_nothing(self):
-        self.assertEqual(self.upgrade("0.5.0-1"), "")
-        self.assertEqual(self.upgrade("0.5.1-1"), "")
+        self.assertEqual(self.upgrade("0.6.0-1"), "")
+        self.assertEqual(self.upgrade("0.6.1-1"), "")
 
 
 if __name__ == "__main__":

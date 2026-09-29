@@ -1,11 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
+Install the new signed extension in each browser (`docs/INSTALL.md`). It adds the optional permissions `bookmarks`
+and `history`; nothing is readable until you switch one on in `about:addons` → Tabdock → *Permissions and data*.
+
+- Add a Bookmarks view (`bookmarks = true`) and a History view (`history = true`), both off by default. *Tabs*,
+  *Bookmarks* and *History* buttons show at the bottom of the panel.
+- Bookmark folders start closed. A bookmark search lists at most 200 matches.
+- Find searches the view that is up; in History it searches all of the history and lists the newest 200.
+- In Find, Ctrl+1/2/3 or Left/Right switch view, and Ctrl+Left/Right switch workspace.
+- In Find, Down/Up also walk bookmarks, folders and visits; Enter opens or closes a folder.
+- The find window is wider and titled *Find*.
 - Replace `docs/RELEASE.md` with a shorter `docs/INSTALL.md`, and trim the other docs.
-- Add an opt-in Bookmarks view (`bookmarks = true`); it needs the new extension and its permission ticked in the extension's options.
-- Add an opt-in History view (`history = true`); it needs the extension's history permission ticked in its options.
-- After a package upgrade from before 0.5.0, pacman says to install the new extension again.
+- After a package upgrade from before 0.6.0, pacman says to install the new extension again.
 
 ## 0.5.0
 
