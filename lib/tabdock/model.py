@@ -81,7 +81,7 @@ def reopenable(tab):
 
 
 # What an extension may say it handles (`features` in its hello), beyond what every version did.
-FEATURES = ("close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab", "bookmarks")
+FEATURES = ("close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab", "bookmarks", "history")
 
 
 def supports(info, feature):
@@ -144,6 +144,15 @@ def bookmark_rows(tree, query="", folded=()):
                 rows.append((depth, node, None))
     walk(tree, 0, "")
     return rows
+
+
+def day_label(day, today):
+    """A date's heading in the history: Today, Yesterday, or the weekday and date."""
+    if day == today:
+        return "Today"
+    if (today - day).days == 1:
+        return "Yesterday"
+    return day.strftime("%a %d %b %Y")
 
 
 def group_tabs(state, every_workspace=False):

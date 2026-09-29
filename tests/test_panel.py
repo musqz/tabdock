@@ -43,6 +43,9 @@ class FakeView:
     def show_bookmarks(self, conn, msg):
         self.calls.append(("bookmarks", conn, msg))
 
+    def show_history(self, conn, msg):
+        self.calls.append(("history", conn, msg))
+
     def reconfigure(self, cfg):
         self.calls.append(("reconfigure",))
 
@@ -113,6 +116,12 @@ class PanelTest(unittest.TestCase):
         self.panel.on_message(self.zen, msg)
         self.panel.on_message(FakeConn(), msg)  # never said hello
         self.assertEqual(self.view.calls, [("bookmarks", self.zen, msg)])
+
+    def test_history_goes_to_the_view_only_from_a_known_browser(self):
+        msg = {"type": "history", "granted": True, "query": "", "items": []}
+        self.panel.on_message(self.zen, msg)
+        self.panel.on_message(FakeConn(), msg)
+        self.assertEqual(self.view.calls, [("history", self.zen, msg)])
 
     def test_follows_the_active_browser_window(self):
         self.panel.follow(ZEN_XID)

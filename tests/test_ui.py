@@ -173,6 +173,42 @@ class DockViewTest(unittest.TestCase):
         click(view.list.get_children()[0])  # folds the folder
         self.assertEqual(len(view.list.get_children()), 1)
 
+    def history_view(self):
+        view = self.make(history=True)
+        conn = object()
+        view.show([(conn, {**INFO, "features": [*INFO["features"], "history"]}, STATE)])
+        return view, conn
+
+    def test_history_lists_visits_by_day_and_opens_one(self):
+        import time
+
+        view, conn = self.history_view()
+        self.assertTrue(view.views.get_visible())
+        self.assertEqual([k for k, b in view._view_buttons if b.get_visible()], ["tabs", "history"])
+        view._set_view("history")
+        self.assertEqual(self.commands, [{"type": "search_history", "query": ""}])
+        now = int(time.time() * 1000)
+        items = [{"title": "Arch wiki", "url": "https://wiki.archlinux.org", "lastVisitTime": now}]
+        view.show_history(conn, {"type": "history", "granted": True, "query": "", "items": items})
+        texts = self.row_texts(view)
+        self.assertEqual(texts[0], "Today")
+        self.assertEqual(texts[1], "Arch wiki")
+        click(view.list.get_children()[1])
+        self.assertEqual(self.commands[-1]["url"], "https://wiki.archlinux.org")
+        self.assertEqual(self.raised, [conn])
+
+    def test_history_ignores_the_answer_to_an_older_search(self):
+        view, conn = self.history_view()
+        view._set_view("history")
+        view._query = "arch"
+        view.show_history(conn, {"type": "history", "granted": True, "query": "ar", "items": []})
+        self.assertIn("Loading", self.row_texts(view)[0])
+
+    def test_history_is_not_kept_while_the_option_is_off(self):
+        view, conn = self.bookmark_view()  # history stays off
+        view.show_history(conn, {"type": "history", "granted": True, "query": "", "items": []})
+        self.assertEqual(view._lists, {})
+
     def test_bookmarks_without_the_permission_lead_to_the_options(self):
         view, conn = self.bookmark_view()
         view._set_view("bookmarks")

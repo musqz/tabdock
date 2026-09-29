@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from tabdock.model import (  # noqa: E402
     bookmark_rows,
+    day_label,
     colour_name,
     edits_workspaces,
     format_state,
@@ -291,6 +292,17 @@ class ModelTest(unittest.TestCase):
         self.assertTrue(text.startswith("Waiting for a browser with the Tabdock extension"))
         self.assertIn("about:addons", text)
         self.assertTrue(text.endswith(xpi.name))
+
+
+class DayLabelTest(unittest.TestCase):
+    def test_names_today_and_yesterday_and_dates_the_rest(self):
+        from datetime import date
+
+        today = date(2026, 9, 29)
+        self.assertEqual(day_label(today, today), "Today")
+        self.assertEqual(day_label(date(2026, 9, 28), today), "Yesterday")
+        older = date(2026, 9, 1)
+        self.assertEqual(day_label(older, today), older.strftime("%a %d %b %Y"))  # in the user's locale
 
 
 class BookmarkRowsTest(unittest.TestCase):

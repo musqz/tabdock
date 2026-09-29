@@ -10,7 +10,7 @@ const HOST = "openbox_sidepanel";
 const RECONNECT_MS = 3000; // only needed if the relay process itself died
 const DEBOUNCE_MS = 50;
 // What this extension does beyond what every version did, told to the panel in "hello": it offers only those.
-const FEATURES = ["close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab", "bookmarks"];
+const FEATURES = ["close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab", "bookmarks", "history"];
 
 let port = null;
 let panelUp = false; // relay has a panel connected (set by resync, cleared by panel_disconnected)
@@ -589,6 +589,28 @@ async function sendBookmarks() {
   }
 }
 
+// -- history --------------------------------------------------------------------------------------
+// The newest visits, or the ones matching a search the panel typed (the browser searches all of its history).
+
+const HISTORY_MAX = 200;
+
+async function sendHistory(query) {
+  if (!browser.history) {
+    send({ type: "history", granted: false });
+    return;
+  }
+  try {
+    const found = await browser.history.search({ text: query, startTime: 0, maxResults: HISTORY_MAX });
+    const items = found
+      .filter((i) => /^https?:/i.test(i.url || ""))
+      .map((i) => ({ title: i.title || i.url, url: i.url, lastVisitTime: i.lastVisitTime }));
+    send({ type: "history", granted: true, query, items });
+  } catch (e) {
+    console.error("tabdock: history failed", e);
+    send({ type: "history", granted: true, error: true, query });
+  }
+}
+
 async function onCommand(msg) {
   try {
     switch (msg.type) {
@@ -606,6 +628,9 @@ async function onCommand(msg) {
         break;
       case "get_bookmarks":
         await sendBookmarks();
+        break;
+      case "search_history":
+        await sendHistory(typeof msg.query === "string" ? msg.query : "");
         break;
       case "open_options":
         await browser.runtime.openOptionsPage();
@@ -759,9 +784,11 @@ if (browser.tabGroups) {
 }
 browser.permissions.onAdded.addListener((p) => {
   if (p.permissions.includes("bookmarks") && panelUp) sendBookmarks();
+  if (p.permissions.includes("history") && panelUp) sendHistory("");
 });
 browser.permissions.onRemoved.addListener((p) => {
   if (p.permissions.includes("bookmarks") && panelUp) send({ type: "bookmarks", granted: false });
+  if (p.permissions.includes("history") && panelUp) send({ type: "history", granted: false });
 });
 browser.commands.onCommand.addListener((name) => track(() => onShortcut(name)));
 

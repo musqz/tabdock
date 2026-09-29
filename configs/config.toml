@@ -51,6 +51,10 @@ badges = true
 # (about:addons -> tabdock -> Preferences). Bookmarks go to the panel on this computer only.
 bookmarks = false
 
+# A History view under the tabs, the same way: the newest visits under a heading for each day, and Find
+# searches all of the browser's history. Off by default. Needs "Allow tabdock to read history" in the extension's options.
+history = false
+
 # Start the panel when a browser with the extension opens and no panel is running (a browser start
 # is enough, no autostart needed). A panel you quit with the X button is not restarted until the next
 # browser start. false = only start it yourself (app menu, autostart line, keybinding).
