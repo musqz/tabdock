@@ -36,6 +36,8 @@ The extension can be find
 /usr/share/tabdock/tabdock.xpi
 ```
 
+**Note:** After the first browser restart the extension may be gone. Install the `.xpi` a second time in that browser; it then stays.
+
 ## Docs
 
 - [docs/INSTALL.md](docs/INSTALL.md) — install, extension, starting the panel, troubleshooting
