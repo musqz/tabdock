@@ -118,8 +118,9 @@ button.sp-btn.sp-reopen:hover {{ color: #ffffff; }}
 """
 
 
-# The rows the find window's keys walk: the tabs, or the bookmarks or visits listed while one of those views is up.
-FIND_KINDS = ("tab", "bookmark", "history")
+# The rows the find window's keys walk: the tabs, or the bookmark folders and bookmarks or the visits listed while
+# one of those views is up.
+FIND_KINDS = ("tab", "bookmark", "bookmark_folder", "history")
 
 # Ctrl + one of these switches the view the find window searches: Tabs, Bookmarks, History.
 FIND_VIEW_KEYS = {Gdk.KEY_1: "tabs", Gdk.KEY_2: "bookmarks", Gdk.KEY_3: "history"}
@@ -1411,7 +1412,7 @@ class DockView:
         self._find_switch, self._find_view_buttons = switch, buttons
         self._set_views()  # hides the buttons of the views not on offer
         entry.connect("changed", narrow)
-        entry.connect("activate", lambda _e: finish(True))
+        entry.connect("activate", lambda _e: self._find_accept())
         entry.connect("key-press-event", self._on_find_key)
         self._dialog_entry = entry
 
@@ -1421,6 +1422,15 @@ class DockView:
         at = order.index(self._view) + step if self._view in order else -1
         if 0 <= at < len(order):
             self._find_view(order[at])
+
+    def _find_accept(self):
+        """Enter in the find window: on a highlighted bookmark folder it opens or closes the folder and the window
+        stays; anything else is picked and the window closes."""
+        box = next((b for b in self._find_rows() if self._tab_key(b) == self._selected), None)
+        if box is not None and self._meta[box]["kind"] == "bookmark_folder":
+            self._meta[box]["click"]()  # the list is rebuilt, and the same row is highlighted again
+        else:
+            self._dialog_finish(True)
 
     def _find_view(self, view):
         """Search another view (its buttons in the find window, Ctrl+1/2/3); what is typed stays and filters it."""
@@ -1447,7 +1457,7 @@ class DockView:
         closes the window.
         The hotkey's Super may still be down, so it changes none of this, and Enter still picks."""
         if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and event.state & Gtk.accelerator_get_default_mod_mask():
-            self._dialog_finish(True)  # (the entry's own "activate" needs every modifier up)
+            self._find_accept()  # (the entry's own "activate" needs every modifier up)
             return True
         if event.keyval in (Gdk.KEY_t, Gdk.KEY_T) and event.state & CARET_MODS == RESTORE_MODS:
             if self._restore_tab():

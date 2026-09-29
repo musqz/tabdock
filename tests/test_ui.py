@@ -1708,6 +1708,24 @@ class DockViewTest(unittest.TestCase):
         self.key(view, Gdk.KEY_2, Gdk.ModifierType.CONTROL_MASK)
         self.assertEqual(view._view, "tabs")
 
+    def test_find_arrow_keys_reach_closed_bookmark_folders_and_enter_opens_them(self):
+        view, conn = self.bookmark_view()
+        view._set_view("bookmarks")
+        tree = [{"title": "Bar", "children": [{"title": "One", "url": "https://one.example"}]},
+                {"title": "Loose", "url": "https://loose.example"}]
+        view.show_bookmarks(conn, {"type": "bookmarks", "granted": True, "tree": tree})
+        view.find_btn.clicked()
+        self.key(view, Gdk.KEY_Down)
+        self.assertEqual(self.highlighted(view), [(0, None)])  # the closed folder
+        view._dialog_entry.emit("activate")  # Enter
+        self.assertEqual(self.row_texts(view), ["▾ Bar", "One", "Loose"])
+        self.assertIsNotNone(view._dialog)  # the window stays
+        self.assertEqual(self.highlighted(view), [(0, None)])  # and the folder is still the highlighted one
+        self.key(view, Gdk.KEY_Down)
+        view._dialog_entry.emit("activate")
+        self.assertEqual(self.commands[-1]["url"], "https://one.example")
+        self.assertIsNone(view._dialog)  # a bookmark closes it
+
     def test_find_arrow_keys_pass_a_bookmark_saved_in_two_folders(self):
         view, conn = self.bookmark_view()
         view._set_view("bookmarks")
@@ -1717,7 +1735,7 @@ class DockViewTest(unittest.TestCase):
         view.opened = {(1, "/0"), (1, "/1")}  # (the browser's pid in INFO, the folder)
         view.show_bookmarks(conn, {"type": "bookmarks", "granted": True, "tree": tree})
         view.find_btn.clicked()
-        for _ in range(4):
+        for _ in range(5):  # A, Docs, B, Docs, Last
             self.key(view, Gdk.KEY_Down)
         self.assertEqual(self.highlighted(view), [(4, "https://last.example")])
         self.key(view, Gdk.KEY_Up)
