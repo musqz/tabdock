@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1
+
+Use this instead of 0.6.0: its tag missed the last two changes and it was never packaged. The extension is the
+one from 0.6.0 (only its version differs); install it as described there.
+
+- After a package upgrade from before 0.6.0, pacman says to install the new extension again.
+
 ## 0.6.0
 
 Install the new signed extension in each browser (`docs/INSTALL.md`). It adds the optional permissions `bookmarks`
@@ -13,7 +20,6 @@ and `history`; nothing is readable until you switch one on in `about:addons` →
 - In Find, Down/Up also walk bookmarks, folders and visits; Enter opens or closes a folder.
 - The find window is wider and titled *Find*.
 - Replace `docs/RELEASE.md` with a shorter `docs/INSTALL.md`, and trim the other docs.
-- After a package upgrade from before 0.6.0, pacman says to install the new extension again.
 
 ## 0.5.0
 
