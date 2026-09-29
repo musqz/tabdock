@@ -1655,6 +1655,37 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(self.highlighted(view), [])
         self.assertEqual(self.listed_tabs(view), order)
 
+    def test_find_arrow_keys_walk_bookmarks_and_enter_opens_the_highlighted_one(self):
+        view, conn = self.bookmark_view()
+        view._set_view("bookmarks")
+        tree = [{"title": "Python docs", "url": "https://docs.python.org"},
+                {"title": "Python wiki", "url": "https://wiki.python.org"}]
+        view.show_bookmarks(conn, {"type": "bookmarks", "granted": True, "tree": tree})
+        view.find_btn.clicked()
+        self.assertEqual(view._dialog.get_title(), "Find bookmark")
+        view._dialog_entry.set_text("python")
+        self.key(view, Gdk.KEY_Down)
+        self.key(view, Gdk.KEY_Down)
+        self.assertEqual(self.highlighted(view), [(1, "https://wiki.python.org")])
+        self.key(view, Gdk.KEY_Up)
+        self.key(view, Gdk.KEY_Down)
+        view._dialog_entry.emit("activate")
+        self.assertEqual(self.commands[-1]["url"], "https://wiki.python.org")
+
+    def test_find_arrow_keys_pass_a_bookmark_saved_in_two_folders(self):
+        view, conn = self.bookmark_view()
+        view._set_view("bookmarks")
+        page = {"title": "Docs", "url": "https://docs.python.org"}
+        tree = [{"title": "A", "children": [page]}, {"title": "B", "children": [page]},
+                {"title": "Last", "url": "https://last.example"}]
+        view.show_bookmarks(conn, {"type": "bookmarks", "granted": True, "tree": tree})
+        view.find_btn.clicked()
+        for _ in range(4):
+            self.key(view, Gdk.KEY_Down)
+        self.assertEqual(self.highlighted(view), [(4, "https://last.example")])
+        self.key(view, Gdk.KEY_Up)
+        self.assertEqual(len(self.highlighted(view)), 1)  # the second copy alone
+
     def test_find_highlight_stops_at_the_ends_and_pages_and_jumps(self):
         view = self.make()
         view.show([(object(), INFO, DRAG_STATE)])

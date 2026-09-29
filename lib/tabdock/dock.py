@@ -118,6 +118,9 @@ button.sp-btn.sp-reopen:hover {{ color: #ffffff; }}
 """
 
 
+# The rows the find window's keys walk: the tabs, or the bookmarks or visits listed while one of those views is up.
+FIND_KINDS = ("tab", "bookmark", "history")
+
 # The keys of the find window that walk the tab rows: (rows to step, from nothing). Home and End step from
 # nothing, which lands on the first or the last row.
 FIND_KEYS = {
@@ -770,7 +773,8 @@ class DockView:
             box.get_style_context().add_class("sp-tabbox")
             box.set_margin_start(12 * depth)
             box.pack_start(label, True, True, 0)
-            rows.append(self._row(box, kind, node.get("url"), None, conn, colour, click, draggable=False))
+            # (position, url): the same page in two folders is two rows, and the arrow keys tell them apart
+            rows.append(self._row(box, kind, (len(rows), node.get("url")), None, conn, colour, click, draggable=False))
             if kind == "bookmark" and self._first_url is None and query.strip():
                 self._first_url = (conn, node["url"], window)
         if not rows:
@@ -851,7 +855,7 @@ class DockView:
         box.get_style_context().add_class(acc_class(colour))
         if active:
             box.get_style_context().add_class("active")
-        if kind == "tab" and (conn, ident) == self._selected:
+        if kind in FIND_KINDS and (conn, ident) == self._selected:
             box.get_style_context().add_class("kbd")
         box.add(child)
         self._meta[box] = {
@@ -1342,7 +1346,7 @@ class DockView:
                 self._rebuild()
 
         def answer(accepted):
-            box = next((b for b in self._tab_rows() if self._tab_key(b) == self._selected), None)
+            box = next((b for b in self._find_rows() if self._tab_key(b) == self._selected), None)
             pick = self._meta[box]["click"] if box is not None else None  # what a click on that row does
             first = self._first_match
             first_url = self._first_url
@@ -1364,12 +1368,16 @@ class DockView:
                 conn, url, window = first_url
                 self._open_url(conn, url, window)
 
-        finish, _ok = self._small_window("Find tab", entry, "Go", answer, focus=entry, beside=True)
+        what = {"bookmarks": "bookmark", "history": "history"}.get(self._view, "tab")
+        finish, _ok = self._small_window(f"Find {what}", entry, "Go", answer, focus=entry, beside=True)
         self._find_dialog = self._dialog
         entry.connect("changed", narrow)
         entry.connect("activate", lambda _e: finish(True))
         entry.connect("key-press-event", self._on_find_key)
         self._dialog_entry = entry
+
+    def _find_rows(self):
+        return [b for b in self._row_order if self._meta[b]["kind"] in FIND_KINDS]
 
     def _tab_rows(self):
         return [b for b in self._row_order if self._meta[b]["kind"] == "tab"]
@@ -1400,7 +1408,7 @@ class DockView:
         if event.keyval not in FIND_KEYS:
             return False
         step, from_nothing = FIND_KEYS[event.keyval]
-        rows = self._tab_rows()
+        rows = self._find_rows()
         if from_nothing and (not rows or event.state & CARET_MODS):
             return False
         if rows:
