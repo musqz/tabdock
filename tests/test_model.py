@@ -6,6 +6,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from tabdock.model import (  # noqa: E402
+    BOOKMARK_MATCHES,
     bookmark_rows,
     day_label,
     colour_name,
@@ -314,31 +315,38 @@ class BookmarkRowsTest(unittest.TestCase):
         {"title": "Loose", "url": "https://example.org"},
     ]
 
-    def test_lists_folders_and_their_bookmarks_in_order(self):
+    def test_folders_start_closed(self):
         rows = bookmark_rows(self.TREE)
+        self.assertEqual([(d, n["title"], p) for d, n, p in rows], [(0, "Bar", "/0"), (0, "Loose", None)])
+
+    def test_an_opened_folder_lists_what_is_inside_in_order(self):
+        rows = bookmark_rows(self.TREE, opened={"/0", "/0/1"})
         self.assertEqual([(d, n["title"], p) for d, n, p in rows],
                          [(0, "Bar", "/0"), (1, "Arch wiki", None), (1, "Dev", "/0/1"),
                           (2, "Python docs", None), (0, "Loose", None)])
+        rows = bookmark_rows(self.TREE, opened={"/0"})
+        self.assertEqual([n["title"] for _d, n, _p in rows], ["Bar", "Arch wiki", "Dev", "Loose"])
 
-    def test_a_folded_folder_hides_what_is_inside(self):
-        rows = bookmark_rows(self.TREE, folded={"/0"})
-        self.assertEqual([n["title"] for _d, n, _p in rows], ["Bar", "Loose"])
-
-    def test_folders_with_the_same_title_fold_apart(self):
+    def test_folders_with_the_same_title_open_apart(self):
         tree = [{"title": "Dev", "children": [{"title": "a", "url": "https://a"}]},
                 {"title": "Dev", "children": [{"title": "b", "url": "https://b"}]}]
-        rows = bookmark_rows(tree, folded={"/0"})
+        rows = bookmark_rows(tree, opened={"/1"})
         self.assertEqual([n["title"] for _d, n, _p in rows], ["Dev", "Dev", "b"])
 
-    def test_a_folder_is_folded_by_its_id_not_its_place(self):
+    def test_a_folder_is_known_by_its_id_not_its_place(self):
         tree = [{"id": "x", "title": "Dev", "children": [{"title": "a", "url": "https://a"}]}]
         self.assertEqual(bookmark_rows(tree)[0][2], "/x")
-        self.assertEqual(len(bookmark_rows([{"id": "new", "title": "N", "children": []}, *tree], folded={"/x"})), 2)  # N and Dev; "a" stays hidden
+        moved = [{"id": "new", "title": "N", "children": []}, *tree]
+        self.assertEqual([n["title"] for _d, n, _p in bookmark_rows(moved, opened={"/x"})], ["N", "Dev", "a"])
 
-    def test_a_query_lists_matches_flat_even_in_folded_folders(self):
-        rows = bookmark_rows(self.TREE, "python", folded={"/0"})
+    def test_a_query_lists_matches_flat_even_in_closed_folders(self):
+        rows = bookmark_rows(self.TREE, "python")
         self.assertEqual([(d, n["title"], p) for d, n, p in rows], [(0, "Python docs", None)])
         self.assertEqual(bookmark_rows(self.TREE, "nothing like it"), [])
+
+    def test_a_query_lists_no_more_than_the_cap(self):
+        tree = [{"title": f"page {i}", "url": f"https://e.example/{i}"} for i in range(BOOKMARK_MATCHES + 50)]
+        self.assertEqual(len(bookmark_rows(tree, "page")), BOOKMARK_MATCHES)
 
 
 if __name__ == "__main__":
