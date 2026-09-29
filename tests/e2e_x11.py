@@ -448,7 +448,7 @@ def main():
         run("xdotool", "mousemove", str(find_btn["x"] + find_btn["w"] // 2), str(find_btn["y"] + find_btn["h"] // 2))
         time.sleep(0.3)
         run("xdotool", "click", "1")
-        wait_for(lambda: active_title() == "Find tab", "the find window, with the keyboard")
+        wait_for(lambda: active_title() == "Find", "the find window, with the keyboard")
         ff.received()
         run("xdotool", "type", "--delay", "30", "mail")
         def listed_tabs():
@@ -471,7 +471,7 @@ def main():
         def hotkey_find():
             done = subprocess.run([os.path.join(ROOT, "tabdock"), "--find"], env=panel_env, capture_output=True, text=True)
             assert done.returncode == 0, done.stderr
-            wait_for(lambda: active_title() == "Find tab", "the find window, with the keyboard")
+            wait_for(lambda: active_title() == "Find", "the find window, with the keyboard")
 
         def active_window():
             return int(run("xdotool", "getactivewindow").stdout)
@@ -498,7 +498,7 @@ def main():
         hotkey_find()
         done = subprocess.run([os.path.join(ROOT, "tabdock"), "--find"], env=panel_env)  # the same key again
         assert done.returncode == 0
-        wait_for(lambda: find("Find tab") is None, "the find window closed by the second --find")
+        wait_for(lambda: find("Find") is None, "the find window closed by the second --find")
         wait_for(lambda: active_window() == term_win, "the keyboard back where it was, again")
         assert not messages("activate_tab"), "closing the window opened a tab"
         ok("find key: Escape, and the same key again, close the window and give the keyboard back")
@@ -508,7 +508,7 @@ def main():
         hotkey_find()
         run("xdotool", "key", "ctrl+shift+t")
         assert messages("restore_tab") == [{"type": "restore_tab"}]
-        wait_for(lambda: find("Find tab") is None, "the find window closed by Ctrl+Shift+T")
+        wait_for(lambda: find("Find") is None, "the find window closed by Ctrl+Shift+T")
         wait_for(lambda: active_window() == ff_win, "the browser raised for the tab that came back")
         ok("find key: Ctrl+Shift+T asks the browser to reopen the closed tab, closes the window and raises the browser")
         collapse()
@@ -651,7 +651,7 @@ def main():
         assert received(ff, "switch_workspace") == [{"type": "switch_workspace", "windowId": 1, "workspaceId": "default"}]
         ok("workspaces: chips above the tabs, only the shown workspace's tabs listed, a click switches")
 
-        # the find key: Left and Right switch workspace while nothing is typed. A browser reports each switch in a
+        # the find key: Ctrl+Left and Ctrl+Right switch workspace while nothing is typed. A browser reports each switch in a
         # new state, so this plays it: the window shows Work (the last of two), then Default, then Work again
         def browser_shows(ws_id, tabs):
             window = ws_state["windows"][0]
@@ -659,22 +659,22 @@ def main():
             wait_for(lambda: count("tab") == tabs, f"the tabs of {ws_id} listed")
 
         hotkey_find()
-        run("xdotool", "key", "Left")
+        run("xdotool", "key", "ctrl+Left")
         assert received(ff, "switch_workspace") == [{"type": "switch_workspace", "windowId": 1, "workspaceId": "default"}]
         browser_shows("default", 1)
-        run("xdotool", "key", "Left")
+        run("xdotool", "key", "ctrl+Left")
         assert not received(ff, "switch_workspace"), "Left went past the first workspace"
-        run("xdotool", "key", "Right")
+        run("xdotool", "key", "ctrl+Right")
         assert received(ff, "switch_workspace") == [{"type": "switch_workspace", "windowId": 1, "workspaceId": "ws-1"}]
         browser_shows("ws-1", 3)
-        run("xdotool", "key", "Right")
+        run("xdotool", "key", "ctrl+Right")
         assert not received(ff, "switch_workspace"), "Right went past the last workspace"
         run("xdotool", "type", "--delay", "30", "a")
         run("xdotool", "key", "Left")
         assert not received(ff, "switch_workspace"), "Left switched workspace with text typed"
         run("xdotool", "key", "Escape")
-        wait_for(lambda: find("Find tab") is None, "the find window closed")
-        ok("find key: Left and Right switch workspace while the box is empty, and are the text cursor's once typed")
+        wait_for(lambda: find("Find") is None, "the find window closed")
+        ok("find key: Ctrl+Left and Ctrl+Right switch workspace while the box is empty; Left is the text cursor's once typed")
         expand()
 
         row = next(r for r in of_kind("tab") if r["id"] == 2)
