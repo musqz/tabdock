@@ -260,7 +260,8 @@ class DockView:
         self._menu = None  # the context menu up (kept referenced while it is shown)
         self._dialog = None  # the window asking for a workspace name, while it is up
         self._dialog_finish = None  # finish(accepted) of that window
-        self.collapsed = set()  # (browser pid, cookieStoreId) of folded container sections; (pid, None) a folded browser; (pid, "/0/2") a folded bookmarks folder
+        self.collapsed = set()  # (browser pid, cookieStoreId) of folded container sections; (pid, None) a folded browser
+        self.opened = set()  # (browser pid, "/3/0") of the bookmark folders opened: they all start closed
         self.hidden = False
         self._last = None  # what the last render showed, to skip identical ones
         self._accent = None
@@ -755,8 +756,23 @@ class DockView:
             return None, [row]
         return msg, None
 
+    def _list_row(self, conn, colour, kind, ident, label, click, indent=0, trailing=None):
+        """A row of a bookmarks or history list: `label`, an optional widget at the far end, and `indent` levels in."""
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.get_style_context().add_class("sp-tabbox")
+        box.set_margin_start(12 * indent)
+        box.pack_start(label, True, True, 0)
+        if trailing is not None:
+            box.pack_end(trailing, False, False, 0)
+        return self._row(box, kind, ident, None, conn, colour, click, draggable=False)
+
+    def _url_label(self, title, url):
+        label = self._label(title, "sp-tab")
+        label.set_tooltip_text(f"{title}\n{url}")
+        return label
+
     def _bookmark_list(self, conn, info, state):
-        """The rows of the Bookmarks view for one browser."""
+        """The rows of the Bookmarks view for one browser. Folders start closed: only what is opened gets built."""
         colour = accent(info, self._colours)
         browser = info.get("browserPid") or info.get("browser")
         msg, rows = self._list_message("bookmarks", conn, colour)
@@ -764,29 +780,22 @@ class DockView:
             return rows
         window = focused_window(state)
         query = self._query
-        folded = {key[1] for key in self.collapsed if key[0] == browser}
+        opened = {key[1] for key in self.opened if key[0] == browser}
         rows = []
-        for depth, node, path in bookmark_rows(msg.get("tree", []), query, folded):
+        for depth, node, path in bookmark_rows(msg.get("tree", []), query, opened):
+            # the ident is (position, url): the same page in two folders is two rows, and the arrow keys tell them apart
+            ident = (len(rows), node.get("url"))
             if path is not None:
-                arrow = "▸" if path in folded else "▾"
+                arrow = "▾" if path in opened else "▸"
                 label = self._label(f'{arrow} <b>{GLib.markup_escape_text(node["title"] or "folder")}</b>',
                                     "sp-tab", markup=True)
-                click = lambda key=(browser, path): self._toggle(key)
-                kind = "bookmark_folder"
+                rows.append(self._list_row(conn, colour, "bookmark_folder", ident, label,
+                                           lambda key=(browser, path): self._toggle_folder(key), depth))
             else:
-                label = self._label(node["title"], "sp-tab")
-                label.set_tooltip_text(f'{node["title"]}\n{node["url"]}')
                 url = node["url"]
-                click = lambda url=url: self._open_url(conn, url, window)
-                kind = "bookmark"
-            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            box.get_style_context().add_class("sp-tabbox")
-            box.set_margin_start(12 * depth)
-            box.pack_start(label, True, True, 0)
-            # (position, url): the same page in two folders is two rows, and the arrow keys tell them apart
-            rows.append(self._row(box, kind, (len(rows), node.get("url")), None, conn, colour, click, draggable=False))
-            if kind == "bookmark" and self._first_url is None and query.strip():
-                self._first_url = (conn, node["url"], window)
+                rows.append(self._list_row(conn, colour, "bookmark", ident, self._url_label(node["title"], url),
+                                           lambda url=url: self._open_url(conn, url, window), depth))
+                self._note_first(conn, url, window, True)
         if not rows:
             text = f"No bookmark matches “{query.strip()}”" if query.strip() else "No bookmarks"
             rows.append(self._label(text, "sp-empty", wrap=True))
@@ -809,20 +818,24 @@ class DockView:
                 heading = self._label(day_label(day, datetime.now().date()), "sp-section")
                 heading.get_style_context().add_class("sp-sectionbox")
                 rows.append(heading)
-            label = self._label(item["title"], "sp-tab")
-            label.set_tooltip_text(f'{item["title"]}\n{item["url"]}')
-            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            box.get_style_context().add_class("sp-tabbox")
-            box.pack_start(label, True, True, 0)
-            box.pack_end(self._label(when.strftime("%H:%M"), "sp-where"), False, False, 0)
             url = item["url"]
-            rows.append(self._row(box, "history", url, None, conn, colour,
-                                  lambda url=url: self._open_url(conn, url, window), draggable=False))
-            if self._first_url is None and query and msg.get("query", "") == query:
-                self._first_url = (conn, url, window)
+            rows.append(self._list_row(conn, colour, "history", url, self._url_label(item["title"], url),
+                                       lambda url=url: self._open_url(conn, url, window),
+                                       trailing=self._label(when.strftime("%H:%M"), "sp-where")))
+            self._note_first(conn, url, window, msg.get("query", "") == query)  # not an answer to an older search
         if not rows:
             rows.append(self._label(f"No history matches “{query}”" if query else "No history", "sp-empty", wrap=True))
         return rows
+
+    def _note_first(self, conn, url, window, current):
+        """The first bookmark or visit listed while finding is what Enter opens when none is highlighted."""
+        if self._first_url is None and self._query.strip() and current:
+            self._first_url = (conn, url, window)
+
+    def _toggle_folder(self, key):
+        self.opened ^= {key}
+        self._last = None
+        self._rebuild()
 
     def _open_url(self, conn, url, window):
         self._command(conn, {"type": "open_url", "url": url, "windowId": window["id"] if window else None})

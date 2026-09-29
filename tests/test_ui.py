@@ -165,12 +165,14 @@ class DockViewTest(unittest.TestCase):
         self.assertIn("Loading", self.row_texts(view)[0])
         tree = [{"title": "Bar", "children": [{"title": "Arch wiki", "url": "https://wiki.archlinux.org"}]}]
         view.show_bookmarks(conn, {"type": "bookmarks", "granted": True, "tree": tree})
+        self.assertEqual(self.row_texts(view), ["▸ Bar"])  # folders start closed
+        click(view.list.get_children()[0])
         self.assertEqual(self.row_texts(view), ["▾ Bar", "Arch wiki"])
         click(view.list.get_children()[1])
         self.assertEqual(self.commands[-1]["type"], "open_url")
         self.assertEqual(self.commands[-1]["url"], "https://wiki.archlinux.org")
         self.assertEqual(self.raised, [conn])
-        click(view.list.get_children()[0])  # folds the folder
+        click(view.list.get_children()[0])  # closes the folder
         self.assertEqual(len(view.list.get_children()), 1)
 
     def history_view(self):
@@ -1712,6 +1714,7 @@ class DockViewTest(unittest.TestCase):
         page = {"title": "Docs", "url": "https://docs.python.org"}
         tree = [{"title": "A", "children": [page]}, {"title": "B", "children": [page]},
                 {"title": "Last", "url": "https://last.example"}]
+        view.opened = {(1, "/0"), (1, "/1")}  # (the browser's pid in INFO, the folder)
         view.show_bookmarks(conn, {"type": "bookmarks", "granted": True, "tree": tree})
         view.find_btn.clicked()
         for _ in range(4):

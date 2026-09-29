@@ -67,7 +67,7 @@ Colours are `"#rrggbb"` or `"#rgb"`; on a dark accent the text turns white.
 3. Set `bookmarks = true` and/or `history = true` in the config and restart the panel.
 
 *Tabs*, *Bookmarks* and *History* buttons appear at the bottom of the panel (with one browser listed). Click a
-folder to fold it, a bookmark or visit to open it in a new tab. Find searches the view that is up; in *History* it
+folder to open or close it (they start closed), a bookmark or visit to open it in a new tab. Find searches the view that is up; in *History* it
 searches all of the browser's history, the list shows the newest 200. Only `http(s)` pages are listed. Nothing leaves
 your computer.
 

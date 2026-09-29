@@ -118,27 +118,32 @@ def matches(tab, query):
     return all(word in text for word in query.casefold().split())
 
 
-def bookmark_rows(tree, query="", folded=()):
+BOOKMARK_MATCHES = 200  # what a search lists at most, as many as the history view
+
+
+def bookmark_rows(tree, query="", opened=()):
     """[(depth, node, path)] of the bookmark tree ({"title", "url"} or {"title", "children"} nodes) in display order.
-    `path` names a folder (its ids joined with "/") for `folded`. With a query only the bookmarks that match
-    are listed, flat: a search never hides a match inside a folded folder."""
+    Folders start closed: only those whose `path` (their ids joined with "/") is in `opened` list what is inside.
+    With a query only the bookmarks that match are listed, flat, folders or not (BOOKMARK_MATCHES at most)."""
     rows = []
     if query.strip():
-        def walk(nodes):
+        def find(nodes):
             for node in nodes:
+                if len(rows) >= BOOKMARK_MATCHES:
+                    return
                 if "children" in node:
-                    walk(node["children"])
+                    find(node["children"])
                 elif matches(node, query):
                     rows.append((0, node, None))
-        walk(tree)
+        find(tree)
         return rows
 
     def walk(nodes, depth, parent):
         for at, node in enumerate(nodes):
             if "children" in node:
-                path = f'{parent}/{node.get("id", at)}'  # the browser's id, so a moved folder keeps its fold
+                path = f'{parent}/{node.get("id", at)}'  # the browser's id, so a moved folder keeps its state
                 rows.append((depth, node, path))
-                if path not in folded:
+                if path in opened:
                     walk(node["children"], depth + 1, path)
             else:
                 rows.append((depth, node, None))
