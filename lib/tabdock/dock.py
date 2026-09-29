@@ -139,7 +139,7 @@ FIND_KEYS = {
 CARET_MODS = Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK
 # Ctrl+Shift+T reopens the closed tab, as in the browser (Super may still be down from the hotkey).
 RESTORE_MODS = Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK
-# The keys that switch workspace (workspaces to step), while the find window's entry is empty.
+# The keys that switch view, or with Ctrl workspace (steps), while the find window's entry is empty.
 WORKSPACE_KEYS = {Gdk.KEY_Left: -1, Gdk.KEY_Right: 1, Gdk.KEY_KP_Left: -1, Gdk.KEY_KP_Right: 1}
 
 
@@ -1339,7 +1339,7 @@ class DockView:
 
     def _find(self):
         """The find window: what is typed there narrows the list at once, to the tabs whose title or address has
-        every word of it, from every workspace. Down and Up highlight a tab and Left and Right switch workspace (see
+        every word of it, from every workspace. Down and Up highlight a tab, Left and Right switch view and Ctrl+Left and Ctrl+Right workspace (see
         _on_find_key); Enter picks the highlighted tab, or the first one when none is (switching to its workspace),
         Escape gives the whole list back."""
         previous = self._view
@@ -1402,6 +1402,13 @@ class DockView:
         entry.connect("key-press-event", self._on_find_key)
         self._dialog_entry = entry
 
+    def _step_view(self, step):
+        """Search the view `step` away (Tabs, Bookmarks, History: those on offer), stopping at the ends."""
+        order = [v for v in ("tabs", "bookmarks", "history") if v == "tabs" or self._view_source(v) is not None]
+        at = order.index(self._view) + step if self._view in order else -1
+        if 0 <= at < len(order):
+            self._find_view(order[at])
+
     def _find_view(self, view):
         """Search another view (its buttons in the find window, Ctrl+1/2/3); what is typed stays and filters it."""
         if view == self._view or (view != "tabs" and self._view_source(view) is None):
@@ -1422,8 +1429,8 @@ class DockView:
         """Down, Up, Page Down, Page Up, Home and End walk the tab rows while the find window has the keyboard.
         The arrows are always taken, even with nothing to walk: GTK would move the focus off the entry with them.
         Home and End stay the entry's caret keys when chorded (Shift+Home selects text) or when no tab is listed.
-        Left and Right switch workspace, but only while nothing is typed: they are the caret's after that, and the
-        list spans every workspace then anyway. Ctrl+Shift+T reopens the tab closed last, as in the browser, and
+        Left and Right switch view (Tabs, Bookmarks, History), Ctrl+Left and Ctrl+Right switch workspace, but only
+        while nothing is typed: they are the caret's after that, and the list spans every workspace then anyway. Ctrl+Shift+T reopens the tab closed last, as in the browser, and
         closes the window.
         The hotkey's Super may still be down, so it changes none of this, and Enter still picks."""
         if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and event.state & Gtk.accelerator_get_default_mod_mask():
@@ -1439,7 +1446,14 @@ class DockView:
         if event.keyval in WORKSPACE_KEYS:
             if entry.get_text().strip():  # (as _rebuild counts a query: blanks alone list nothing more)
                 return False
-            self._step_workspace(WORKSPACE_KEYS[event.keyval])
+            mods = event.state & CARET_MODS
+            if mods == Gdk.ModifierType.CONTROL_MASK:
+                if self._view == "tabs":  # elsewhere the list would not show the switch
+                    self._step_workspace(WORKSPACE_KEYS[event.keyval])
+            elif not mods:
+                self._step_view(WORKSPACE_KEYS[event.keyval])
+            else:
+                return False  # Shift and Alt chords are the caret's
             return True
         if event.keyval not in FIND_KEYS:
             return False
