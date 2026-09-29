@@ -47,12 +47,12 @@ icons = false
 badges = true
 
 # A Bookmarks view under the tabs (Tabs / Bookmarks buttons at the bottom of the panel). Off by default.
-# Also tick "Allow tabdock to read bookmarks" in the tabdock extension's options in each browser
-# (about:addons -> tabdock -> Preferences). Bookmarks go to the panel on this computer only.
+# Also switch on the optional "bookmarks" permission in each browser
+# (about:addons -> Tabdock -> Permissions and data). Bookmarks go to the panel on this computer only.
 bookmarks = false
 
 # A History view under the tabs, the same way: the newest visits under a heading for each day, and Find
-# searches all of the browser's history. Off by default. Needs "Allow tabdock to read history" in the extension's options.
+# searches all of the browser's history. Off by default. Needs the optional "history" permission, switched on the same way.
 history = false
 
 # Start the panel when a browser with the extension opens and no panel is running (a browser start

@@ -63,7 +63,7 @@ Colours are `"#rrggbb"` or `"#rgb"`; on a dark accent the text turns white.
 **Bookmarks and history** are off by default. Turn them on:
 
 1. Install the new extension (`docs/INSTALL.md`).
-2. `about:addons` → tabdock → *Preferences* → tick *Allow tabdock to read bookmarks* and/or *history*.
+2. `about:addons` → Tabdock → *Permissions and data* → switch on *bookmarks* and/or *history* under *Optional*.
 3. Set `bookmarks = true` and/or `history = true` in the config and restart the panel.
 
 *Tabs*, *Bookmarks* and *History* buttons appear at the bottom of the panel (with one browser listed). Click a
