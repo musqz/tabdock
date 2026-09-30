@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from tabdock import config, launch  # noqa: E402
 from tabdock.autohide import Autohide  # noqa: E402
-from tabdock.geometry import TRIGGER_PX, dock_rect, outer_monitor, strut  # noqa: E402
+from tabdock.geometry import TRIGGER_PX, clamp_width, dock_rect, outer_monitor, strut  # noqa: E402
 from tabdock.model import (  # noqa: E402
     accent,
     accents,
@@ -159,6 +159,29 @@ class ConfigTest(unittest.TestCase):
             config.set_theme_colour("zen", "#9d7cd8", path3)
             self.assertEqual(config.load(path3)["theme"], {"zen": "#9d7cd8"})
 
+    def test_set_width_edits_one_line(self):
+        cases = (  # (file before, or None for no file; after)
+            ('side = "right"\nwidth = 320\n', 'side = "right"\nwidth = 400\n'),
+            ('# width = 320\nside = "right"\n', 'width = 400\nside = "right"\n'),
+            ('# width = 200\nwidth = 320\n', '# width = 200\nwidth = 400\n'),
+            ('# note\n[theme]\nfirefox = "#111111"\n', 'width = 400\n# note\n[theme]\nfirefox = "#111111"\n'),
+            ('[theme] # colours\nfirefox = "#111111"\n', 'width = 400\n[theme] # colours\nfirefox = "#111111"\n'),
+            ('side = "right"\n\n[theme]\n# width = 1\n', 'width = 400\nside = "right"\n\n[theme]\n# width = 1\n'),
+            ("", "width = 400\n"),
+            (None, "width = 400\n"),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            for i, (before, after) in enumerate(cases):
+                path = os.path.join(tmp, f"d{i}", "c.toml")  # the directory does not exist either
+                if before is not None:
+                    os.makedirs(os.path.dirname(path))
+                    with open(path, "w") as f:
+                        f.write(before)
+                config.set_width(400, path)
+                with open(path) as f:
+                    self.assertEqual(f.read(), after)
+                self.assertEqual(config.load(path)["width"], 400)
+
     def test_an_option_written_below_theme_says_where_it_belongs(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "c.toml")
@@ -200,6 +223,12 @@ class GeometryTest(unittest.TestCase):
         self.assertEqual(dock_rect(self.HDMI, "left", 320, False), (0, 0, TRIGGER_PX, 1440))
         self.assertEqual(dock_rect(self.DP, "right", 320, True), (4160, 180, 320, 1080))
         self.assertEqual(dock_rect(self.DP, "right", 320, False), (4480 - TRIGGER_PX, 180, TRIGGER_PX, 1080))
+
+    def test_clamp_width(self):
+        self.assertEqual(clamp_width(50, 1920), 100)
+        self.assertEqual(clamp_width(500, 1920), 500)
+        self.assertEqual(clamp_width(5000, 4000), 1000)
+        self.assertEqual(clamp_width(900, 1280), 640)  # at most half the monitor
 
     def test_strut_on_outer_edges(self):
         self.assertEqual(strut(self.HDMI, self.SCREEN_W, "left", 320), [320, 0, 0, 0, 0, 1439, 0, 0, 0, 0, 0, 0])

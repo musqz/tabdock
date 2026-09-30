@@ -111,6 +111,36 @@ def set_theme_colour(key, value, path=None):
     os.replace(path + ".tmp", path)
 
 
+_WIDTH_RE = re.compile(r"^[ \t]*width[ \t]*=.*$", re.MULTILINE)
+_WIDTH_EXAMPLE_RE = re.compile(r"^[ \t]*#[ \t]*width[ \t]*=.*$", re.MULTILINE)
+_TABLE_RE = re.compile(r"^\[", re.MULTILINE)
+
+
+def set_width(value, path=None):
+    """Sets `width = N` in the config file on disk (uncommenting or adding the line if needed), leaving every
+    other line -- comments included -- untouched."""
+    path = path or config_path()
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except FileNotFoundError:
+        text = ""
+    new_line = f"width = {value}"
+    table = _TABLE_RE.search(text)  # a width below a [table] header would belong to that table
+    top, rest = (text[: table.start()], text[table.start() :]) if table else (text, "")
+    for pattern in (_WIDTH_RE, _WIDTH_EXAMPLE_RE):  # an active line wins over a commented example
+        if pattern.search(top):
+            top = pattern.sub(new_line, top, count=1)
+            break
+    else:
+        top = f"{new_line}\n{top}"
+    text = top + rest
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(path + ".tmp", path)
+
+
 def load(path=None):
     """Defaults overlaid with config_path() (if present)."""
     try:
