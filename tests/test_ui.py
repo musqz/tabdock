@@ -1674,6 +1674,7 @@ class DockViewTest(unittest.TestCase):
         view._dialog_entry.emit("activate")  # Enter
         self.assertEqual(view.collapsed, {(INFO.get("browserPid") or INFO["browser"], None)})
         self.assertIsNotNone(view._dialog)  # the window stays
+        view.on_choose = lambda key: (self.chosen.append(key), view._rebuild())  # as the panel does
         self.key(view, Gdk.KEY_a, Gdk.ModifierType.CONTROL_MASK)
         self.assertEqual(self.chosen, ["all", "auto"])
         self.assertEqual(self.raised, [ff])

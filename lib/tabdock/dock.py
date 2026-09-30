@@ -1263,7 +1263,7 @@ class DockView:
         )
         row = self._row(
             self._label(markup, "sp-bandlabel", markup=True), "browser", None, None, conn, colour,
-            lambda: self._toggle(key), draggable=False, findable=self._mode == "all",
+            lambda: self._toggle(key), draggable=False, findable=self._mode == "all" and not self._query.strip(),
         )
         row.get_style_context().add_class("sp-bhead")
         return row
@@ -1505,8 +1505,8 @@ class DockView:
             self._find_view(order[at])
 
     def _find_accept(self):
-        """Enter in the find window: on a highlighted bookmark folder it opens or closes the folder and the window
-        or a browser header folds or unfolds it and the window stays; anything else is picked and the window closes."""
+        """Enter in the find window: on a highlighted bookmark folder it opens or closes the folder, and on a browser
+        header it folds or unfolds the browser; the window stays either way. Anything else is picked and the window closes."""
         box = self._highlighted()
         if box is not None and self._meta[box]["kind"] in ("bookmark_folder", "browser"):
             self._meta[box]["click"]()  # the list is rebuilt, and the same row is highlighted again
@@ -1545,7 +1545,7 @@ class DockView:
                 self._dialog_finish(False)  # the tab is back: the keyboard goes on to the browser
             return True
         lower = Gdk.keyval_to_lower(event.keyval)
-        if lower == Gdk.KEY_a and event.state & CARET_MODS == Gdk.ModifierType.CONTROL_MASK:
+        if lower == Gdk.KEY_a and event.state & CARET_MODS == Gdk.ModifierType.CONTROL_MASK and len(self._choices) > 1:
             self._toggle_all()
             return True
         if event.state & CARET_MODS == Gdk.ModifierType.CONTROL_MASK and (lower in FIND_ACTIONS or lower in FIND_ROW_ACTIONS):
@@ -1599,15 +1599,14 @@ class DockView:
     def _toggle_all(self):
         """Ctrl+A: between "all" (the arrows also stop on the browser headers) and "auto". Leaving "all" from a
         highlighted row makes its browser the one in use, and the keyboard goes on to it."""
-        if len(self._choices) < 2:
-            return
         if self._mode != "all":
             self._choose("all")
             return
         box = self._highlighted()
+        conn = box and self._meta[box]["conn"]  # (choosing rebuilds the rows)
         self._choose("auto")
-        if box is not None:
-            self._raise(self._meta[box]["conn"])
+        if conn is not None:
+            self._raise(conn)
             self._dialog_finish(False)
 
     def _highlighted(self):
