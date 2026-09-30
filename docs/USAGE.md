@@ -31,7 +31,7 @@
 - **Reorder:** drag sections, and tabs within their container. The order is kept per browser profile.
 - **Several browsers:** chips under the header pick `auto` (browser in use), one browser, or `all`.
   Clicking a tab of another browser raises it.
-- **Tab groups:** a tab in a Firefox tab group shows the group's name in its colour.
+- **Tab groups:** each Firefox tab group gets a pill in its colour above its tabs, with its name and tab count. Click it to fold the group (in the panel only); a group Firefox has collapsed starts folded. In a search the tab shows the group's name instead.
 - **Pin** keeps the panel open and reserves space on an outer screen edge (an inner edge becomes an overlay).
   `⇄` flips the side, `✕` quits until the next browser start. The panel never takes keyboard focus.
 

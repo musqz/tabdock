@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Head each Firefox tab group with a coloured pill that folds its tabs; Enter folds it in Find.
+
 ## 0.8.0
 
 The extension only changes its version number; installing the new one is optional.
