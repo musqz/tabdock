@@ -1753,6 +1753,15 @@ class DockViewTest(unittest.TestCase):
         view._dialog_entry.emit("activate")
         self.assertEqual(self.commands, [{"type": "new_workspace", "windowId": 2, "name": "Deep work"}])
         self.assertEqual(self.command_conns, [conn])
+        self.assertEqual(self.raised, [conn])
+
+    def test_new_workspace_key_makes_nothing_when_the_name_window_is_cancelled(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        view.new_workspace()
+        self.assertEqual(view._dialog.get_title(), "New workspace")
+        view._dialog_finish(False)
+        self.assertEqual(self.commands, [])
 
     def test_find_delete_ctrl_k_and_ctrl_t_act_on_the_highlighted_tab(self):
         ctrl = Gdk.ModifierType.CONTROL_MASK
