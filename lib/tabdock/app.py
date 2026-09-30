@@ -29,7 +29,8 @@ from .ui import ConsoleView  # noqa: E402
 
 EDITS = {"wsicon": "icon", "wscolor": "color", "wscontainer": "cookieStoreId"}  # --debug verb -> what it sets
 # `tabdock --pin` and the like: the message the panel takes -> the view's method
-DOCK_MESSAGES = {"pin": "toggle_pin", "icons": "toggle_icons", "side": "flip_side", "new_workspace": "new_workspace"}
+DOCK_MESSAGES = {"pin": "toggle_pin", "icons": "toggle_icons", "side": "flip_side", "new_workspace": "new_workspace",
+                "next": "nav_next", "prev": "nav_prev", "open": "nav_open", "all": "toggle_all"}
 CONTAINER_VERBS = {"cnew": None, "crm": None, "crename": "name", "ccolor": "color", "cicon": "icon"}
 
 
@@ -315,6 +316,7 @@ def _send(kind):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
+        allow_abbrev=False,
         prog="tabdock",
         description="Autohiding X11 side panel with the tabs and containers of Firefox-family browsers.",
         epilog=_help_files(),
@@ -338,6 +340,10 @@ def main(argv=None):
         ("icons", "show or hide the site icons"),
         ("side", "switch the panel to the other screen edge"),
         ("new_workspace", "make a new workspace in the browser in use"),
+        ("next", "highlight the next row (bind it to a key in your window manager)"),
+        ("prev", "highlight the previous row"),
+        ("open", "open the highlighted tab, or fold or unfold the highlighted browser"),
+        ("all", "switch between auto and all browsers"),
     ):
         parser.add_argument(f"--{flag.replace('_', '-')}", dest=flag, action="store_true",
                             help=f"tell the running panel to {what}")

@@ -116,6 +116,10 @@ tabdock grabs no key. Bind `tabdock --find` in your window manager. In Openbox, 
 
 The same toggles work without Find: `tabdock --pin`, `--icons`, `--side` and `--new-workspace`.
 
+The keyboard also works without Find. Bind `tabdock --next`, `--prev`, `--open` and `--all` the same way (for
+example `W-Down`, `W-Up`, `W-Return`, `W-a`). They highlight a row (a 1px border), open it or fold the highlighted
+browser, and switch `auto`/`all` (leaving `all` from a highlighted row raises that browser). The panel stays open 5 s after the last key.
+
 `W-` is Super, `A-` Alt, `C-` Ctrl, `S-` Shift; `xev` prints key names. The panel must be running.
 
 ### Multiple monitors
