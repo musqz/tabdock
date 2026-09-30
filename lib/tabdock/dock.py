@@ -25,7 +25,7 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("GdkX11", "3.0")
 from gi.repository import Gdk, GdkX11, GLib, Gtk, Pango  # noqa: E402,F401
 
-from . import config, favicons, geometry  # noqa: E402
+from . import config, favicons, geometry, launch  # noqa: E402
 from .autohide import Autohide  # noqa: E402
 from .model import (  # noqa: E402
     DARK_TEXT,
@@ -265,6 +265,7 @@ class DockView:
         self.opened = set()  # (browser pid, "/3/0") of the bookmark folders opened: they all start closed
         self.hidden = False
         self._last = None  # what the last render showed, to skip identical ones
+        self._offline = ()  # [(name, executable)] of the browsers that can be started from the panel
         self._accent = None
         self._warned_monitor = False
         self._overlay = False  # pinned, but on an inner edge where no space can be reserved
@@ -383,18 +384,20 @@ class DockView:
         windows = (self.strip, self.win, self._dialog)  # (the name window only while it is up)
         return {w.get_window().get_xid() for w in windows if w is not None and w.get_window() is not None}
 
-    def show(self, sources, mode="auto", choices=(), focus=None):
+    def show(self, sources, mode="auto", choices=(), focus=None, offline=()):
         """List the browsers in `sources` ([(conn, hello, state)]). `mode` ("auto", "all" or a conn) and
         `choices` ([(conn, label, colour)] of every connected browser) drive the chips; `focus` is the
-        hello of the browser whose colour the header and the strip wear (the only one listed, by default)."""
+        hello of the browser whose colour the header and the strip wear (the only one listed, by default).
+        `offline`: [(name, executable)] of browsers to offer starting, as dimmed rows."""
         if self._press is not None and not self._pressing():
             self._end_press()  # a press whose release never came: let go of the hold and the drag marks
         if self._pressing():
-            self._deferred = (sources, mode, choices, focus)  # rows are being pressed or dragged: redraw after the drop
+            self._deferred = (sources, mode, choices, focus, offline)  # rows are being pressed or dragged: redraw after the drop
             return
         self._deferred = None
         self._ws_pending = None
         self.sources = list(sources)
+        self._offline = tuple(offline)
         self._names = {conn: label for conn, label, _colour in choices}
         if focus is None and len(self.sources) == 1:
             focus = self.sources[0][1]
@@ -415,19 +418,20 @@ class DockView:
         self._set_accent(accent(focus, self._colours) if focus else self._colours["other"])
         listed = self.sources if self._view == "tabs" else [  # bookmarks do not change with the tabs
             (c, i, (focused_window(s) or {}).get("id")) for c, i, s in self.sources]
-        snapshot = (listed, frozenset(self.collapsed), mode, tuple(choices))
+        snapshot = (listed, frozenset(self.collapsed), mode, tuple(choices), self._offline)
         if snapshot != self._last:
             self._last = snapshot
             self._set_chips(mode, choices)
             self._set_views()
             self._rebuild()
 
-    def clear(self, mode="auto", choices=()):
+    def clear(self, mode="auto", choices=(), offline=()):
         """Nothing to list (yet). The chips stay when browsers are connected: they lead to another one."""
         self._end_press()
         self._deferred = None
         self._clear_ghost()  # (its timer would rebuild the list over the waiting text)
         self.sources = []
+        self._offline = tuple(offline)
         self._names = {}
         self._lists, self._asked = {}, set()
         self._last = None
@@ -439,7 +443,7 @@ class DockView:
         self.browser_name.set_tooltip_text(None)
         self._current_source = None
         self._set_accent(self._colours["other"])
-        self._replace_rows([self._label(waiting_text(), "sp-empty", wrap=True)])
+        self._replace_rows([self._label(waiting_text(), "sp-empty", wrap=True), *self._offline_rows()])
 
     def set_hidden(self, hidden):
         if hidden == self.hidden:
@@ -1179,7 +1183,19 @@ class DockView:
         self._row_order = [r for r in rows if r in self._meta]  # (an undo row is made last but sits among the tabs)
         if finding and self._first_match is None:
             rows.append(self._label(f"No tab matches “{self._query.strip()}”", "sp-empty", wrap=True))
-        self._replace_rows(rows or [self._label("No browser windows", "sp-empty", wrap=True)])
+        self._replace_rows((rows or [self._label("No browser windows", "sp-empty", wrap=True)]) + self._offline_rows())
+
+    def _offline_rows(self):
+        """Dimmed rows that start a browser. Not draggable, and left out of _row_order: find and the arrows skip them."""
+        order = list(self._row_order)
+        rows = []
+        for name, binary in self._offline:
+            label = self._label(f"Start {name}", "sp-empty")
+            label.set_tooltip_text(binary)
+            rows.append(self._row(label, "offline", binary, None, None, self._colours["other"],
+                                  lambda b=binary: launch.launch(b), draggable=False))
+        self._row_order = order
+        return rows
 
     def _name(self, conn, info):
         return self._names.get(conn) or info.get("browser") or "browser"
