@@ -9,7 +9,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
-from tabdock import config  # noqa: E402
+from tabdock import config, launch  # noqa: E402
 from tabdock.autohide import Autohide  # noqa: E402
 from tabdock.geometry import TRIGGER_PX, dock_rect, outer_monitor, strut  # noqa: E402
 from tabdock.model import (  # noqa: E402
@@ -67,6 +67,7 @@ class ConfigTest(unittest.TestCase):
             {"width": "wide"},
             {"width": True},
             {"pinned": "yes"},
+            {"launch_offline": "yes"},
             {"start_with_browser": "yes"},
             {"start_with_browser": 1},
             {"monitor": ""},
@@ -466,6 +467,32 @@ class MatchTest(unittest.TestCase):
             self.assertEqual(on_accent(dark), "#ffffff", dark)
         for light in ("#ffffff", "#ffcb00", "#4c9aff"):
             self.assertEqual(on_accent(light), "#1b1d23", light)
+
+
+class LaunchTest(unittest.TestCase):
+    def profile(self, home, root, addons):
+        path = os.path.join(home, root, "abc.default")
+        os.makedirs(path)
+        with open(os.path.join(path, "extensions.json"), "w") as f:
+            f.write('{"addons": [%s]}' % ",".join('{"id": "%s"}' % a for a in addons))
+
+    def test_needs_the_binary_and_a_profile_with_the_addon(self):
+        with tempfile.TemporaryDirectory() as home:
+            self.profile(home, ".zen", [launch.ADDON_ID])
+            self.profile(home, ".librewolf", ["other@example.org"])
+            self.profile(home, ".waterfox", [launch.ADDON_ID])  # not on PATH
+            self.profile(home, ".config/firedragon", [launch.ADDON_ID])
+            which = {"zen-browser": "/usr/bin/zen-browser", "librewolf": "/usr/bin/librewolf",
+                     "firedragon": "/usr/bin/firedragon"}.get
+            self.assertEqual(launch.installed_browsers(home, which),
+                             [("Zen", "/usr/bin/zen-browser"), ("FireDragon", "/usr/bin/firedragon")])
+
+    def test_unreadable_extensions_json_is_skipped(self):
+        with tempfile.TemporaryDirectory() as home:
+            self.profile(home, ".zen", [])
+            with open(os.path.join(home, ".zen", "abc.default", "extensions.json"), "w") as f:
+                f.write("not json")
+            self.assertEqual(launch.installed_browsers(home, lambda n: "/usr/bin/" + n), [])
 
 
 if __name__ == "__main__":

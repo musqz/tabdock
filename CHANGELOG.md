@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add `launch_offline` to list installed browsers that are not connected; a click starts one.
+
 ## 0.6.1
 
 Use this instead of 0.6.0: its tag missed the last two changes and it was never packaged. The extension is the

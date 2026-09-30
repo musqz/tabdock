@@ -25,12 +25,14 @@ class FakeView:
     def __init__(self):
         self.calls = []
 
-    def show(self, sources, mode, choices, focus):
+    def show(self, sources, mode, choices, focus, offline=()):
+        self.offline = list(offline)
         self.calls.append(("show", "+".join(info["browser"] for _conn, info, _state in sources)))
         self.last = {"sources": [conn for conn, _info, _state in sources], "mode": mode,
                      "choices": [(label, colour) for _conn, label, colour in choices], "focus": focus}
 
-    def clear(self, mode="auto", choices=()):
+    def clear(self, mode="auto", choices=(), offline=()):
+        self.offline = list(offline)
         self.calls.append(("clear",))
         self.cleared = {"mode": mode, "choices": [label for _conn, label, _colour in choices]}
 
@@ -362,6 +364,13 @@ class PanelTest(unittest.TestCase):
             self.panel.activate_tab(libre, 7, 1)
         self.assertEqual(libre.sent[-1]["type"], "activate_tab")
         self.assertEqual(self.x.activated, [])
+
+    def test_offline_browsers_are_the_installed_ones_that_are_not_connected(self):
+        self.panel.installed = [("Firefox", "/usr/bin/firefox"), ("LibreWolf", "/usr/bin/librewolf")]
+        self.panel._render()
+        self.assertEqual(self.view.offline, [("LibreWolf", "/usr/bin/librewolf")])
+        self.panel.on_close(self.ff)
+        self.assertEqual(self.view.offline, [("Firefox", "/usr/bin/firefox"), ("LibreWolf", "/usr/bin/librewolf")])
 
     def test_reconfigure_to_last_unhides(self):
         self.panel.reconfigure({"follow": "last", "view": "auto"})

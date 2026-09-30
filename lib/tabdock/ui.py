@@ -6,11 +6,11 @@ from .model import format_state
 class ConsoleView:
     xids = frozenset()
 
-    def show(self, sources, mode="auto", choices=(), focus=None):
+    def show(self, sources, mode="auto", choices=(), focus=None, offline=()):
         for _conn, info, state in sources:
             print(format_state(info, state), flush=True)
 
-    def clear(self, mode="auto", choices=()):
+    def clear(self, mode="auto", choices=(), offline=()):
         pass
 
     def set_hidden(self, hidden):

@@ -10,7 +10,7 @@ gi.require_version("GLibUnix", "2.0")
 gi.require_version("GioUnix", "2.0")
 from gi.repository import Gio, GioUnix, GLib, GLibUnix  # noqa: E402
 
-from . import config  # noqa: E402
+from . import config, launch  # noqa: E402
 from .ipc import Server  # noqa: E402
 from .model import (  # noqa: E402
     accent,
@@ -44,6 +44,7 @@ class Panel:
         self.mode = cfg["view"]  # "auto" (the browser in use), "all", or the Connection chosen with its chip
         self.active = None  # XID of the active window
         self.browser_xids = {}  # Connection -> XID of its window when it was last seen active
+        self.installed = launch.installed_browsers() if cfg.get("launch_offline") else []  # scanned at start and on reload
 
     # -- from the relays -----------------------------------------------------------
 
@@ -120,12 +121,14 @@ class Panel:
 
     def reconfigure(self, cfg):
         self.cfg = cfg
+        before = self._offline()
+        self.installed = launch.installed_browsers() if cfg.get("launch_offline") else []
         mode, self.mode = self.mode, cfg["view"]  # the file wins over a chip clicked since, like pin and side
         colours, self.colours = self.colours, accents(cfg.get("theme"))
         self.view.reconfigure(cfg)
         if cfg["follow"] == "last":
             self.view.set_hidden(False)
-        if self.mode != mode or self.colours != colours:
+        if self._offline() != before or self.mode != mode or self.colours != colours:
             self._render()
 
     def _window_of(self, conn):
@@ -226,16 +229,22 @@ class Panel:
             conns = [self.current if self.mode == "auto" else self.mode]
         return [c for c in conns if c in self.states]
 
+    def _offline(self):
+        """Installed browsers that are not connected, by kind (not by profile)."""
+        running = {info["browser"] for info in self.browsers.values()}
+        return [(name, binary) for name, binary in self.installed if name not in running]
+
     def _render(self):
         shown = self._shown()
+        offline = self._offline()
         choices = [(c, label, accent(self.browsers[c], self.colours)) for c, label in choice_labels(self.browsers)]
         if not shown:  # nothing to show yet: never leave another browser's tabs under this one's header
-            self.view.clear(self.mode, choices)  # (the chips stay: they are the way to another browser)
+            self.view.clear(self.mode, choices, offline)  # (the chips stay: they are the way to another browser)
             return
         sources = [(c, self.browsers[c], self.states[c]) for c in shown]
         # the header and the strip wear the colour of the browser shown, or, for all of them, of the one in use
         focus = sources[0][1] if len(sources) == 1 else self.browsers.get(self.current)
-        self.view.show(sources, self.mode, choices, focus)
+        self.view.show(sources, self.mode, choices, focus, offline)
 
 
 def _watch_stdin(panel):
@@ -361,6 +370,7 @@ def main(argv=None):
             on_command=panel.command, on_choose=panel.choose, on_raise=panel.raise_browser,
         )
 
+    panel._render()
     if x is not None:
         x.watch_active_window(panel.follow, loop.quit)
         panel.follow(x.active_window())

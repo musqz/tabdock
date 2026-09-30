@@ -64,6 +64,10 @@ start_with_browser = true
 # edge only; on an inner edge it stays open as an overlay). false = autohide on hover.
 pinned = false
 
+# List installed browsers that have the extension but are not running, dimmed at the bottom of the
+# panel. A click starts the browser (default profile).
+launch_offline = false
+
 # Colours. Every line below [theme] belongs to it, so any other option goes above that line.
 # The accent colour is on the strip at the screen edge, the header's top line and browser name, the pin,
 # icons and find buttons while they are on, the active tab's bar, the chip picked and the drop marker. By

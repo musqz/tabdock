@@ -45,6 +45,7 @@
 | `bookmarks` | `false` | Tabs / Bookmarks buttons at the bottom of the panel (see Bookmarks) |
 | `history` | `false` | a History view in the same buttons (see Bookmarks) |
 | `pinned` | `false` | start pinned |
+| `launch_offline` | `false` | dimmed rows for installed browsers with the extension that are not running; a click starts one (no Flatpak or Snap) |
 | `start_with_browser` | `true` | start the panel when a browser with the extension opens |
 
 **Colours:** each browser has its own (Firefox orange, Zen purple, FireDragon red, Waterfox teal, LibreWolf blue,

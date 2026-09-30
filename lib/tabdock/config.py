@@ -15,6 +15,7 @@ DEFAULTS = {
     "bookmarks": False,  # a Bookmarks view under the tabs; also needs the permission granted in the extension's options
     "history": False,  # a History view under the tabs; also needs the permission granted in the extension's options
     "pinned": False,
+    "launch_offline": False,  # list installed browsers that have the add-on but are not running; a click starts one
     "start_with_browser": True,  # read by the native-messaging relay, not by the panel itself
     "theme": {},  # the [theme] section: colours, only those given (model.accents() fills in the rest)
 }
@@ -59,7 +60,7 @@ def validate(user):
         raise ValueError(f'width must be an integer between 100 and 1000 (got {cfg["width"]!r})')
     if not isinstance(cfg["monitor"], str) or not cfg["monitor"]:
         raise ValueError('monitor must be "outer", "primary" or an output name such as "HDMI-1"')
-    for key in ("icons", "badges", "bookmarks", "history", "pinned", "start_with_browser"):
+    for key in ("icons", "badges", "bookmarks", "history", "pinned", "launch_offline", "start_with_browser"):
         if not isinstance(cfg[key], bool):
             raise ValueError(f"{key} must be true or false (got {cfg[key]!r})")
     cfg["theme"] = _theme(cfg["theme"])
