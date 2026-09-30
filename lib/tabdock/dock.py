@@ -2019,6 +2019,7 @@ class DockView:
         dialog.set_type_hint(Gdk.WindowTypeHint.DIALOG)
         dialog.set_keep_above(True)
         dialog.set_resizable(False)
+        dialog.set_size_request(300, -1)  # wide enough for the whole title in the window's bar
         dialog.set_skip_taskbar_hint(True)
         dialog.set_position(Gtk.WindowPosition.MOUSE)
         ok, cancel = Gtk.Button(label=accept_label), Gtk.Button(label="Cancel")
@@ -2071,7 +2072,7 @@ class DockView:
             if accepted and name:
                 done(name)
 
-        finish, _ok = self._small_window(title, entry, "OK", answer, focus=entry)  # the whole text selected: typing replaces it
+        finish, _ok = self._small_window(title, entry, "OK", answer, focus=entry, beside=True)  # the whole text selected: typing replaces it
         entry.connect("activate", lambda _e: finish(True))
         self._dialog_entry = entry
 
