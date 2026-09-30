@@ -17,7 +17,7 @@
 - **From the keyboard:** `tabdock --find` shows the panel and that window from any app (see Hotkey); the same
   key closes it again. There: Down/Up highlight a tab (a bookmark or visit in those views), Page Down/Up move ten,
   Home/End jump, Enter opens it (a bookmark folder: opens or closes it), Escape closes.
-  The arrows also stop on an empty container: Enter opens a tab in it.
+  The arrows also stop on an empty container (Enter opens a tab in it) and on a tab group's pill (Enter folds it).
   With `launch_offline` they also stop on a "Start …" row: Enter starts the browser.
   Ctrl+1/2/3 (or the buttons at the top of the window)
   search Tabs, Bookmarks or History, whichever are on. While nothing is typed, Left/Right switch view and Ctrl+Left/Right switch workspace. Ctrl+Shift+T reopens the last closed tab.

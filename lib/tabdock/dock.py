@@ -164,6 +164,11 @@ RESTORE_MODS = Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK
 WORKSPACE_KEYS = {Gdk.KEY_Left: -1, Gdk.KEY_Right: 1, Gdk.KEY_KP_Left: -1, Gdk.KEY_KP_Right: 1}
 
 
+def group_key(browser, gid):
+    """What `collapsed` holds for a Firefox tab group (folded in every container section it shows in)."""
+    return (browser, f"group:{gid}")
+
+
 def group_class(color):
     """The style class of a Firefox tab group colour (an unknown one is drawn grey)."""
     return "gc-" + (color if color in GROUP_COLORS else "gray")
@@ -213,6 +218,8 @@ GROUP_CSS = "".join(
     f".sp-ingroup.{group_class(name)} {{ border-left: 2px solid {c}; }}"
     for name, c in GROUP_COLORS.items()
 )
+
+STATIC_CSS = WS_CSS + GROUP_CSS
 
 # Firefox container icon names -> a glyph (best effort; unknown names fall back to a dot)
 ICONS = {
@@ -318,7 +325,7 @@ class DockView:
         self._colours = accents(cfg.get("theme"))  # each browser's colour, with the config's [theme]
         self._set_accent(self._colours["other"])
         self._per_browser = Gtk.CssProvider()
-        self._per_browser.load_from_data((browser_css(self._colours.values()) + WS_CSS + GROUP_CSS).encode())
+        self._per_browser.load_from_data((browser_css(self._colours.values()) + STATIC_CSS).encode())
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), self._per_browser, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
@@ -439,6 +446,13 @@ class DockView:
         if focus is None and len(self.sources) == 1:
             focus = self.sources[0][1]
         self._focus = focus
+        for _conn, info, state in self.sources:  # a group Firefox has collapsed starts folded, once
+            browser = info.get("browserPid") or info.get("browser")
+            for group in state.get("groups") or []:
+                if (browser, group["id"]) not in self._groups_seen:
+                    self._groups_seen.add((browser, group["id"]))
+                    if group.get("collapsed"):
+                        self.collapsed.add(group_key(browser, group["id"]))
         self._mode = mode
         for gone in [k for k in self._lists if k[1] not in self._names]:  # a browser that left: forget its lists
             del self._lists[gone]
@@ -592,7 +606,7 @@ class DockView:
         colours = accents(self.cfg.get("theme"))
         if colours != self._colours:  # new [theme] colours: the next show() rebuilds the rows in them
             self._colours = colours
-            self._per_browser.load_from_data((browser_css(colours.values()) + WS_CSS + GROUP_CSS).encode())
+            self._per_browser.load_from_data((browser_css(colours.values()) + STATIC_CSS).encode())
             self._last = None
             if not self.sources:
                 self._set_accent(colours["other"])  # (nothing listed: no show() to come)
@@ -1217,11 +1231,6 @@ class DockView:
             window = focused_window(state)
             self._state = state  # (what a tab row looks its group up in)
             self._check_ghost(conn, state)
-            for group in state.get("groups") or []:
-                if (browser, group["id"]) not in self._groups_seen:
-                    self._groups_seen.add((browser, group["id"]))
-                    if group.get("collapsed"):
-                        self.collapsed.add((browser, f"group:{group['id']}"))
             groups = group_tabs(state, every_workspace=finding)  # the focused window's tabs, in the workspace it shows
             if finding:  # only what matches, and only the sections that hold some of it
                 groups = [(c, [t for t in tabs if matches(t, self._query)]) for c, tabs in groups]
@@ -1247,12 +1256,13 @@ class DockView:
                     tab_rows = [
                         self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour, spaces, can,
                                       ordered_containers(state), window.get("workspaceId") if finding else None)
-                        for tab in tabs
+                        for tab in tabs if finding or not self._hidden_by_fold(browser, state, tab)
                     ]
                     ghost = None if finding else self._ghost_row(conn, container["cookieStoreId"], tabs, colour, window)
                     if ghost is not None:
                         tab_rows.insert(min(self._ghost["position"], len(tab_rows)), ghost)
-                    rows.extend(tab_rows if finding else self._group_rows(tab_rows, tabs, browser, conn, colour, state))
+                    rows.extend(tab_rows if finding else self._group_rows(tab_rows, tabs, browser, conn, colour, state,
+                                                                          container["cookieStoreId"]))
                 if finding and tabs and self._first_match is None:
                     self._first_match = (conn, tabs[0]["id"], window["id"])
         self._row_order = [r for r in rows if r in self._meta]  # (an undo row is made last but sits among the tabs)
@@ -1378,32 +1388,43 @@ class DockView:
                 lambda: self._command(conn, {"type": "remove_container", "cookieStoreId": cid}))),
         ]
 
-    def _group_rows(self, rows, tabs, browser, conn, colour, state):
-        """`rows` (the tab rows of one container) with a pill before each run of tabs in a Firefox tab group, and
-        none of the tabs of a group that is folded."""
-        by_id = {t["id"]: t for t in tabs}
-        out, run = [], None
-        for row in rows:
-            meta = self._meta[row]
-            if meta["kind"] != "tab":
-                out.append(row)  # (an undo row stays where it is)
-                continue
-            group = tab_group(state, by_id[meta["id"]])
+    def _hidden_by_fold(self, browser, state, tab):
+        """A tab of a folded Firefox tab group is not listed, except the active one (as Firefox keeps it in view)."""
+        group = tab_group(state, tab)
+        return group is not None and group_key(browser, group["id"]) in self.collapsed and not tab.get("active")
+
+    def _group_rows(self, rows, tabs, browser, conn, colour, state, store):
+        """`rows` (the listed tab rows of the container `store`) with a pill before each run of tabs in a Firefox tab
+        group. `tabs`: all of the container's tabs, which the pill counts."""
+        index = {t["id"]: i for i, t in enumerate(tabs)}
+        runs, run = [], None  # (where a run of one group starts, the group)
+        for i, tab in enumerate(tabs):
+            group = tab_group(state, tab)
             gid = group["id"] if group else None
             if gid != run:
                 run = gid
                 if group:
-                    key = (browser, f"group:{gid}")
-                    size = sum(1 for t in tabs if t.get("groupId") == gid)
-                    out.append(self._group_row(group, size, key, key in self.collapsed, conn, colour))
-            if group and (browser, f"group:{gid}") in self.collapsed:
-                del self._meta[row]
-                continue
+                    runs.append((i, group))
+        out = []
+
+        def pill(group):
+            size = sum(1 for t in tabs if t.get("groupId") == group["id"])
+            key = group_key(browser, group["id"])
+            out.append(self._group_row(group, size, key, key in self.collapsed, conn, colour, store))
+
+        for row in rows:
+            meta = self._meta[row]
+            if meta["kind"] == "tab":  # (an undo row stays where it is)
+                while runs and runs[0][0] <= index[meta["id"]]:
+                    pill(runs.pop(0)[1])
             out.append(row)
+        for _start, group in runs:  # a folded group with no tab listed still has its pill
+            pill(group)
         return out
 
-    def _group_row(self, group, size, key, folded, conn, colour):
-        """The pill that heads a Firefox tab group: its name in its colour, how many tabs, and ▾ or ▸."""
+    def _group_row(self, group, size, key, folded, conn, colour, store):
+        """The pill that heads a Firefox tab group: its name in its colour, how many tabs, and ▾ or ▸. A group with
+        tabs in several containers has a pill in each, so the row's id names the container too."""
         name = GLib.markup_escape_text(group["title"] or "Unnamed group")
         arrow = "▸" if folded else "▾"
         label = self._label(f'{name}  <span alpha="70%">({size})  {arrow}</span>', "sp-pill", markup=True)
@@ -1412,8 +1433,8 @@ class DockView:
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         box.get_style_context().add_class("sp-grouprow")
         box.pack_start(label, False, False, 0)
-        return self._row(box, "tabgroup", f"group:{group['id']}", None, conn, colour, lambda: self._toggle(key),
-                         draggable=False, findable=not self._query.strip())
+        return self._row(box, "tabgroup", f"group:{group['id']}:{store}", None, conn, colour,
+                         lambda: self._toggle(key), draggable=False, findable=True)
 
     def _toggle(self, key):
         self.collapsed ^= {key}
@@ -1454,7 +1475,7 @@ class DockView:
         elif firefox_group is not None:  # Firefox's own tab group: its name, in its colour
             title = firefox_group["title"]
             tag = self._label(
-                f'<span foreground="{GROUP_COLORS.get(firefox_group["color"], DEFAULT_ACCENT)}">'
+                f'<span foreground="{GROUP_COLORS.get(firefox_group["color"], GROUP_COLORS["gray"])}">'
                 f'{GLib.markup_escape_text(title or "group")}</span>', "sp-group", markup=True)
             tag.set_tooltip_text(f"In the tab group “{title}”" if title else "In an unnamed tab group")
             box.pack_start(tag, False, False, 0)
@@ -1588,7 +1609,7 @@ class DockView:
 
     def _find_accept(self):
         """Enter in the find window: on a highlighted bookmark folder it opens or closes the folder, and on a browser
-        header it folds or unfolds the browser; the window stays either way. Anything else is picked and the window closes."""
+        header or a tab group's pill it folds or unfolds it; the window stays either way. Anything else is picked and the window closes."""
         box = self._highlighted()
         if box is not None and self._meta[box]["kind"] in FOLD_KINDS:
             self._meta[box]["click"]()  # the list is rebuilt, and the same row is highlighted again
