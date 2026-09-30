@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Reach empty containers and "Start …" rows with the arrow keys in Find; Enter opens a tab or starts the browser.
+
 ## 0.7.0
 
 The extension only changes its version number; installing the new one is optional.

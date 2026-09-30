@@ -119,8 +119,8 @@ button.sp-btn.sp-reopen:hover {{ color: #ffffff; }}
 
 
 # The rows the find window's keys walk: the tabs, or the bookmark folders and bookmarks or the visits listed while
-# one of those views is up.
-FIND_KINDS = ("tab", "bookmark", "bookmark_folder", "history")
+# one of those views is up, and the Start rows. A row of another kind opts in with `findable`.
+FIND_KINDS = ("tab", "bookmark", "bookmark_folder", "history", "offline")
 
 # Ctrl + one of these switches the view the find window searches: Tabs, Bookmarks, History.
 FIND_VIEW_KEYS = {Gdk.KEY_1: "tabs", Gdk.KEY_2: "bookmarks", Gdk.KEY_3: "history"}
@@ -253,7 +253,7 @@ class DockView:
         self._first_match = None  # (conn, tab id, window id) of the first tab listed while finding
         self._ghost = None  # the tab just closed from the panel: {conn, id, title, group, position, t}
         self._ghost_timer = None
-        self._selected = None  # (conn, tab id) of the tab the arrow keys have highlighted while finding
+        self._selected = None  # (conn, row id) of the row the arrow keys have highlighted while finding
         self._find_dialog = None  # the find window, while it is up (self._dialog may be another window)
         self._state = {}  # the state of the browser whose rows are being built
         self._middle = None  # the row a middle button went down on: releasing it there closes that tab
@@ -862,14 +862,16 @@ class DockView:
         return label
 
     def _row(self, child, kind, ident, group, conn, colour, on_click, active=False, draggable=True, pinned=False,
-             menu=None, closable=False):
+             menu=None, closable=False, findable=False, pick=None):
         """A row of the browser `conn`, in its colour. Hover/active styling lives on the EventBox: a
         windowless label gets no prelight.
 
         A click and a drag share one press, so they never both happen: the click fires on release,
         and moving DRAG_THRESHOLD px with the button down turns the press into a drag instead.
-        `menu` ([(label, action)], see _popup) is what a right click offers.
+        `menu` ([(label, action)], see _popup) is what a right click offers. `findable` puts the row among the ones
+        the find window's arrows stop on, and `pick` is what Enter does there (default: what a click does).
         """
+        findable = findable or kind in FIND_KINDS
         box = Gtk.EventBox()
         box.add_events(
             Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.BUTTON1_MOTION_MASK
@@ -884,11 +886,12 @@ class DockView:
         box.get_style_context().add_class(acc_class(colour))
         if active:
             box.get_style_context().add_class("active")
-        if kind in FIND_KINDS and (conn, ident) == self._selected:
+        if findable and (conn, ident) == self._selected:
             box.get_style_context().add_class("kbd")
         box.add(child)
         self._meta[box] = {
             "kind": kind, "id": ident, "group": group, "conn": conn, "click": on_click,
+            "pick": pick or on_click, "findable": findable,
             "draggable": draggable, "pinned": pinned, "menu": menu, "closable": closable,
         }
         self._row_order.append(box)
@@ -1187,17 +1190,16 @@ class DockView:
         self._replace_rows((rows or [self._label("No browser windows", "sp-empty", wrap=True)]) + self._offline_rows())
 
     def _offline_rows(self):
-        """Dimmed rows that start a browser. Not draggable, and left out of _row_order: find and the arrows skip them."""
-        order = list(self._row_order)
+        """Dimmed rows that start a browser, after the tab rows. Not draggable. A find query keeps the ones it names."""
+        words = self._query.casefold().split()
         rows = []
         for name, binary in self._offline:
-            if name in self._starting:
+            if name in self._starting or not all(w in name.casefold() for w in words):
                 continue
             label = self._label(f"Start {name}", "sp-empty")
             label.set_tooltip_text(binary)
             rows.append(self._row(label, "offline", binary, None, None, self._colours["other"],
                                   lambda n=name, b=binary: self._start(n, b), draggable=False))
-        self._row_order = order
         return rows
 
     def _start(self, name, binary):
@@ -1216,6 +1218,7 @@ class DockView:
             self._last = None
             self._rebuild()
         else:
+            self._meta, self._row_order = {}, []
             self._replace_rows([self._label(waiting_text(), "sp-empty", wrap=True), *self._offline_rows()])
 
     def _name(self, conn, info):
@@ -1254,15 +1257,19 @@ class DockView:
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         box.get_style_context().add_class("sp-sectionbox")
         box.pack_start(label, True, True, 0)
-        if cid == NO_CONTAINER or cid in known:
+        has_new = cid == NO_CONTAINER or cid in known
+        new_tab = lambda: self._new_tab(conn, cid, window_id)  # noqa: E731
+        empty = has_new and not tabs
+        if has_new:
             button = self._button(
                 "+", "New tab" if cid == NO_CONTAINER else f"New tab in {container['name']}", Gtk.Button
             )
             button.get_style_context().add_class("sp-newtab")
-            button.connect("clicked", lambda _b: self._new_tab(conn, cid, window_id))
+            button.connect("clicked", lambda _b: new_tab())
             box.pack_start(button, False, False, 0)
         return self._row(
             box, "section", cid, None, conn, browser_colour, (lambda: self._toggle(key)) if tabs else (lambda: None),
+            findable=empty, pick=new_tab if empty else None,
             draggable=cid != NO_CONTAINER and cid in known,
             menu=(self._container_menu(conn, container, state)
                   if "containers" in can and (cid == NO_CONTAINER or cid in known) else None),
@@ -1420,7 +1427,7 @@ class DockView:
 
         def answer(accepted):
             box = next((b for b in self._find_rows() if self._tab_key(b) == self._selected), None)
-            pick = self._meta[box]["click"] if box is not None else None  # what a click on that row does
+            pick = self._meta[box]["pick"] if box is not None else None  # what Enter does on that row
             first = self._first_match
             first_url = self._first_url
             self._find_switch, self._find_view_buttons = None, []
@@ -1477,7 +1484,7 @@ class DockView:
         self._set_view(view)
 
     def _find_rows(self):
-        return [b for b in self._row_order if self._meta[b]["kind"] in FIND_KINDS]
+        return [b for b in self._row_order if self._meta[b]["findable"]]
 
     def _tab_rows(self):
         return [b for b in self._row_order if self._meta[b]["kind"] == "tab"]
@@ -1519,7 +1526,8 @@ class DockView:
             return False
         step, from_nothing = FIND_KEYS[event.keyval]
         rows = self._find_rows()
-        if from_nothing and (not rows or event.state & CARET_MODS):
+        listed = any(self._meta[b]["kind"] != "offline" for b in rows)  # Start rows alone leave Home/End to the caret
+        if from_nothing and (not listed or event.state & CARET_MODS):
             return False
         if rows:
             keys = [self._tab_key(b) for b in rows]
