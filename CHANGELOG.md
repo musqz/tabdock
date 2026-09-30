@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add Ctrl+P, Ctrl+I, Ctrl+L and Ctrl+N in Find: pin, icons, side, new workspace.
+- Show the Find keys as a faint hint along the bottom.
+- Add Delete, Ctrl+K and Ctrl+T in Find: close, pin or open a new tab in the highlighted tab's container.
+- Add `tabdock --pin`, `--icons`, `--side` and `--new-workspace`.
 - Reach empty containers and "Start …" rows with the arrow keys in Find; Enter opens a tab or starts the browser.
 
 ## 0.7.0

@@ -354,6 +354,25 @@ class FindCommandTest(unittest.TestCase):
             self.assertEqual(conn.recv(100), b'{"type":"find"}\n')
 
 
+    def test_the_dock_flags_send_their_message(self):
+        for flag, kind in (("--pin", "pin"), ("--icons", "icons"), ("--side", "side"),
+                           ("--new-workspace", "new_workspace")):
+            with tempfile.TemporaryDirectory() as home:
+                path = os.path.join(home, "panel.sock")
+                srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                self.addCleanup(srv.close)
+                srv.bind(path)
+                srv.listen(1)
+                srv.settimeout(TIMEOUT)
+                env = {**os.environ, "TABDOCK_SOCKET": path}
+                done = subprocess.run([sys.executable, PANEL, flag], env=env, capture_output=True, text=True,
+                                      timeout=TIMEOUT)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                conn, _ = srv.accept()
+                self.addCleanup(conn.close)
+                self.assertEqual(json.loads(conn.recv(100)), {"type": kind})
+
+
 class PanelDebugTest(Base):
     def read_panel_until(self, panel, needle):
         deadline = time.monotonic() + TIMEOUT
