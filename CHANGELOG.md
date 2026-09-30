@@ -1,7 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.8.0
 
+The extension only changes its version number; installing the new one is optional.
+
+- Add Ctrl+A in Find: switch between `auto` and `all`. With `all` the arrows also stop on each browser's header; Enter folds it.
+- Add `tabdock --next`, `--prev`, `--open` and `--all`: move the highlight, open the row and switch `auto`/`all` without Find.
+- Add `tabdock --ws-next` and `--ws-prev`: switch workspace from a key.
+- Ask for a name first with `tabdock --new-workspace` and Ctrl+N in Find; name windows open beside the panel.
+- Outline the highlighted row with a 1px border.
 - Add Ctrl+P, Ctrl+I, Ctrl+L and Ctrl+N in Find: pin, icons, side, new workspace.
 - Show the Find keys as a faint hint along the bottom.
 - Add Delete, Ctrl+K and Ctrl+T in Find: close, pin or open a new tab in the highlighted tab's container.
