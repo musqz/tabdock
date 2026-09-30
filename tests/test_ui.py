@@ -1715,6 +1715,13 @@ class DockViewTest(unittest.TestCase):
         view.ws_next()
         self.assertEqual([m["type"] for m in self.commands], ["switch_workspace"])
         self.assertEqual(self.command_conns, [conn])
+        self.assertIn("keys", view._holds)  # the panel shows the switch
+        view.ws_prev()
+        self.assertEqual(len(self.commands), 2)
+        self.assertNotEqual(self.commands[0]["workspaceId"], self.commands[1]["workspaceId"])
+        view.new_workspace()  # a name window is up: the keys wait
+        view.ws_next()
+        self.assertEqual(len(self.commands), 2)
 
     def test_find_arrows_reach_an_empty_container_and_a_start_row(self):
         view = self.make()

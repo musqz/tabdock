@@ -130,7 +130,7 @@ FIND_VIEW_KEYS = {Gdk.KEY_1: "tabs", Gdk.KEY_2: "bookmarks", Gdk.KEY_3: "history
 FIND_ACTIONS = {Gdk.KEY_p: "toggle_pin", Gdk.KEY_i: "toggle_icons", Gdk.KEY_l: "flip_side", Gdk.KEY_n: "new_workspace"}
 FIND_ROW_ACTIONS = {Gdk.KEY_k: "pin", Gdk.KEY_t: "new_tab"}
 
-# Seconds the panel stays open, and a highlighted row stays marked, after the last of `--next`, `--prev` and `--open`.
+# Seconds the panel stays open, and a highlighted row stays marked, after the last of those keys.
 NAV_IDLE_S = 5
 
 # The faint reminder along the bottom of the find window.
@@ -1617,7 +1617,7 @@ class DockView:
             current = None if from_nothing or self._selected not in keys else keys.index(self._selected)
             self._select(rows[step_index(current, len(rows), step)])
 
-    # -- keys without the find window: `tabdock --next`, `--prev`, `--open` and `--all` ------------------------------
+    # -- keys without the find window: `tabdock --next`, `--prev`, `--open`, `--all`, `--ws-next`, `--ws-prev` ------------------------------
 
     def _nav(self):
         """The panel is shown and stays open while keys move the highlight; it lets go, and the highlight goes, after
@@ -1633,6 +1633,7 @@ class DockView:
             GLib.source_remove(self._nav_timer)
             self._nav_timer = None
         self._hold("keys", False)
+        self._ws_pending = None  # (a switch that never arrived must not steer the next key)
         if self._dialog is None:
             self._clear_highlight()
         return False
@@ -1666,11 +1667,17 @@ class DockView:
         self._end_nav()
         pick()
 
+    def _ws_key(self, step):
+        """`--ws-next` and `--ws-prev`: as Ctrl+Left and Ctrl+Right, but with no window up: the panel shows the switch."""
+        if self._dialog is None:
+            self._nav()
+            self._step_workspace(step)
+
     def ws_next(self):
-        self._step_workspace(1)
+        self._ws_key(1)
 
     def ws_prev(self):
-        self._step_workspace(-1)
+        self._ws_key(-1)
 
     def toggle_all(self):
         """Ctrl+A, or `tabdock --all`: between "all" (the arrows also stop on the browser headers) and "auto". Leaving "all" from a

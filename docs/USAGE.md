@@ -121,7 +121,8 @@ example `W-Down`, `W-Up`, `W-Return`, `W-a`). They highlight a row (a 1px border
 browser, and switch `auto`/`all` (leaving `all` from a highlighted row raises that browser). The panel stays open 5 s
 after the last key.
 
-`tabdock --ws-next` and `--ws-prev` switch the browser in use to its next or previous workspace.
+`tabdock --ws-next` and `--ws-prev` switch the browser in use (or the one its chip picked) to its next or previous
+workspace, and stop at the first and last. Bind them like the others, for example `S-C-Down` and `S-C-Up`.
 
 `W-` is Super, `A-` Alt, `C-` Ctrl, `S-` Shift; `xev` prints key names. The panel must be running.
 
