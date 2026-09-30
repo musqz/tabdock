@@ -14,7 +14,7 @@ directions, with two additions: it sends `resync` to the extension whenever the 
 
 | type    | fields | notes |
 |---------|--------|-------|
-| `hello` | `browser`, `version`, `features`, `browserPid` (added by relay) | sent on every resync, before `state`. `browser` is what `getBrowserInfo()` reports, which is unreliable (Zen says "Firefox"), so the panel names the browser from `/proc/<browserPid>/exe` and only falls back to this. `features` lists what the extension handles beyond what every version did (`close_tab`, `pin_tab`, `containers`, `reopen_in_container`, `restore_tab`, `bookmarks`, `history`): the panel offers only those, so an older extension (no `features`) never gets a `✕` or a menu item that does nothing |
+| `hello` | `browser`, `version`, `features`, `browserPid` (added by relay) | sent on every resync, before `state`. `browser` is what `getBrowserInfo()` reports, which is unreliable (Zen says "Firefox"), so the panel names the browser from `/proc/<browserPid>/exe` and only falls back to this. `features` lists what the extension handles beyond what every version did (`close_tab`, `pin_tab`, `containers`, `reopen_in_container`, `restore_tab`, `bookmarks`, `history`, `tab_groups`): the panel offers only those, so an older extension (no `features`) never gets a `✕` or a menu item that does nothing |
 | `state` | `focusedWindowId`, `containerOrder[]`, `containers[]`, `groups[]`, `workspaces[]`, `windows[]` | full snapshot, debounced 50 ms after any change |
 
 `containers[]`: `{cookieStoreId, name, color, colorCode, icon}`.
@@ -57,6 +57,8 @@ offers no workspaces in Zen (it has its own) or from an older extension (no `wor
 | `update_container` | `cookieStoreId`, and any of `name`, `color`, `icon` | changes what it names; an empty name, or a colour or icon Firefox does not offer, is ignored |
 | `remove_container` | `cookieStoreId` | as Firefox's own settings do: its tabs close first (each as `close_tab` closes one, so never a window with other workspaces' hidden tabs), then the container goes and Firefox deletes its cookies. A workspace that opened its new tabs in it opens them in none from then on |
 | `reopen_in_container` | `tabId`, `cookieStoreId` | a tab cannot change its container, so its page opens anew in that one (`firefox-default`: none), right after it, pinned if it was and in the same workspace, and the original closes: the page reloads and its back/forward history stays behind. Pages an extension may not open (`about:config`, `file:`, ...) stay where they are |
+| `group_tab` | `tabId`, `groupId` or `title` | puts the tab in the Firefox tab group `groupId`, or in a new group named `title`; only with the `tab_groups` feature |
+| `ungroup_tab` | `tabId` | takes the tab out of its tab group; only with the `tab_groups` feature |
 | `pin_tab` | `tabId`, `pinned` | pins (`true`) or unpins the tab; a pinned tab shows in every workspace, an unpinned one joins the workspace its window shows |
 | `move_tab` | `tabId`, `index` | `tabs.move`: `index` is the tab's final position in its window (it leaves its old place first, so moving forward lands one earlier than the target's index); the resulting `tabs.onMoved` triggers a new `state` |
 | `set_container_order` | `order[]` (cookieStoreIds) | stores the order of the panel's container sections and pushes a new `state`; the panel also shows it at once without waiting |

@@ -42,6 +42,8 @@ from .model import (  # noqa: E402
     removal_text,
     reopenable,
     tab_group,
+    group_colour,
+    window_groups,
     GROUP_COLORS,
     supports,
     focused_window,
@@ -280,6 +282,7 @@ class DockView:
         self._fetcher = None  # started with the first icon wanted: no threads while icons are off
         self._redraw = False  # a redraw was asked for while a row was pressed: done after the release
         self._names = {}  # conn -> how its browser is called (numbered when two share a name)
+        self._groups_here = []  # [(tab group, its tabs)] of the window being listed
         self._groups_seen = set()  # (browser, tab group id) met: a group Firefox has collapsed starts folded, once
         self._nav_timer = None  # the idle timeout of the keys that work without the find window
         self._mode = "auto"  # what the chips say: "auto", "all" or a conn
@@ -1230,6 +1233,7 @@ class DockView:
             colour = accent(info, self._colours)
             window = focused_window(state)
             self._state = state  # (what a tab row looks its group up in)
+            self._groups_here = window_groups(state)  # (and what its menu offers)
             self._check_ghost(conn, state)
             groups = group_tabs(state, every_workspace=finding)  # the focused window's tabs, in the workspace it shows
             if finding:  # only what matches, and only the sections that hold some of it
@@ -1443,8 +1447,8 @@ class DockView:
 
     def _tab_row(self, tab, window_id, group, conn, colour, spaces=(), can=(), containers=(), shown=None):
         """A tab: its site icon (optional), the title, an unread badge, a pin if pinned, and a ✕ that shows while
-        the row is hovered. Middle-click closes it too; right-click pins, moves (to another workspace) or closes.
-        `can`: what the extension handles ("close_tab", "pin_tab", "reopen_in_container"); the rest is not offered.
+        the row is hovered. Middle-click closes it too; right-click pins, groups, moves (to another workspace) or closes.
+        `can`: what the extension handles ("close_tab", "pin_tab", "reopen_in_container", "tab_groups"); the rest is not offered.
         `shown`: while finding, the workspace the window shows; a tab of another one says which it is in."""
         label = self._label(tab_label(tab), "sp-tab")
         label.set_tooltip_text("\n".join(filter(None, (tab.get("title"), tab.get("url")))))
@@ -1475,7 +1479,7 @@ class DockView:
         elif firefox_group is not None:  # Firefox's own tab group: its name, in its colour
             title = firefox_group["title"]
             tag = self._label(
-                f'<span foreground="{GROUP_COLORS.get(firefox_group["color"], GROUP_COLORS["gray"])}">'
+                f'<span foreground="{group_colour(firefox_group["color"])}">'
                 f'{GLib.markup_escape_text(title or "group")}</span>', "sp-group", markup=True)
             tag.set_tooltip_text(f"In the tab group “{title}”" if title else "In an unnamed tab group")
             box.pack_start(tag, False, False, 0)
@@ -1493,6 +1497,22 @@ class DockView:
         if "pin_tab" in can:
             groups.append([("Unpin tab" if pinned else "Pin tab",
                             lambda: self._command(conn, {"type": "pin_tab", "tabId": tab["id"], "pinned": not pinned}))])
+        if "tab_groups" in can and not pinned:  # (a pinned tab cannot be in a group)
+            others = [(g, n) for g, n in self._groups_here if firefox_group is None or g["id"] != firefox_group["id"]]
+            items = [
+                (Markup(f'<span foreground="{group_colour(g["color"])}">▌</span> '
+                        f'{GLib.markup_escape_text(g["title"] or "Unnamed group")} ({n})'),
+                 lambda gid=g["id"]: self._command(conn, {"type": "group_tab", "tabId": tab["id"], "groupId": gid}))
+                for g, n in others
+            ]
+            if items:
+                items.append((None, None))
+            items.append(("New group…", lambda: self._ask_name(
+                "New group", "", lambda name: self._command(conn, {"type": "group_tab", "tabId": tab["id"], "title": name}))))
+            part = [("Add to group", items)]
+            if firefox_group is not None:
+                part.append(("Remove from group", lambda: self._command(conn, {"type": "ungroup_tab", "tabId": tab["id"]})))
+            groups.append(part)
         store = tab.get("cookieStoreId") or NO_CONTAINER
         if "reopen_in_container" in can and store != "firefox-private" and reopenable(tab):
             others = [c for c in ({"cookieStoreId": NO_CONTAINER, "name": "No container"}, *containers)

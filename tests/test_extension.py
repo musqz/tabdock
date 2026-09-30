@@ -42,7 +42,7 @@ class ManifestTest(unittest.TestCase):
             sorted(self.manifest["permissions"]),
             # storage: the container order and the workspaces; tabHide: a workspace hides the others' tabs;
             # sessions: which workspace a tab is in, and which one a window shows, across browser restarts
-            # tabGroups: the names and colours of Firefox's own tab groups, shown next to their tabs
+            # tabGroups: the names and colours of Firefox's own tab groups, and naming a new one
             ["contextualIdentities", "cookies", "nativeMessaging", "sessions", "storage", "tabGroups", "tabHide", "tabs"],
         )
 

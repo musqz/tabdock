@@ -55,6 +55,23 @@ GROUP_COLORS = {
 }
 
 
+def group_colour(color):
+    """The colour Firefox draws a tab group in (an unknown name is grey)."""
+    return GROUP_COLORS.get(color, GROUP_COLORS["gray"])
+
+
+def window_groups(state):
+    """[(group, tabs in it)] for the Firefox tab groups of the focused window's workspace, in the order they first
+    appear."""
+    win = focused_window(state)
+    found = {}
+    for tab in (win or {}).get("tabs", []):
+        group = tab_group(state, tab)
+        if group is not None and in_workspace(tab, win.get("workspaceId")):
+            found.setdefault(group["id"], [group, 0])[1] += 1
+    return [tuple(pair) for pair in found.values()]
+
+
 def tab_group(state, tab):
     """The Firefox tab group `tab` is in ({id, title, color, collapsed}), or None."""
     gid = tab.get("groupId")
@@ -81,7 +98,8 @@ def reopenable(tab):
 
 
 # What an extension may say it handles (`features` in its hello), beyond what every version did.
-FEATURES = ("close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab", "bookmarks", "history")
+FEATURES = ("close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab", "bookmarks", "history",
+            "tab_groups")
 
 
 def supports(info, feature):

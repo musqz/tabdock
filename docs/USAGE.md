@@ -32,6 +32,8 @@
 - **Several browsers:** chips under the header pick `auto` (browser in use), one browser, or `all`.
   Clicking a tab of another browser raises it.
 - **Tab groups:** each Firefox tab group gets a pill in its colour above its tabs, with its name and tab count. Click it to fold the group (in the panel only); a group Firefox has collapsed starts folded. In a search the tab shows the group's name instead.
+  Right-click a tab: *Add to group* (a group or *New group…*), *Remove from group*.
+  Needs this version's signed extension and a browser with tab groups.
 - **Pin** keeps the panel open and reserves space on an outer screen edge (an inner edge becomes an overlay).
   `⇄` flips the side, `✕` quits until the next browser start. The panel never takes keyboard focus.
 
