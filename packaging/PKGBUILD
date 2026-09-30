@@ -4,7 +4,7 @@
 # needs the maintainer's addons.mozilla.org credentials, so it is attached to the GitHub release
 # once per version and installed to /usr/share/tabdock/tabdock.xpi for every user.
 pkgname=tabdock
-pkgver=0.8.0
+pkgver=0.9.0
 pkgrel=1
 pkgdesc="Autohiding X11 side panel with the tabs and containers of Firefox-family browsers"
 arch=('any')
@@ -16,8 +16,8 @@ source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
         "$pkgname-$pkgver.xpi::$url/releases/download/v$pkgver/$pkgname-$pkgver.xpi")
 noextract=("$pkgname-$pkgver.xpi")  # a zip: makepkg would unpack it otherwise
 # run `updpkgsums` once the v$pkgver tag and its release asset exist
-sha256sums=('7e1d3a6641c43cf33263e10b14c6a1a8006ca9e62b17965fb2805ae28a8685da'
-            '7a17b8c90bab9542272d39ef6aeb5fc5d476e5da7422344dcdc6340557bfda22')
+sha256sums=('6e1fbf7cfe4e6f5e15d61965b7b13df4f9282d3d74d93c27d353f4a09afa6dfb'
+            'e6fdaf9aba103a660ec7cb47a5a30a089c5e7fca58b1c48480024414d4468e5c')
 
 prepare() {
     cd "$pkgname-$pkgver"
