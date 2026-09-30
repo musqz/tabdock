@@ -91,7 +91,7 @@ With no panel listening, the flag prints `tabdock: not running` and exits 1.
 | `pin` | (none) | pins the panel open, or unpins it (`tabdock --pin`) |
 | `icons` | (none) | shows or hides the site icons (`tabdock --icons`) |
 | `side` | (none) | switches the panel to the other screen edge (`tabdock --side`) |
-| `new_workspace` | (none) | not the panel-to-extension command of that name: makes a workspace, named by the extension, in the browser in use (`tabdock --new-workspace`) |
+| `new_workspace` | (none) | not the panel-to-extension command of that name: asks for a name, then makes a workspace in the browser in use (`tabdock --new-workspace`) |
 | `next`, `prev` | (none) | highlight the next or previous row and keep the panel open for 5 s (`tabdock --next`, `--prev`) |
 | `open` | (none) | opens the highlighted tab, or folds or unfolds the highlighted browser (`tabdock --open`) |
 | `all` | (none) | switches between `auto` and `all` (`tabdock --all`) |
