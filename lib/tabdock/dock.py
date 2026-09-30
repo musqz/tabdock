@@ -125,6 +125,17 @@ FIND_KINDS = ("tab", "bookmark", "bookmark_folder", "history", "offline")
 # Ctrl + one of these switches the view the find window searches: Tabs, Bookmarks, History.
 FIND_VIEW_KEYS = {Gdk.KEY_1: "tabs", Gdk.KEY_2: "bookmarks", Gdk.KEY_3: "history"}
 
+# Ctrl + one of these acts on the dock from the find window (methods of DockView), or on the highlighted row (the
+# names in a row's `keys`).
+FIND_ACTIONS = {Gdk.KEY_p: "toggle_pin", Gdk.KEY_i: "toggle_icons", Gdk.KEY_l: "flip_side", Gdk.KEY_n: "new_workspace"}
+FIND_ROW_ACTIONS = {Gdk.KEY_k: "pin", Gdk.KEY_t: "new_tab"}
+
+# The faint reminder along the bottom of the find window.
+FIND_HINT = (
+    "↑↓ pick   Enter open   Del close tab   ^K pin tab   ^T new tab\n"
+    "^P pin dock   ^I icons   ^L side   ^N new workspace   ^1/2/3 view"
+)
+
 # The keys of the find window that walk the tab rows: (rows to step, from nothing). Home and End step from
 # nothing, which lands on the first or the last row.
 FIND_KEYS = {
@@ -308,7 +319,7 @@ class DockView:
         self.quit_btn.get_style_context().add_class("sp-quit")
         self.quit_btn.connect("clicked", lambda _b: on_quit())
         self.flip_btn = self._button("⇄", "Switch side", Gtk.Button)
-        self.flip_btn.connect("clicked", lambda _b: self.set_side("right" if self.cfg["side"] == "left" else "left"))
+        self.flip_btn.connect("clicked", lambda _b: self.flip_side())
         self.pin_btn = self._button("pin", "Pin: keep the panel open", Gtk.ToggleButton)
         self.pin_btn.get_style_context().add_class("sp-pin")
         self.pin_btn.connect("toggled", self._on_pin_toggled)
@@ -464,6 +475,22 @@ class DockView:
     def set_side(self, side):
         self.cfg["side"] = side
         self._place()
+
+    def flip_side(self):
+        self.set_side("right" if self.cfg["side"] == "left" else "left")
+
+    def toggle_pin(self):
+        self.pin_btn.set_active(not self.pin_btn.get_active())
+
+    def toggle_icons(self):
+        self.icons_btn.set_active(not self.icons_btn.get_active())
+
+    def new_workspace(self):
+        """As the "+" chip, without asking for a name: the extension names it "Workspace N"."""
+        source = self._keyboard_source()
+        window = source and offers_workspaces(source[1], source[2]) and focused_window(source[2])
+        if window:
+            self._command(source[0], {"type": "new_workspace", "windowId": window["id"], "name": ""})
 
     def _refresh_pin(self):
         # the state must be readable at a glance: the words, the filled pill and the tooltip all change
@@ -862,7 +889,7 @@ class DockView:
         return label
 
     def _row(self, child, kind, ident, group, conn, colour, on_click, active=False, draggable=True, pinned=False,
-             menu=None, closable=False, findable=False, pick=None):
+             menu=None, closable=False, findable=False, pick=None, keys=None):
         """A row of the browser `conn`, in its colour. Hover/active styling lives on the EventBox: a
         windowless label gets no prelight.
 
@@ -892,7 +919,7 @@ class DockView:
         self._meta[box] = {
             "kind": kind, "id": ident, "group": group, "conn": conn, "click": on_click,
             "pick": pick or on_click, "findable": findable,
-            "draggable": draggable, "pinned": pinned, "menu": menu, "closable": closable,
+            "draggable": draggable, "pinned": pinned, "menu": menu, "closable": closable, "keys": keys or {},
         }
         self._row_order.append(box)
         return box
@@ -1269,7 +1296,7 @@ class DockView:
             box.pack_start(button, False, False, 0)
         return self._row(
             box, "section", cid, None, conn, browser_colour, (lambda: self._toggle(key)) if tabs else (lambda: None),
-            findable=empty, pick=new_tab if empty else None,
+            findable=empty, pick=new_tab if empty else None, keys={"new_tab": new_tab} if empty else None,
             draggable=cid != NO_CONTAINER and cid in known,
             menu=(self._container_menu(conn, container, state)
                   if "containers" in can and (cid == NO_CONTAINER or cid in known) else None),
@@ -1381,9 +1408,16 @@ class DockView:
         if "close_tab" in can:
             groups.append([("Close tab", lambda: self._close_tab(conn, tab["id"]))])
         menu = [item for i, group in enumerate(groups) for item in ([(None, None)] if i else []) + group] or None
+        keys = {}  # what the find window's Delete, Ctrl+K and Ctrl+T do on this row
+        if "close_tab" in can:
+            keys["close"] = lambda: self._close_tab(conn, tab["id"])
+        if "pin_tab" in can:
+            keys["pin"] = lambda: self._command(conn, {"type": "pin_tab", "tabId": tab["id"], "pinned": not pinned})
+        if store == NO_CONTAINER or store in {c["cookieStoreId"] for c in containers}:
+            keys["new_tab"] = lambda: self._new_tab(conn, store, window_id)
         return self._row(
             box, "tab", tab["id"], group, conn, colour, lambda: self.on_activate(conn, tab["id"], window_id),
-            active=bool(tab.get("active")), pinned=pinned, menu=menu, closable="close_tab" in can,
+            active=bool(tab.get("active")), pinned=pinned, menu=menu, closable="close_tab" in can, keys=keys,
         )
 
     def find(self):
@@ -1426,7 +1460,7 @@ class DockView:
                 self._rebuild()
 
         def answer(accepted):
-            box = next((b for b in self._find_rows() if self._tab_key(b) == self._selected), None)
+            box = self._highlighted()
             pick = self._meta[box]["pick"] if box is not None else None  # what Enter does on that row
             first = self._first_match
             first_url = self._first_url
@@ -1451,7 +1485,7 @@ class DockView:
                 conn, url, window = first_url
                 self._open_url(conn, url, window)
 
-        finish, _ok = self._small_window("Find", content, "Go", answer, focus=entry, beside=True)
+        finish, _ok = self._small_window("Find", content, "Go", answer, focus=entry, beside=True, hint=FIND_HINT)
         self._find_dialog = self._dialog
         self._find_switch, self._find_view_buttons = switch, buttons
         self._set_views()  # hides the buttons of the views not on offer
@@ -1470,7 +1504,7 @@ class DockView:
     def _find_accept(self):
         """Enter in the find window: on a highlighted bookmark folder it opens or closes the folder and the window
         stays; anything else is picked and the window closes."""
-        box = next((b for b in self._find_rows() if self._tab_key(b) == self._selected), None)
+        box = self._highlighted()
         if box is not None and self._meta[box]["kind"] == "bookmark_folder":
             self._meta[box]["click"]()  # the list is rebuilt, and the same row is highlighted again
         else:
@@ -1507,6 +1541,27 @@ class DockView:
             if self._restore_tab():
                 self._dialog_finish(False)  # the tab is back: the keyboard goes on to the browser
             return True
+        lower = Gdk.keyval_to_lower(event.keyval)
+        if event.state & CARET_MODS == Gdk.ModifierType.CONTROL_MASK and (lower in FIND_ACTIONS or lower in FIND_ROW_ACTIONS):
+            if lower in FIND_ACTIONS:
+                getattr(self, FIND_ACTIONS[lower])()
+            else:
+                act = self._row_action(FIND_ROW_ACTIONS[lower])
+                if act:
+                    act()
+                    if lower == Gdk.KEY_t:
+                        self._dialog_finish(False)  # the browser is raised: the keyboard goes on to it
+            return True
+        if event.keyval in (Gdk.KEY_Delete, Gdk.KEY_KP_Delete) and not event.state & CARET_MODS:
+            close = self._row_action("close")
+            if close and not entry.get_selection_bounds() and entry.get_position() == len(entry.get_text()):
+                rows = self._find_rows()  # (elsewhere Delete deletes text)
+                at = next(i for i, b in enumerate(rows) if self._tab_key(b) == self._selected)
+                close()
+                if len(rows) > 1:  # the highlight moves to the neighbour, which the rebuild marks
+                    self._selected = self._tab_key(rows[at + 1 if at + 1 < len(rows) else at - 1])
+                return True
+            return False
         if event.keyval in FIND_VIEW_KEYS and event.state & CARET_MODS == Gdk.ModifierType.CONTROL_MASK:
             self._find_view(FIND_VIEW_KEYS[event.keyval])
             return True
@@ -1534,6 +1589,14 @@ class DockView:
             current = None if from_nothing or self._selected not in keys else keys.index(self._selected)
             self._select(rows[step_index(current, len(rows), step)])
         return True
+
+    def _highlighted(self):
+        return next((b for b in self._find_rows() if self._tab_key(b) == self._selected), None)
+
+    def _row_action(self, name):
+        """What `name` does on the highlighted row, or None."""
+        box = self._highlighted()
+        return box and self._meta[box]["keys"].get(name)
 
     def _keyboard_source(self):
         """(conn, hello, state) of the browser the find window's keys act on: the one listed, or of several the one
@@ -1851,11 +1914,12 @@ class DockView:
             menu.append(item)
         return menu
 
-    def _small_window(self, title, content, accept_label, answer, focus=None, beside=False):
+    def _small_window(self, title, content, accept_label, answer, focus=None, beside=False, hint=None):
         """A small window of its own: `content` above Cancel and `accept_label`. It takes the keyboard, which the dock
         windows never do (a click must not steal it from the browser), and the panel stays open while it is up.
         answer(accepted) is called once, as it goes; Escape or closing it is Cancel. Returns (finish, accept button).
-        `beside`: next to the panel instead of at the pointer, where it would cover what the panel shows."""
+        `beside`: next to the panel instead of at the pointer, where it would cover what the panel shows.
+        `hint`: a faint line of text along the bottom."""
         if self._dialog is not None:
             self._dialog_finish(False)  # replaced is cancelled: its answer undoes what it changed (a find's list)
         dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL, title=title)
@@ -1872,6 +1936,8 @@ class DockView:
         box.set_border_width(10)
         box.pack_start(content, False, False, 0)
         box.pack_start(buttons, False, False, 0)
+        if hint:
+            box.pack_start(self._label(hint, "sp-where", wrap=True), False, False, 0)
         dialog.add(box)
 
         def finish(accept):

@@ -42,6 +42,18 @@ class FakeView:
     def find(self):
         self.calls.append(("find",))
 
+    def toggle_pin(self):
+        self.calls.append(("toggle_pin",))
+
+    def toggle_icons(self):
+        self.calls.append(("toggle_icons",))
+
+    def flip_side(self):
+        self.calls.append(("flip_side",))
+
+    def new_workspace(self):
+        self.calls.append(("new_workspace",))
+
     def show_bookmarks(self, conn, msg):
         self.calls.append(("bookmarks", conn, msg))
 
@@ -465,6 +477,13 @@ class PanelTest(unittest.TestCase):
     def test_a_find_message_opens_the_find_window(self):
         self.panel.on_message(FakeConn(), {"type": "find"})
         self.assertEqual(self.view.calls, [("find",)])
+
+    def test_the_dock_messages_reach_the_view(self):
+        for kind, call in (("pin", "toggle_pin"), ("icons", "toggle_icons"), ("side", "flip_side"),
+                           ("new_workspace", "new_workspace")):
+            self.view.calls.clear()
+            self.panel.on_message(FakeConn(), {"type": kind})
+            self.assertEqual(self.view.calls, [(call,)])
 
     def test_a_client_that_never_said_hello_closing_redraws_nothing(self):
         self.panel.on_message(FakeConn(), {"type": "find"})  # what `tabdock --find` sends

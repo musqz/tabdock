@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import signal
 import socket
@@ -27,6 +28,8 @@ from .ui import ConsoleView  # noqa: E402
 
 
 EDITS = {"wsicon": "icon", "wscolor": "color", "wscontainer": "cookieStoreId"}  # --debug verb -> what it sets
+# `tabdock --pin` and the like: the message the panel takes -> the view's method
+DOCK_MESSAGES = {"pin": "toggle_pin", "icons": "toggle_icons", "side": "flip_side", "new_workspace": "new_workspace"}
 CONTAINER_VERBS = {"cnew": None, "crm": None, "crename": "name", "ccolor": "color", "cicon": "icon"}
 
 
@@ -66,6 +69,8 @@ class Panel:
             self.view.show_history(conn, msg)
         elif kind == "find":  # from `tabdock --find`, a key bound in the window manager
             self.view.find()
+        elif kind in DOCK_MESSAGES:  # from `tabdock --pin` and the like
+            getattr(self.view, DOCK_MESSAGES[kind])()
 
     def on_close(self, conn):
         if conn not in self.browsers:
@@ -294,12 +299,12 @@ def _help_files():
     )
 
 
-def _send_find():
-    """`tabdock --find`: tell the running panel to open its find window."""
+def _send(kind):
+    """`tabdock --find` and the like: tell the running panel."""
     client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         client.connect(config.socket_path())
-        client.sendall(b'{"type":"find"}\n')
+        client.sendall(json.dumps({"type": kind}, separators=(",", ":")).encode() + b"\n")
     except OSError:
         print("tabdock: not running", file=sys.stderr)
         return 1
@@ -328,10 +333,21 @@ def main(argv=None):
         help="show the running panel's find window (bind it to a key in your window manager); "
         "arrows and Enter then pick a tab, Escape closes it",
     )
+    for flag, what in (
+        ("pin", "pin the panel open, or unpin it"),
+        ("icons", "show or hide the site icons"),
+        ("side", "switch the panel to the other screen edge"),
+        ("new_workspace", "make a new workspace in the browser in use"),
+    ):
+        parser.add_argument(f"--{flag.replace('_', '-')}", dest=flag, action="store_true",
+                            help=f"tell the running panel to {what}")
     args = parser.parse_args(argv)
 
     if args.find:
-        return _send_find()
+        return _send("find")
+    for kind in DOCK_MESSAGES:
+        if getattr(args, kind):
+            return _send(kind)
 
     try:
         cfg = config.load()

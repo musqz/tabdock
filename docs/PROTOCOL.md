@@ -82,10 +82,14 @@ the workspace of the window focused before it.
 
 ## Command line -> panel
 
-The panel takes one message from a client that is no relay: `tabdock --find` connects to the same socket, sends it
-and disconnects. The panel answers nothing, and the client never sends `hello`, so it is never listed as a browser.
-With no panel listening, `--find` prints `tabdock: not running` and exits 1.
+The panel takes these messages from a client that is no relay: `tabdock --find` (or one of the flags below) connects to
+the same socket, sends one and disconnects. The panel answers nothing, and the client never sends `hello`, so it is never listed as a browser.
+With no panel listening, the flag prints `tabdock: not running` and exits 1.
 
 | type   | fields | notes |
 |--------|--------|-------|
+| `pin` | (none) | pins the panel open, or unpins it (`tabdock --pin`) |
+| `icons` | (none) | shows or hides the site icons (`tabdock --icons`) |
+| `side` | (none) | switches the panel to the other screen edge (`tabdock --side`) |
+| `new_workspace` | (none) | not the panel-to-extension command of that name: makes a workspace, named by the extension, in the browser in use (`tabdock --new-workspace`) |
 | `find` | (none) | shows the panel (even while hidden) with its find window, where the arrow keys highlight a tab; sent again while that window is up, it closes it |
