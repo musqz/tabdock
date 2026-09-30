@@ -349,5 +349,26 @@ class BookmarkRowsTest(unittest.TestCase):
         self.assertEqual(len(bookmark_rows(tree, "page")), BOOKMARK_MATCHES)
 
 
+
+
+class WindowGroupsTest(unittest.TestCase):
+    def test_groups_of_the_workspace_shown_in_order_with_their_size(self):
+        from tabdock.model import window_groups
+
+        state = {
+            "focusedWindowId": 1,
+            "groups": [{"id": 7, "title": "A"}, {"id": 8, "title": "B"}, {"id": 9, "title": "Other"}],
+            "windows": [{"id": 1, "workspaceId": "w1", "tabs": [
+                {"id": 1, "groupId": 8, "workspaceId": "w1"},
+                {"id": 2, "groupId": 7, "workspaceId": "w1"},
+                {"id": 3, "groupId": 8, "workspaceId": "w1"},
+                {"id": 4, "groupId": 9, "workspaceId": "w2"},  # another workspace's hidden tab
+                {"id": 5, "workspaceId": "w1"},
+            ]}],
+        }
+        self.assertEqual([(g["id"], n) for g, n in window_groups(state)], [(8, 2), (7, 1)])
+        self.assertEqual(window_groups({"groups": [], "windows": []}), [])
+
+
 if __name__ == "__main__":
     unittest.main()

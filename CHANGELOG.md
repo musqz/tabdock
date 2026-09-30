@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Install the new signed extension in each browser (`docs/INSTALL.md`); without it the group menu does not show.
+Install the new signed extension in each browser (`docs/INSTALL.md`).
 
 - Add "Add to group", "New group…" and "Remove from group" to the right-click menu of a tab.
 - Head each Firefox tab group with a coloured pill that folds its tabs; Enter folds it in Find.

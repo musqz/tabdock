@@ -28,7 +28,7 @@ GitHub release (the package ships it as `/usr/share/tabdock/tabdock.xpi`): `abou
 A newer extension adds features; an older one keeps working and the panel offers only what it says it handles.
 
 Permissions: `tabs`, `contextualIdentities` + `cookies` (containers), `nativeMessaging`, `storage` (container order,
-workspaces), `tabHide` (workspaces), `sessions` (remember workspaces), `tabGroups` (group names).
+workspaces), `tabHide` (workspaces), `sessions` (remember workspaces), `tabGroups` (group names and colours; naming a new group).
 Optional, switched on in `about:addons` → Tabdock → *Permissions and data*: `bookmarks`, `history` (the panel's Bookmarks and History views).
 Nothing leaves your computer.
 

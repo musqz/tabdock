@@ -2389,7 +2389,7 @@ class DockViewTest(unittest.TestCase):
         outside = self.tab_menu(view, 11)
         self.assertNotIn("Remove from group", [str(i[0]) for i in outside])
         items = by_label(outside, "Add to group")[1]
-        self.assertIn("Trip &amp; co", items[0][0])
+        self.assertIn("Trip &amp; co (1)", items[0][0])
         items[0][1]()
         self.assertEqual(self.commands[-1], {"type": "group_tab", "tabId": 11, "groupId": 7})
         by_label(items, "New group…")[1]()

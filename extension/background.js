@@ -561,7 +561,8 @@ async function resync() {
   }
   panelUp = true;
   // grouping tabs needs Firefox's own tab group API, which older builds lack
-  const features = browser.tabs.group && browser.tabGroups ? FEATURES : FEATURES.filter((f) => f !== "tab_groups");
+  const grouping = browser.tabs.group && browser.tabs.ungroup && browser.tabGroups;
+  const features = grouping ? FEATURES : FEATURES.filter((f) => f !== "tab_groups");
   send({ type: "hello", browser: info.name, version: info.version, features });
   send(await snapshot());
 }
@@ -678,8 +679,8 @@ async function onCommand(msg) {
         break;
       case "group_tab":
         // into the tab group `groupId`, or into a new one named `title`; the group events report it
-        if (Number.isInteger(msg.tabId) && browser.tabs.group) {
-          if (Number.isInteger(msg.groupId)) {
+        if (Number.isInteger(msg.tabId) && (msg.groupId === undefined || Number.isInteger(msg.groupId))) {
+          if (msg.groupId !== undefined) {
             await browser.tabs.group({ tabIds: [msg.tabId], groupId: msg.groupId });
           } else {
             const groupId = await browser.tabs.group({ tabIds: [msg.tabId] });
@@ -688,7 +689,7 @@ async function onCommand(msg) {
         }
         break;
       case "ungroup_tab":
-        if (Number.isInteger(msg.tabId) && browser.tabs.ungroup) await browser.tabs.ungroup([msg.tabId]);
+        if (Number.isInteger(msg.tabId)) await browser.tabs.ungroup([msg.tabId]);
         break;
       case "create_container":
         await createContainer(msg);

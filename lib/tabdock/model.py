@@ -55,15 +55,21 @@ GROUP_COLORS = {
 }
 
 
+def group_colour(color):
+    """The colour Firefox draws a tab group in (an unknown name is grey)."""
+    return GROUP_COLORS.get(color, GROUP_COLORS["gray"])
+
+
 def window_groups(state):
-    """The Firefox tab groups the focused window's tabs are in, in the order they first appear."""
+    """[(group, tabs in it)] for the Firefox tab groups of the focused window's workspace, in the order they first
+    appear."""
     win = focused_window(state)
-    seen = []
+    found = {}
     for tab in (win or {}).get("tabs", []):
         group = tab_group(state, tab)
-        if group is not None and group not in seen:
-            seen.append(group)
-    return seen
+        if group is not None and in_workspace(tab, win.get("workspaceId")):
+            found.setdefault(group["id"], [group, 0])[1] += 1
+    return [tuple(pair) for pair in found.values()]
 
 
 def tab_group(state, tab):
