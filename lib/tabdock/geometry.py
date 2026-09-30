@@ -1,6 +1,12 @@
 """Panel placement math (pure). Rects are (x, y, w, h) in X screen coordinates."""
 
 TRIGGER_PX = 3  # width of the collapsed hover strip
+MIN_WIDTH = 100
+MAX_WIDTH = 1000  # the range config.validate accepts
+
+
+def clamp_width(width, monitor_w):
+    return max(MIN_WIDTH, min(width, MAX_WIDTH, monitor_w // 2))
 
 
 def outer_monitor(rects, side, primary=None):

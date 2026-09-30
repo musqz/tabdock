@@ -2612,6 +2612,72 @@ class DockViewTest(unittest.TestCase):
         GLib.source_remove(first)
         view._relayout_id = None
 
+    def test_wider_and_narrower_step_clamp_and_save(self):
+        view = self.make(width=300)
+        with mock.patch("tabdock.config.set_width") as save, mock.patch.object(view, "_nav"), \
+                mock.patch.object(view, "_monitor_rect", return_value=(0, 0, 2560, 1440)):
+            view.wider()
+            self.assertEqual(view.cfg["width"], 340)
+            save.assert_called_with(340)
+            view.narrower()
+            view.narrower()
+            view.narrower()
+            self.assertEqual(view.cfg["width"], 220)
+            view.cfg["width"] = 120
+            view.narrower()
+            self.assertEqual(view.cfg["width"], 100)  # MIN_WIDTH
+            view.narrower()
+            self.assertEqual(save.call_args.args, (100,))
+            view.cfg["width"] = 990
+            view.wider()
+            self.assertEqual(view.cfg["width"], 1000)  # MAX_WIDTH
+
+    def test_dragging_the_grip_resizes_on_either_side(self):
+        class Ev:
+            button = 1
+            x = 0  # the press lands on the grip's outer pixel
+            state = Gdk.ModifierType.BUTTON1_MASK
+
+            def __init__(self, x):
+                self.x_root = x
+
+        for side, x, want in (("left", 445, 450), ("right", 1920 - 380, 380)):
+            view = self.make(side=side, width=300)
+            with mock.patch("tabdock.config.set_width") as save, \
+                    mock.patch.object(view, "_monitor_rect", return_value=(0, 0, 1920, 1080)):
+                view._on_grip_motion(None, Ev(x))  # no press yet: ignored
+                self.assertEqual(view.cfg["width"], 300)
+                view._on_grip_press(None, Ev(x))
+                self.assertIn("resize", view._holds)
+                view._on_grip_motion(None, Ev(x))
+                self.assertEqual(view.cfg["width"], want)
+                save.assert_not_called()
+                view._on_grip_release(None, Ev(x))
+                self.assertNotIn("resize", view._holds)
+                save.assert_called_once_with(want)
+            self.assertIs(view.grip.get_parent(), view.frame)
+            children = view.frame.get_children()
+            self.assertEqual(children.index(view.grip), 1 if side == "left" else 0)
+
+    def test_a_click_on_the_grip_saves_nothing_and_a_lost_release_ends_the_drag(self):
+        class Ev:
+            button = 1
+            x = 0
+            x_root = 100
+            state = Gdk.ModifierType.BUTTON1_MASK
+
+        view = self.make(width=300)
+        with mock.patch("tabdock.config.set_width") as save:
+            view._on_grip_press(None, Ev())
+            view._on_grip_release(None, Ev())
+            save.assert_not_called()
+            view._on_grip_press(None, Ev())
+            Ev.state = 0  # motion without the button: the release was lost
+            view._on_grip_motion(None, Ev())
+            self.assertFalse(view._dragging_grip)
+            self.assertNotIn("resize", view._holds)
+            save.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

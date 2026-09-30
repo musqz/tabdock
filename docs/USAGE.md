@@ -47,7 +47,7 @@
 |-----|---------|---------|
 | `side` | `"left"` | `"left"` or `"right"` |
 | `monitor` | `"outer"` | `"outer"` (screen's outer edge for `side`), `"primary"`, or an `xrandr` output name |
-| `width` | `320` | px, 100-1000 |
+| `width` | `320` | px, 100-1000; a drag on the panel's edge or `--wider`/`--narrower` updates it |
 | `follow` | `"last"` | while a non-browser window is active: `"last"` keeps the last browser, `"hide"` hides |
 | `view` | `"auto"` | `"auto"` or `"all"` at start |
 | `icons` | `false` | site icons before titles (see Site icons); the header's `icons` button switches them for the session |
@@ -125,6 +125,10 @@ after the last key.
 
 `tabdock --ws-next` and `--ws-prev` switch the browser in use (or the one its chip picked) to its next or previous
 workspace, and stop at the first and last. Bind them like the others, for example `S-C-Down` and `S-C-Up`.
+
+Drag the panel's inner edge to resize it. `tabdock --wider` and `--narrower` change the width by 40 px; bind them like
+the others, for example `W-Right` and `W-Left`. The width is saved to `width` in `config.toml` (200 to 1000, at most half
+the monitor).
 
 `W-` is Super, `A-` Alt, `C-` Ctrl, `S-` Shift; `xev` prints key names. The panel must be running.
 

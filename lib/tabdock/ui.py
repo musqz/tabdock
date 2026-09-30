@@ -37,6 +37,12 @@ class ConsoleView:
     def new_workspace(self):
         pass
 
+    def wider(self):
+        pass
+
+    def narrower(self):
+        pass
+
     def nav_next(self):
         pass
 

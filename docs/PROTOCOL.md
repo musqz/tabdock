@@ -97,5 +97,6 @@ With no panel listening, the flag prints `tabdock: not running` and exits 1.
 | `next`, `prev` | (none) | highlight the next or previous row and keep the panel open for 5 s (`tabdock --next`, `--prev`) |
 | `open` | (none) | opens the highlighted tab, or folds or unfolds the highlighted browser (`tabdock --open`) |
 | `ws_next`, `ws_prev` | (none) | switches the browser in use to its next or previous workspace, stopping at the ends (`tabdock --ws-next`, `--ws-prev`) |
+| `wider`, `narrower` | (none) | changes the panel width by 40 px and saves it to `config.toml` (`tabdock --wider`, `--narrower`) |
 | `all` | (none) | switches between `auto` and `all` (`tabdock --all`) |
 | `find` | (none) | shows the panel (even while hidden) with its find window, where the arrow keys highlight a tab; sent again while that window is up, it closes it |

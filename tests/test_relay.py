@@ -358,7 +358,7 @@ class FindCommandTest(unittest.TestCase):
         for flag, kind in (("--pin", "pin"), ("--icons", "icons"), ("--side", "side"),
                            ("--new-workspace", "new_workspace"), ("--next", "next"), ("--prev", "prev"),
                            ("--open", "open"), ("--all", "all"), ("--ws-next", "ws_next"),
-                           ("--ws-prev", "ws_prev")):
+                           ("--ws-prev", "ws_prev"), ("--wider", "wider"), ("--narrower", "narrower")):
             with tempfile.TemporaryDirectory() as home:
                 path = os.path.join(home, "panel.sock")
                 srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

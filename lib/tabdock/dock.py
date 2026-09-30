@@ -66,8 +66,13 @@ from .model import (  # noqa: E402
     workspaces,
 )
 
+GRIP_PX = 5
+WIDTH_STEP = 40
+
 CSS = """
 .sp-strip {{ background-color: {accent}; }}
+.sp-grip {{ background-color: transparent; }}
+.sp-grip:hover {{ background-color: {accent}; }}
 .sp-panel {{ background-color: #1b1d23; }}
 .sp-content {{ background-color: #1b1d23; color: #dfe3ea; }}
 .sp-header {{ background-color: #23262e; border-top: 3px solid {accent}; padding: 5px 8px; }}
@@ -404,7 +409,21 @@ class DockView:
         self.content.pack_start(self.chips, False, False, 0)
         self.content.pack_start(self.scroll, True, True, 0)
         self.content.pack_start(self.views, False, False, 0)
-        self.win.get_child().add(self.content)
+        self.frame = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.frame.pack_start(self.content, True, True, 0)
+        self.grip = Gtk.EventBox()  # the panel's inner edge: drag it to resize
+        self.grip.set_size_request(GRIP_PX, -1)
+        self.grip.get_style_context().add_class("sp-grip")
+        self.grip.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK
+                             | Gdk.EventMask.POINTER_MOTION_MASK)
+        self.grip.connect("realize", lambda w: w.get_window().set_cursor(
+            Gdk.Cursor.new_from_name(w.get_display(), "col-resize")))
+        self.grip.connect("button-press-event", self._on_grip_press)
+        self.grip.connect("motion-notify-event", self._on_grip_motion)
+        self.grip.connect("button-release-event", self._on_grip_release)
+        self._dragging_grip = False
+        self._place_grip()
+        self.win.get_child().add(self.frame)
         self.win.get_child().show_all()  # the panel window itself is only shown while expanded
         self.views.set_visible(False)
         self.strip.get_child().show()
@@ -518,7 +537,72 @@ class DockView:
 
     def set_side(self, side):
         self.cfg["side"] = side
+        self._place_grip()
         self._place()
+
+    def _place_grip(self):
+        """The grip sits on the panel's inner edge: right of the content on the left side, left of it on the right."""
+        if self.grip.get_parent() is not None:
+            self.frame.remove(self.grip)
+        if self.cfg["side"] == "left":
+            self.frame.pack_end(self.grip, False, False, 0)
+        else:
+            self.frame.pack_start(self.grip, False, False, 0)
+            self.frame.reorder_child(self.grip, 0)
+        self.grip.show()
+
+    def _set_width(self, width, save):
+        width = geometry.clamp_width(width, self._monitor_rect()[2])
+        if width != self.cfg["width"]:
+            self.cfg["width"] = width
+            self._place()
+        if save:
+            config.set_width(self.cfg["width"])
+
+    def _on_grip_press(self, _w, event):
+        if event.button == 1:
+            self._dragging_grip = True
+            self._grip_off = event.x  # where in the grip it was taken, so the edge does not jump
+            self._grip_moved = False
+            self._hold("resize", True)
+        return True
+
+    def _on_grip_motion(self, _w, event):
+        if self._dragging_grip and not event.state & Gdk.ModifierType.BUTTON1_MASK:
+            self._end_grip_drag()  # the release never came (a grab was lost)
+        elif self._dragging_grip:
+            mon = self._monitor_rect()
+            if self.cfg["side"] == "left":
+                width = event.x_root - mon[0] + GRIP_PX - self._grip_off
+            else:
+                width = mon[0] + mon[2] - event.x_root + self._grip_off
+            self._grip_moved = True
+            self._set_width(int(width), False)
+        return True
+
+    def _on_grip_release(self, _w, event):
+        if event.button == 1 and self._dragging_grip:
+            self._end_grip_drag()
+        return True
+
+    def _end_grip_drag(self):
+        self._dragging_grip = False
+        self._hold("resize", False)
+        if self._grip_moved:
+            config.set_width(self.cfg["width"])
+
+    def _step_width(self, delta):
+        """A step never goes against its direction, whatever the clamp says about the current width."""
+        width = geometry.clamp_width(self.cfg["width"] + delta, self._monitor_rect()[2])
+        if (width - self.cfg["width"]) * delta > 0:
+            self._set_width(width, True)
+        self._nav()
+
+    def wider(self):
+        self._step_width(WIDTH_STEP)
+
+    def narrower(self):
+        self._step_width(-WIDTH_STEP)
 
     def flip_side(self):
         self.set_side("right" if self.cfg["side"] == "left" else "left")
@@ -605,6 +689,7 @@ class DockView:
         self._last = None
         if self._view != was and self.sources:
             self._rebuild()
+        self._place_grip()
         self._place()  # side, width or monitor may have changed too
         colours = accents(self.cfg.get("theme"))
         if colours != self._colours:  # new [theme] colours: the next show() rebuilds the rows in them
