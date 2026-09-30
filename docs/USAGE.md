@@ -17,7 +17,7 @@
 - **From the keyboard:** `tabdock --find` shows the panel and that window from any app (see Hotkey); the same
   key closes it again. There: Down/Up highlight a tab (a bookmark or visit in those views), Page Down/Up move ten,
   Home/End jump, Enter opens it (a bookmark folder: opens or closes it), Escape closes.
-  The arrows also stop on an empty container: Enter opens a tab in it.
+  The arrows also stop on an empty container (Enter opens a tab in it) and on a tab group's pill (Enter folds it).
   With `launch_offline` they also stop on a "Start …" row: Enter starts the browser.
   Ctrl+1/2/3 (or the buttons at the top of the window)
   search Tabs, Bookmarks or History, whichever are on. While nothing is typed, Left/Right switch view and Ctrl+Left/Right switch workspace. Ctrl+Shift+T reopens the last closed tab.
@@ -31,7 +31,7 @@
 - **Reorder:** drag sections, and tabs within their container. The order is kept per browser profile.
 - **Several browsers:** chips under the header pick `auto` (browser in use), one browser, or `all`.
   Clicking a tab of another browser raises it.
-- **Tab groups:** a tab in a Firefox tab group shows the group's name in its colour.
+- **Tab groups:** each Firefox tab group gets a pill in its colour above its tabs, with its name and tab count. Click it to fold the group (in the panel only); a group Firefox has collapsed starts folded. In a search the tab shows the group's name instead.
 - **Pin** keeps the panel open and reserves space on an outer screen edge (an inner edge becomes an overlay).
   `⇄` flips the side, `✕` quits until the next browser start. The panel never takes keyboard focus.
 

@@ -2338,19 +2338,80 @@ class DockViewTest(unittest.TestCase):
         px, py, pw, _ph = geometry.dock_rect(view._monitor_rect(), "left", view.cfg["width"], True)
         self.assertEqual([(x, y) for w, x, y in moved if w is view._dialog], [(px + pw + 8, py + 30)])
 
-    def test_a_tab_in_a_firefox_tab_group_wears_the_groups_name_in_its_colour(self):
+    GROUP_STATE = {**STATE, "groups": [{"id": 7, "title": "Trip & co", "color": "blue", "collapsed": False}],
+                   "windows": [{"id": 2, "tabs": [{**STATE["windows"][0]["tabs"][0], "groupId": 7, "active": False},
+                                                  STATE["windows"][0]["tabs"][1]]}]}
+
+    def test_a_firefox_tab_group_gets_a_pill_above_its_tabs(self):
         view = self.make()
-        tabs = [{**STATE["windows"][0]["tabs"][0], "groupId": 7}, STATE["windows"][0]["tabs"][1]]
-        state = {**STATE, "groups": [{"id": 7, "title": "Trip & co", "color": "blue", "collapsed": False}],
+        view.show([(object(), INFO, self.GROUP_STATE)])
+        pill = self.row(view, "tabgroup", "group:7:firefox-default")
+        label = pill.get_child().get_children()[0]
+        self.assertIn("Trip &amp; co", label.get_label())
+        self.assertIn("(1)", label.get_label())
+        self.assertTrue(label.get_style_context().has_class("gc-blue"))
+        order = [view._meta[b]["id"] for b in view._row_order]
+        self.assertLess(order.index("group:7:firefox-default"), order.index(10))  # above its tab
+        self.assertTrue(self.row(view, "tab", 10).get_child().get_style_context().has_class("sp-ingroup"))
+        self.assertFalse(self.row(view, "tab", 11).get_child().get_style_context().has_class("sp-ingroup"))
+        tags = [c for c in self.row(view, "tab", 10).get_child().get_children() if c.get_style_context().has_class("sp-group")]
+        self.assertEqual(tags, [])  # the pill says it
+
+    def test_a_click_on_the_pill_folds_its_tabs(self):
+        view = self.make()
+        view.show([(object(), INFO, self.GROUP_STATE)])
+        view._meta[self.row(view, "tabgroup", "group:7:firefox-default")]["click"]()
+        self.assertEqual(self.listed_tabs(view), [11])
+        self.assertIn("▸", self.row(view, "tabgroup", "group:7:firefox-default").get_child().get_children()[0].get_label())
+        view._meta[self.row(view, "tabgroup", "group:7:firefox-default")]["click"]()
+        self.assertEqual(sorted(self.listed_tabs(view)), [10, 11])
+
+    def test_a_group_firefox_has_collapsed_starts_folded(self):
+        view = self.make()
+        state = {**self.GROUP_STATE, "groups": [{"id": 7, "title": "Trip", "color": "blue", "collapsed": True}]}
+        view.show([(object(), INFO, state)])
+        self.assertEqual(self.listed_tabs(view), [11])
+
+    def test_a_folded_group_keeps_its_active_tab_listed(self):
+        view = self.make()
+        tabs = [{**t, "active": t["id"] == 10} for t in self.GROUP_STATE["windows"][0]["tabs"]]
+        view.show([(object(), INFO, {**self.GROUP_STATE, "windows": [{"id": 2, "tabs": tabs}],
+                                     "groups": [{"id": 7, "title": "Trip", "color": "blue", "collapsed": True}]})])
+        self.assertEqual(sorted(self.listed_tabs(view)), [10, 11])
+
+    def test_a_group_in_two_containers_has_a_pill_with_its_own_id_in_each(self):
+        view = self.make()
+        tabs = [{**STATE["windows"][0]["tabs"][0], "groupId": 7, "active": False},
+                {**STATE["windows"][0]["tabs"][1], "groupId": 7, "cookieStoreId": "firefox-container-1"}]
+        state = {**STATE, "groups": [{"id": 7, "title": "Trip", "color": "blue", "collapsed": False}],
                  "windows": [{"id": 2, "tabs": tabs}]}
         view.show([(object(), INFO, state)])
-        tag = lambda tab_id: next((c for c in self.row(view, "tab", tab_id).get_child().get_children()  # noqa: E731
-                                   if c.get_style_context().has_class("sp-group")), None)
-        self.assertEqual(tag(10).get_text(), "Trip & co")
-        self.assertIn("#3f8cf2", tag(10).get_label())  # blue
-        self.assertEqual(tag(10).get_tooltip_text(), "In the tab group “Trip & co”")
-        self.assertIsNone(tag(11))
-        self.assertEqual(label_of(self.row(view, "tab", 10).get_child()).get_text(), "plain")  # the title stays first
+        ids = [view._meta[b]["id"] for b in view._row_order if view._meta[b]["kind"] == "tabgroup"]
+        self.assertEqual(len(ids), 2)
+        self.assertEqual(len(set(ids)), 2)
+
+    def test_a_find_lists_the_tab_with_its_group_name_and_no_pill(self):
+        view = self.make()
+        view.show([(object(), INFO, self.GROUP_STATE)])
+        view.find_btn.clicked()
+        view._dialog_entry.set_text("plain")
+        with self.assertRaises(StopIteration):
+            self.row(view, "tabgroup", "group:7:firefox-default")
+        tag = next(c for c in self.row(view, "tab", 10).get_child().get_children() if c.get_style_context().has_class("sp-group"))
+        self.assertEqual(tag.get_text(), "Trip & co")
+
+    def test_enter_on_a_highlighted_pill_folds_it_in_find(self):
+        view = self.make()
+        view.show([(object(), INFO, self.GROUP_STATE)])
+        view.find_btn.clicked()
+        rows = [view._meta[b]["id"] for b in view._find_rows()]
+        self.assertIn("group:7:firefox-default", rows)
+        for _ in range(rows.index("group:7:firefox-default") + 1):
+            self.key(view, Gdk.KEY_Down)
+        self.assertEqual(self.highlighted(view), ["group:7:firefox-default"])
+        view._dialog_entry.emit("activate")
+        self.assertEqual(self.listed_tabs(view), [11])
+        self.assertIsNotNone(view._dialog)  # the window stays
 
     def test_a_middle_click_closes_the_tab_it_was_released_on(self):
         view = self.make()
