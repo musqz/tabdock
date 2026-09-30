@@ -94,5 +94,6 @@ With no panel listening, the flag prints `tabdock: not running` and exits 1.
 | `new_workspace` | (none) | not the panel-to-extension command of that name: asks for a name, then makes a workspace in the browser in use (`tabdock --new-workspace`) |
 | `next`, `prev` | (none) | highlight the next or previous row and keep the panel open for 5 s (`tabdock --next`, `--prev`) |
 | `open` | (none) | opens the highlighted tab, or folds or unfolds the highlighted browser (`tabdock --open`) |
+| `ws_next`, `ws_prev` | (none) | switches the browser in use to its next or previous workspace, stopping at the ends (`tabdock --ws-next`, `--ws-prev`) |
 | `all` | (none) | switches between `auto` and `all` (`tabdock --all`) |
 | `find` | (none) | shows the panel (even while hidden) with its find window, where the arrow keys highlight a tab; sent again while that window is up, it closes it |

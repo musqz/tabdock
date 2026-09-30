@@ -30,7 +30,8 @@ from .ui import ConsoleView  # noqa: E402
 EDITS = {"wsicon": "icon", "wscolor": "color", "wscontainer": "cookieStoreId"}  # --debug verb -> what it sets
 # `tabdock --pin` and the like: the message the panel takes -> the view's method
 DOCK_MESSAGES = {"pin": "toggle_pin", "icons": "toggle_icons", "side": "flip_side", "new_workspace": "new_workspace",
-                "next": "nav_next", "prev": "nav_prev", "open": "nav_open", "all": "toggle_all"}
+                "next": "nav_next", "prev": "nav_prev", "open": "nav_open", "all": "toggle_all",
+                "ws_next": "ws_next", "ws_prev": "ws_prev"}
 CONTAINER_VERBS = {"cnew": None, "crm": None, "crename": "name", "ccolor": "color", "cicon": "icon"}
 
 
@@ -344,6 +345,8 @@ def main(argv=None):
         ("prev", "highlight the previous row"),
         ("open", "open the highlighted tab, or fold or unfold the highlighted browser"),
         ("all", "switch between auto and all browsers"),
+        ("ws_next", "switch to the next workspace of the browser in use"),
+        ("ws_prev", "switch to the previous workspace of the browser in use"),
     ):
         parser.add_argument(f"--{flag.replace('_', '-')}", dest=flag, action="store_true",
                             help=f"tell the running panel to {what}")
