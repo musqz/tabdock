@@ -100,6 +100,8 @@ DRAG_STATE = {  # one window: p1 mail p2 p3 (the mail tab belongs to the Persona
     ],
 }
 
+NO_EMPTY_STATE = {**DRAG_STATE, "containers": DRAG_STATE["containers"][:1]}  # no empty container for the arrows to stop on
+
 
 @unittest.skipUnless(Gtk.init_check()[0], "no X display")
 class DockViewTest(unittest.TestCase):
@@ -1657,6 +1659,21 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(self.highlighted(view), [])
         self.assertEqual(self.listed_tabs(view), order)
 
+    def test_find_arrows_reach_an_empty_container_and_a_start_row(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, STATE)], offline=[("Zen", "zen-browser"), ("Chromium", "chromium")])
+        view.find_btn.clicked()
+        rows = [(view._meta[b]["kind"], view._meta[b]["id"]) for b in view._find_rows()]
+        self.assertEqual(rows, [("tab", 10), ("tab", 11), ("section", "firefox-container-2"),
+                                ("offline", "zen-browser"), ("offline", "chromium")])
+        empty = view._find_rows()[2]
+        view._meta[empty]["pick"]()
+        self.assertEqual(self.commands[-1]["type"], "new_tab")
+        view._dialog_entry.set_text("zen")
+        self.assertEqual([view._meta[b]["id"] for b in view._find_rows() if view._meta[b]["kind"] == "offline"],
+                         ["zen-browser"])
+
     def test_find_arrow_keys_walk_bookmarks_and_enter_opens_the_highlighted_one(self):
         view, conn = self.bookmark_view()
         view._set_view("bookmarks")
@@ -1743,7 +1760,7 @@ class DockViewTest(unittest.TestCase):
 
     def test_find_highlight_stops_at_the_ends_and_pages_and_jumps(self):
         view = self.make()
-        view.show([(object(), INFO, DRAG_STATE)])
+        view.show([(object(), INFO, NO_EMPTY_STATE)])
         order = self.listed_tabs(view)
         view.find_btn.clicked()
         self.key(view, Gdk.KEY_Up)  # from nothing: the last tab
@@ -1801,7 +1818,7 @@ class DockViewTest(unittest.TestCase):
     def test_find_keys_work_with_super_still_down_from_the_hotkey_and_on_the_keypad(self):
         view = self.make()
         conn = object()
-        view.show([(conn, INFO, DRAG_STATE)])
+        view.show([(conn, INFO, NO_EMPTY_STATE)])
         order = self.listed_tabs(view)
         super_ = Gdk.ModifierType.SUPER_MASK
         view.find_btn.clicked()
