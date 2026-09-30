@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
+
+The extension only changes its version number; installing the new one is optional.
 
 - Add `launch_offline` to list installed browsers that are not connected; a click starts one.
 
