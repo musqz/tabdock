@@ -25,5 +25,17 @@ class ConsoleView:
     def find(self):
         pass
 
+    def toggle_pin(self):
+        pass
+
+    def toggle_icons(self):
+        pass
+
+    def flip_side(self):
+        pass
+
+    def new_workspace(self):
+        pass
+
     def reconfigure(self, cfg):
         pass

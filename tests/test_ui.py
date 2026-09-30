@@ -1674,6 +1674,66 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual([view._meta[b]["id"] for b in view._find_rows() if view._meta[b]["kind"] == "offline"],
                          ["zen-browser"])
 
+    def test_find_ctrl_p_i_l_toggle_the_dock_and_stay_open(self):
+        ctrl = Gdk.ModifierType.CONTROL_MASK
+        view = self.make(pinned=False, icons=False, side="left")
+        view.show([(object(), INFO, STATE)])
+        view.find_btn.clicked()
+        self.assertTrue(self.key(view, Gdk.KEY_p, ctrl))
+        self.assertEqual((view.cfg["pinned"], view.autohide.pinned, view.pin_btn.get_active()), (True, True, True))
+        self.key(view, Gdk.KEY_p, ctrl)
+        self.assertEqual((view.cfg["pinned"], view.autohide.pinned), (False, False))
+        self.key(view, Gdk.KEY_i, ctrl)
+        self.assertTrue(view.cfg["icons"])
+        self.key(view, Gdk.KEY_l, ctrl)
+        self.assertEqual(view.cfg["side"], "right")
+        self.key(view, Gdk.KEY_L, ctrl)  # (Caps Lock)
+        self.assertEqual(view.cfg["side"], "left")
+        self.assertIsNotNone(view._find_dialog)
+        self.assertEqual(view._dialog_entry.get_text(), "")
+
+    def test_find_ctrl_n_makes_a_workspace_without_asking_for_a_name(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, self.WS_STATE)])
+        view.find_btn.clicked()
+        self.assertTrue(self.key(view, Gdk.KEY_n, Gdk.ModifierType.CONTROL_MASK))
+        self.assertEqual(self.commands, [{"type": "new_workspace", "windowId": 2, "name": ""}])
+        self.assertEqual(self.command_conns, [conn])
+
+    def test_find_delete_ctrl_k_and_ctrl_t_act_on_the_highlighted_tab(self):
+        ctrl = Gdk.ModifierType.CONTROL_MASK
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        view.find_btn.clicked()
+        self.key(view, Gdk.KEY_k, ctrl)  # nothing highlighted
+        self.assertEqual(self.commands, [])
+        self.key(view, Gdk.KEY_Down)  # tab 10
+        self.key(view, Gdk.KEY_k, ctrl)
+        self.assertEqual(self.commands, [{"type": "pin_tab", "tabId": 10, "pinned": True}])
+        self.assertTrue(self.key(view, Gdk.KEY_Delete))
+        self.assertEqual(self.commands[-1], {"type": "close_tab", "tabId": 10})
+        self.assertEqual(view._selected[1], 11)  # the neighbour, marked by the rebuild that follows the close
+        view._dialog_entry.set_text("mail")
+        view._dialog_entry.select_region(0, -1)
+        self.assertFalse(self.key(view, Gdk.KEY_Delete))  # a selection is deleted, not the tab
+        self.assertEqual(len(self.commands), 2)
+        view._dialog_entry.set_text("")
+        self.key(view, Gdk.KEY_Down)
+        self.key(view, Gdk.KEY_t, ctrl)
+        self.assertEqual(self.commands[-1], {"type": "new_tab", "cookieStoreId": "firefox-container-2", "windowId": 2})  # the empty Work row
+        self.assertIsNone(view._find_dialog)  # the browser has the keyboard now
+
+    def test_find_delete_is_the_carets_while_it_is_not_at_the_end_of_the_text(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        view.find_btn.clicked()
+        view._dialog_entry.set_text("plain")
+        self.key(view, Gdk.KEY_Down)
+        view._dialog_entry.set_position(2)
+        self.assertFalse(self.key(view, Gdk.KEY_Delete))
+        self.assertEqual(self.commands, [])
+
     def test_find_arrow_keys_walk_bookmarks_and_enter_opens_the_highlighted_one(self):
         view, conn = self.bookmark_view()
         view._set_view("bookmarks")
@@ -2076,7 +2136,7 @@ class DockViewTest(unittest.TestCase):
         view.show([(object(), self.RESTORING, STATE)])
         view.find_btn.clicked()
         self.assertFalse(self.key(view, Gdk.KEY_t))  # plain typing
-        self.assertFalse(self.key(view, Gdk.KEY_t, Gdk.ModifierType.CONTROL_MASK))
+        self.assertTrue(self.key(view, Gdk.KEY_t, Gdk.ModifierType.CONTROL_MASK))  # new tab in a row: nothing highlighted
         self.assertEqual(self.restored, [])
         self.assertIsNotNone(view._dialog)
         view.show([(object(), INFO, STATE)])  # an extension from before it
