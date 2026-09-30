@@ -1666,6 +1666,12 @@ class DockView:
         self._end_nav()
         pick()
 
+    def ws_next(self):
+        self._step_workspace(1)
+
+    def ws_prev(self):
+        self._step_workspace(-1)
+
     def toggle_all(self):
         """Ctrl+A, or `tabdock --all`: between "all" (the arrows also stop on the browser headers) and "auto". Leaving "all" from a
         highlighted row makes its browser the one in use, and the keyboard goes on to it."""

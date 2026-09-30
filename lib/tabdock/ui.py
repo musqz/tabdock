@@ -49,5 +49,11 @@ class ConsoleView:
     def toggle_all(self):
         pass
 
+    def ws_next(self):
+        pass
+
+    def ws_prev(self):
+        pass
+
     def reconfigure(self, cfg):
         pass

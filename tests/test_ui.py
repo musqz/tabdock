@@ -1708,6 +1708,14 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(self.raised, [ff])
         self.assertEqual(self.highlighted(view), [])
 
+    def test_ws_next_and_prev_switch_workspace_without_the_find_window(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, self.WS_STATE)])
+        view.ws_next()
+        self.assertEqual([m["type"] for m in self.commands], ["switch_workspace"])
+        self.assertEqual(self.command_conns, [conn])
+
     def test_find_arrows_reach_an_empty_container_and_a_start_row(self):
         view = self.make()
         conn = object()
