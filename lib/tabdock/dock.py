@@ -266,6 +266,7 @@ class DockView:
         self.hidden = False
         self._last = None  # what the last render showed, to skip identical ones
         self._offline = ()  # [(name, executable)] of the browsers that can be started from the panel
+        self._starting = set()  # names clicked lately: no row until the browser connects, or 30 s pass
         self._accent = None
         self._warned_monitor = False
         self._overlay = False  # pinned, but on an inner edge where no space can be reserved
@@ -1190,12 +1191,32 @@ class DockView:
         order = list(self._row_order)
         rows = []
         for name, binary in self._offline:
+            if name in self._starting:
+                continue
             label = self._label(f"Start {name}", "sp-empty")
             label.set_tooltip_text(binary)
             rows.append(self._row(label, "offline", binary, None, None, self._colours["other"],
-                                  lambda b=binary: launch.launch(b), draggable=False))
+                                  lambda n=name, b=binary: self._start(n, b), draggable=False))
         self._row_order = order
         return rows
+
+    def _start(self, name, binary):
+        launch.launch(binary)
+        self._starting.add(name)
+        GLib.timeout_add_seconds(30, self._stopped_waiting, name)
+        self._redraw_offline()
+
+    def _stopped_waiting(self, name):
+        self._starting.discard(name)
+        self._redraw_offline()
+        return False
+
+    def _redraw_offline(self):
+        if self.sources:
+            self._last = None
+            self._rebuild()
+        else:
+            self._replace_rows([self._label(waiting_text(), "sp-empty", wrap=True), *self._offline_rows()])
 
     def _name(self, conn, info):
         return self._names.get(conn) or info.get("browser") or "browser"
