@@ -42,6 +42,7 @@ from .model import (  # noqa: E402
     removal_text,
     reopenable,
     tab_group,
+    window_groups,
     GROUP_COLORS,
     supports,
     focused_window,
@@ -1493,6 +1494,23 @@ class DockView:
         if "pin_tab" in can:
             groups.append([("Unpin tab" if pinned else "Pin tab",
                             lambda: self._command(conn, {"type": "pin_tab", "tabId": tab["id"], "pinned": not pinned}))])
+        if "tab_groups" in can and not pinned:  # (a pinned tab cannot be in a group)
+            current = tab_group(self._state, tab)
+            others = [g for g in window_groups(self._state) if current is None or g["id"] != current["id"]]
+            items = [
+                (Markup(f'<span foreground="{GROUP_COLORS.get(g["color"], GROUP_COLORS["gray"])}">▌</span> '
+                        f'{GLib.markup_escape_text(g["title"] or "Unnamed group")}'),
+                 lambda gid=g["id"]: self._command(conn, {"type": "group_tab", "tabId": tab["id"], "groupId": gid}))
+                for g in others
+            ]
+            if items:
+                items.append((None, None))
+            items.append(("New group…", lambda: self._ask_name(
+                "New group", "", lambda name: self._command(conn, {"type": "group_tab", "tabId": tab["id"], "title": name}))))
+            part = [("Add to group", items)]
+            if current is not None:
+                part.append(("Remove from group", lambda: self._command(conn, {"type": "ungroup_tab", "tabId": tab["id"]})))
+            groups.append(part)
         store = tab.get("cookieStoreId") or NO_CONTAINER
         if "reopen_in_container" in can and store != "firefox-private" and reopenable(tab):
             others = [c for c in ({"cookieStoreId": NO_CONTAINER, "name": "No container"}, *containers)

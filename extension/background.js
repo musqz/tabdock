@@ -10,7 +10,7 @@ const HOST = "openbox_sidepanel";
 const RECONNECT_MS = 3000; // only needed if the relay process itself died
 const DEBOUNCE_MS = 50;
 // What this extension does beyond what every version did, told to the panel in "hello": it offers only those.
-const FEATURES = ["close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab", "bookmarks", "history"];
+const FEATURES = ["close_tab", "pin_tab", "containers", "reopen_in_container", "restore_tab", "bookmarks", "history", "tab_groups"];
 
 let port = null;
 let panelUp = false; // relay has a panel connected (set by resync, cleared by panel_disconnected)
@@ -560,7 +560,9 @@ async function resync() {
     lastFocusedWindowId = (await browser.windows.getLastFocused()).id;
   }
   panelUp = true;
-  send({ type: "hello", browser: info.name, version: info.version, features: FEATURES });
+  // grouping tabs needs Firefox's own tab group API, which older builds lack
+  const features = browser.tabs.group && browser.tabGroups ? FEATURES : FEATURES.filter((f) => f !== "tab_groups");
+  send({ type: "hello", browser: info.name, version: info.version, features });
   send(await snapshot());
 }
 
@@ -673,6 +675,20 @@ async function onCommand(msg) {
       case "pin_tab":
         // tabs.onUpdated reports it; an unpinned tab joins the workspace its window shows
         if (Number.isInteger(msg.tabId)) await browser.tabs.update(msg.tabId, { pinned: msg.pinned === true });
+        break;
+      case "group_tab":
+        // into the tab group `groupId`, or into a new one named `title`; the group events report it
+        if (Number.isInteger(msg.tabId) && browser.tabs.group) {
+          if (Number.isInteger(msg.groupId)) {
+            await browser.tabs.group({ tabIds: [msg.tabId], groupId: msg.groupId });
+          } else {
+            const groupId = await browser.tabs.group({ tabIds: [msg.tabId] });
+            if (typeof msg.title === "string" && msg.title) await browser.tabGroups.update(groupId, { title: msg.title });
+          }
+        }
+        break;
+      case "ungroup_tab":
+        if (Number.isInteger(msg.tabId) && browser.tabs.ungroup) await browser.tabs.ungroup([msg.tabId]);
         break;
       case "create_container":
         await createContainer(msg);

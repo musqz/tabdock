@@ -2372,6 +2372,40 @@ class DockViewTest(unittest.TestCase):
         view.show([(object(), INFO, state)])
         self.assertEqual(self.listed_tabs(view), [11])
 
+    def tab_menu(self, view, tab_id):
+        return view._meta[self.row(view, "tab", tab_id)]["menu"]
+
+    def test_the_tab_menu_adds_to_a_group_and_removes_from_it(self):
+        view = self.make()
+        conn = object()
+        tabs = [{**self.GROUP_STATE["windows"][0]["tabs"][0]}, {**STATE["windows"][0]["tabs"][1]}]
+        state = {**self.GROUP_STATE, "windows": [{"id": 2, "tabs": tabs}]}
+        view.show([(conn, {**INFO, "features": [*INFO["features"], "tab_groups"]}, state)])
+        by_label = lambda menu, label: next(item for item in menu if str(item[0]) == label)  # noqa: E731
+        inside = self.tab_menu(view, 10)  # in the group: it can leave it
+        self.assertEqual(len(by_label(inside, "Add to group")[1]), 1)  # only "New group…": it is already in the only one
+        by_label(inside, "Remove from group")[1]()
+        self.assertEqual(self.commands[-1], {"type": "ungroup_tab", "tabId": 10})
+        outside = self.tab_menu(view, 11)
+        self.assertNotIn("Remove from group", [str(i[0]) for i in outside])
+        items = by_label(outside, "Add to group")[1]
+        self.assertIn("Trip &amp; co", items[0][0])
+        items[0][1]()
+        self.assertEqual(self.commands[-1], {"type": "group_tab", "tabId": 11, "groupId": 7})
+        by_label(items, "New group…")[1]()
+        view._dialog_entry.set_text("Reading")
+        view._dialog_entry.emit("activate")
+        self.assertEqual(self.commands[-1], {"type": "group_tab", "tabId": 11, "title": "Reading"})
+
+    def test_the_tab_menu_offers_no_group_items_without_the_feature_or_for_a_pinned_tab(self):
+        view = self.make()
+        view.show([(object(), INFO, self.GROUP_STATE)])  # an extension without "tab_groups"
+        self.assertNotIn("Add to group", [str(i[0]) for i in self.tab_menu(view, 11)])
+        pinned = [{**STATE["windows"][0]["tabs"][0], "pinned": True}, STATE["windows"][0]["tabs"][1]]
+        view.show([(object(), {**INFO, "features": [*INFO["features"], "tab_groups"]},
+                    {**STATE, "windows": [{"id": 2, "tabs": pinned}]})])
+        self.assertNotIn("Add to group", [str(i[0]) for i in self.tab_menu(view, 10)])
+
     def test_a_folded_group_keeps_its_active_tab_listed(self):
         view = self.make()
         tabs = [{**t, "active": t["id"] == 10} for t in self.GROUP_STATE["windows"][0]["tabs"]]
