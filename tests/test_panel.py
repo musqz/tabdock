@@ -54,6 +54,18 @@ class FakeView:
     def new_workspace(self):
         self.calls.append(("new_workspace",))
 
+    def nav_next(self):
+        self.calls.append(("nav_next",))
+
+    def nav_prev(self):
+        self.calls.append(("nav_prev",))
+
+    def nav_open(self):
+        self.calls.append(("nav_open",))
+
+    def toggle_all(self):
+        self.calls.append(("toggle_all",))
+
     def show_bookmarks(self, conn, msg):
         self.calls.append(("bookmarks", conn, msg))
 
@@ -480,7 +492,8 @@ class PanelTest(unittest.TestCase):
 
     def test_the_dock_messages_reach_the_view(self):
         for kind, call in (("pin", "toggle_pin"), ("icons", "toggle_icons"), ("side", "flip_side"),
-                           ("new_workspace", "new_workspace")):
+                           ("new_workspace", "new_workspace"), ("next", "nav_next"), ("prev", "nav_prev"),
+                           ("open", "nav_open"), ("all", "toggle_all")):
             self.view.calls.clear()
             self.panel.on_message(FakeConn(), {"type": kind})
             self.assertEqual(self.view.calls, [(call,)])

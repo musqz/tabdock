@@ -1659,6 +1659,55 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(self.highlighted(view), [])
         self.assertEqual(self.listed_tabs(view), order)
 
+    def test_find_ctrl_a_toggles_all_and_all_lists_the_browser_headers(self):
+        view = self.make()
+        ff, zen = self.two(view, mode="auto")
+        view.find_btn.clicked()
+        self.assertEqual([m["kind"] for b, m in view._meta.items() if m["kind"] == "browser"], ["browser", "browser"])
+        self.assertFalse(any(m["findable"] for m in view._meta.values() if m["kind"] == "browser"))
+        self.assertTrue(self.key(view, Gdk.KEY_a, Gdk.ModifierType.CONTROL_MASK))
+        self.assertEqual(self.chosen, ["all"])
+        ff, zen = self.two(view, mode="all")
+        self.assertEqual([m["conn"] for m in view._meta.values() if m["kind"] == "browser" and m["findable"]], [ff, zen])
+        self.key(view, Gdk.KEY_Down)  # the first row is Firefox's header
+        self.assertEqual(self.highlighted(view), [None])
+        view._dialog_entry.emit("activate")  # Enter
+        self.assertEqual(view.collapsed, {(INFO.get("browserPid") or INFO["browser"], None)})
+        self.assertIsNotNone(view._dialog)  # the window stays
+        view.on_choose = lambda key: (self.chosen.append(key), view._rebuild())  # as the panel does
+        self.key(view, Gdk.KEY_a, Gdk.ModifierType.CONTROL_MASK)
+        self.assertEqual(self.chosen, ["all", "auto"])
+        self.assertEqual(self.raised, [ff])
+
+    def test_next_prev_and_open_work_without_the_find_window(self):
+        view = self.make()
+        conn = object()
+        view.show([(conn, INFO, DRAG_STATE)])
+        order = self.listed_tabs(view)
+        view.nav_next()
+        self.assertEqual(self.highlighted(view), [order[0]])
+        view.nav_next()
+        view.nav_prev()
+        view.nav_next()
+        self.assertEqual(self.highlighted(view), [order[1]])
+        self.assertIn("keys", view._holds)  # the panel stays open while keys are used
+        view.nav_open()
+        self.assertEqual(self.activated, [(conn, order[1], 2)])
+        self.assertEqual(self.highlighted(view), [])
+        self.assertNotIn("keys", view._holds)
+
+    def test_open_on_a_browser_header_folds_it_and_all_toggles(self):
+        view = self.make()
+        ff, zen = self.two(view, mode="all")
+        view.nav_next()
+        view.nav_open()
+        self.assertEqual(view.collapsed, {(INFO.get("browserPid") or INFO["browser"], None)})
+        self.assertEqual(self.highlighted(view), [None])
+        view.toggle_all()
+        self.assertEqual(self.chosen, ["auto"])
+        self.assertEqual(self.raised, [ff])
+        self.assertEqual(self.highlighted(view), [])
+
     def test_find_arrows_reach_an_empty_container_and_a_start_row(self):
         view = self.make()
         conn = object()

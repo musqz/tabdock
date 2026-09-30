@@ -37,5 +37,17 @@ class ConsoleView:
     def new_workspace(self):
         pass
 
+    def nav_next(self):
+        pass
+
+    def nav_prev(self):
+        pass
+
+    def nav_open(self):
+        pass
+
+    def toggle_all(self):
+        pass
+
     def reconfigure(self, cfg):
         pass

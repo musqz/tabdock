@@ -76,7 +76,7 @@ CSS = """
 .sp-row:hover {{ background-color: #2a2e38; }}
 .sp-row.active {{ background-color: #2f3542; border-left-color: {accent}; }}
 .sp-row.active label {{ font-weight: bold; }}
-.sp-row.kbd {{ background-color: #2a2e38; border-left-color: {accent}; }}
+.sp-row.kbd {{ background-color: #2a2e38; border-left-color: {accent}; box-shadow: inset 0 0 0 1px {accent}; }}
 .sp-tabbox {{ padding: 4px 10px 4px 19px; }}
 .sp-tab {{ padding: 0; }}
 .sp-badge {{ background-color: #e64553; color: #ffffff; font-weight: bold; font-size: 0.8em; padding: 0 5px; border-radius: 8px; }}
@@ -130,10 +130,13 @@ FIND_VIEW_KEYS = {Gdk.KEY_1: "tabs", Gdk.KEY_2: "bookmarks", Gdk.KEY_3: "history
 FIND_ACTIONS = {Gdk.KEY_p: "toggle_pin", Gdk.KEY_i: "toggle_icons", Gdk.KEY_l: "flip_side", Gdk.KEY_n: "new_workspace"}
 FIND_ROW_ACTIONS = {Gdk.KEY_k: "pin", Gdk.KEY_t: "new_tab"}
 
+# Seconds the panel stays open, and a highlighted row stays marked, after the last of `--next`, `--prev` and `--open`.
+NAV_IDLE_S = 5
+
 # The faint reminder along the bottom of the find window.
 FIND_HINT = (
     "↑↓ pick   Enter open   Del close tab   ^K pin tab   ^T new tab\n"
-    "^P pin dock   ^I icons   ^L side   ^N new workspace   ^1/2/3 view"
+    "^P pin dock   ^I icons   ^L side   ^N new workspace   ^A auto/all   ^1/2/3 view"
 )
 
 # The keys of the find window that walk the tab rows: (rows to step, from nothing). Home and End step from
@@ -166,7 +169,8 @@ def browser_css(colours):
     """The rules for each browser colour in `colours` (a text readable on it where it fills something)."""
     return "".join(
         f".sp-row.active.{acc_class(c)} {{ border-left-color: {c}; }}"
-        f".sp-row.kbd.{acc_class(c)} {{ border-left-color: {c}; }}"
+        f".sp-row.kbd.{acc_class(c)} {{ border-left-color: {c}; box-shadow: inset 0 0 0 1px {c}; }}"
+        f".sp-row.sp-bhead.kbd.{acc_class(c)} {{ box-shadow: inset 0 0 0 2px #1b1d23; }}"
         f".sp-row.drop-before.{acc_class(c)} {{ box-shadow: inset 0 2px 0 0 {c}; }}"
         f".sp-row.drop-after.{acc_class(c)} {{ box-shadow: inset 0 -2px 0 0 {c}; }}"
         f"button.sp-btn.sp-chip.{acc_class(c)} {{ border-color: {c}; }}"
@@ -251,6 +255,8 @@ class DockView:
         self._fetcher = None  # started with the first icon wanted: no threads while icons are off
         self._redraw = False  # a redraw was asked for while a row was pressed: done after the release
         self._names = {}  # conn -> how its browser is called (numbered when two share a name)
+        self._nav_timer = None  # the idle timeout of the keys that work without the find window
+        self._mode = "auto"  # what the chips say: "auto", "all" or a conn
         self._choices = ()  # (conn, label, colour) of the chips built
         self._chip_buttons = []  # (key, button)
         self._ws_buttons = []  # (conn, workspace id or None for "+", button) of the rows built last
@@ -414,6 +420,7 @@ class DockView:
         if focus is None and len(self.sources) == 1:
             focus = self.sources[0][1]
         self._focus = focus
+        self._mode = mode
         for gone in [k for k in self._lists if k[1] not in self._names]:  # a browser that left: forget its lists
             del self._lists[gone]
         self._asked = {k for k in self._asked if k[1] in self._names}
@@ -444,6 +451,7 @@ class DockView:
         self._clear_ghost()  # (its timer would rebuild the list over the waiting text)
         self.sources = []
         self._offline = tuple(offline)
+        self._mode = mode
         self._names = {}
         self._lists, self._asked = {}, set()
         self._last = None
@@ -653,6 +661,7 @@ class DockView:
         """The panel window is gone: stop reacting to monitor changes."""
         self._closed = True
         self._clear_ghost()
+        self._end_nav()
         if self._relayout_id is not None:
             GLib.source_remove(self._relayout_id)
             self._relayout_id = None
@@ -1260,7 +1269,7 @@ class DockView:
         )
         row = self._row(
             self._label(markup, "sp-bandlabel", markup=True), "browser", None, None, conn, colour,
-            lambda: self._toggle(key), draggable=False,
+            lambda: self._toggle(key), draggable=False, findable=self._mode == "all" and not self._query.strip(),
         )
         row.get_style_context().add_class("sp-bhead")
         return row
@@ -1502,10 +1511,10 @@ class DockView:
             self._find_view(order[at])
 
     def _find_accept(self):
-        """Enter in the find window: on a highlighted bookmark folder it opens or closes the folder and the window
-        stays; anything else is picked and the window closes."""
+        """Enter in the find window: on a highlighted bookmark folder it opens or closes the folder, and on a browser
+        header it folds or unfolds the browser; the window stays either way. Anything else is picked and the window closes."""
         box = self._highlighted()
-        if box is not None and self._meta[box]["kind"] == "bookmark_folder":
+        if box is not None and self._meta[box]["kind"] in ("bookmark_folder", "browser"):
             self._meta[box]["click"]()  # the list is rebuilt, and the same row is highlighted again
         else:
             self._dialog_finish(True)
@@ -1542,6 +1551,9 @@ class DockView:
                 self._dialog_finish(False)  # the tab is back: the keyboard goes on to the browser
             return True
         lower = Gdk.keyval_to_lower(event.keyval)
+        if lower == Gdk.KEY_a and event.state & CARET_MODS == Gdk.ModifierType.CONTROL_MASK and len(self._choices) > 1:
+            self.toggle_all()
+            return True
         if event.state & CARET_MODS == Gdk.ModifierType.CONTROL_MASK and (lower in FIND_ACTIONS or lower in FIND_ROW_ACTIONS):
             if lower in FIND_ACTIONS:
                 getattr(self, FIND_ACTIONS[lower])()
@@ -1558,8 +1570,9 @@ class DockView:
                 rows = self._find_rows()  # (elsewhere Delete deletes text)
                 at = next(i for i, b in enumerate(rows) if self._tab_key(b) == self._selected)
                 close()
-                if len(rows) > 1:  # the highlight moves to the neighbour, which the rebuild marks
-                    self._selected = self._tab_key(rows[at + 1 if at + 1 < len(rows) else at - 1])
+                near = [b for b in rows[at + 1:] + rows[:at][::-1] if self._meta[b]["kind"] == "tab"]
+                if near:  # the highlight moves to the neighbouring tab, which the rebuild marks
+                    self._selected = self._tab_key(near[0])
                 return True
             return False
         if event.keyval in FIND_VIEW_KEYS and event.state & CARET_MODS == Gdk.ModifierType.CONTROL_MASK:
@@ -1580,15 +1593,86 @@ class DockView:
         if event.keyval not in FIND_KEYS:
             return False
         step, from_nothing = FIND_KEYS[event.keyval]
-        rows = self._find_rows()
-        listed = any(self._meta[b]["kind"] != "offline" for b in rows)  # Start rows alone leave Home/End to the caret
+        listed = any(self._meta[b]["kind"] != "offline" for b in self._find_rows())  # Start rows alone leave Home/End to the caret
         if from_nothing and (not listed or event.state & CARET_MODS):
             return False
+        self._walk(step, from_nothing)
+        return True
+
+    def _walk(self, step, from_nothing=False):
+        rows = self._find_rows()
         if rows:
             keys = [self._tab_key(b) for b in rows]
             current = None if from_nothing or self._selected not in keys else keys.index(self._selected)
             self._select(rows[step_index(current, len(rows), step)])
-        return True
+
+    # -- keys without the find window: `tabdock --next`, `--prev`, `--open` and `--all` ------------------------------
+
+    def _nav(self):
+        """The panel is shown and stays open while keys move the highlight; it lets go, and the highlight goes, after
+        NAV_IDLE_S without one."""
+        self.set_hidden(False)
+        self._hold("keys", True)
+        if self._nav_timer is not None:
+            GLib.source_remove(self._nav_timer)
+        self._nav_timer = GLib.timeout_add_seconds(NAV_IDLE_S, self._end_nav)
+
+    def _end_nav(self):
+        if self._nav_timer is not None:
+            GLib.source_remove(self._nav_timer)
+            self._nav_timer = None
+        self._hold("keys", False)
+        if self._dialog is None:
+            self._clear_highlight()
+        return False
+
+    def _clear_highlight(self):
+        self._selected = None
+        for row in self._row_order:
+            row.get_style_context().remove_class("kbd")
+
+    def nav_next(self):
+        self._nav()
+        self._walk(1)
+
+    def nav_prev(self):
+        self._nav()
+        self._walk(-1)
+
+    def nav_open(self):
+        """Enter: a browser header folds or unfolds; a tab opens, and the highlight goes."""
+        box = self._highlighted()
+        if box is None:
+            return
+        if self._dialog is not None and self._dialog is self._find_dialog:
+            self._find_accept()
+            return
+        if self._meta[box]["kind"] in ("bookmark_folder", "browser"):
+            self._nav()
+            self._meta[box]["click"]()
+            return
+        pick = self._meta[box]["pick"]
+        self._end_nav()
+        pick()
+
+    def toggle_all(self):
+        """Ctrl+A, or `tabdock --all`: between "all" (the arrows also stop on the browser headers) and "auto". Leaving "all" from a
+        highlighted row makes its browser the one in use, and the keyboard goes on to it."""
+        if len(self._choices) < 2 or self._dialog not in (None, self._find_dialog):
+            return
+        if self._dialog is None:
+            self._nav()
+        if self._mode != "all":
+            self._choose("all")
+            return
+        box = self._highlighted()
+        conn = box and self._meta[box]["conn"]  # (choosing rebuilds the rows)
+        self._choose("auto")
+        if conn is not None:
+            self._raise(conn)
+            if self._dialog is not None:
+                self._dialog_finish(False)
+            self._end_nav()
 
     def _highlighted(self):
         return next((b for b in self._find_rows() if self._tab_key(b) == self._selected), None)
@@ -1629,9 +1713,7 @@ class DockView:
         if not target:
             return
         self._ws_pending = target[1]  # (keys pressed before the browser reports the switch count from here)
-        self._selected = None
-        for row in self._row_order:
-            row.get_style_context().remove_class("kbd")
+        self._clear_highlight()
         self._command(source[0], {"type": "switch_workspace", "windowId": target[0], "workspaceId": target[1]})
 
     def _select(self, box):

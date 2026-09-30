@@ -21,7 +21,9 @@
   With `launch_offline` they also stop on a "Start …" row: Enter starts the browser.
   Ctrl+1/2/3 (or the buttons at the top of the window)
   search Tabs, Bookmarks or History, whichever are on. While nothing is typed, Left/Right switch view and Ctrl+Left/Right switch workspace. Ctrl+Shift+T reopens the last closed tab.
-  Dock keys, with Ctrl: P pins or unpins the panel, I shows or hides icons, L switches side, N makes a workspace.
+  Dock keys, with Ctrl: P pins or unpins the panel, I shows or hides icons, L switches side, N makes a workspace,
+  A switches between `auto` and `all`.
+  With `all` the arrows also stop on each browser's header: Enter folds or unfolds it, Ctrl+A goes to `auto` for that browser.
   On the highlighted tab: Delete closes it, Ctrl+K pins or unpins it, Ctrl+T opens a new tab in its container.
   Renaming, colours, icons, removing a container and "Move to workspace" stay mouse-only.
 - **Containers:** right-click a section to rename it, change colour or icon, make a new one, or remove it
@@ -113,6 +115,10 @@ tabdock grabs no key. Bind `tabdock --find` in your window manager. In Openbox, 
 ```
 
 The same toggles work without Find: `tabdock --pin`, `--icons`, `--side` and `--new-workspace`.
+
+The keyboard also works without Find. Bind `tabdock --next`, `--prev`, `--open` and `--all` the same way (for
+example `W-Down`, `W-Up`, `W-Return`, `W-a`). They highlight a row (a 1px border), open it or fold the highlighted
+browser, and switch `auto`/`all` (leaving `all` from a highlighted row raises that browser). The panel stays open 5 s after the last key.
 
 `W-` is Super, `A-` Alt, `C-` Ctrl, `S-` Shift; `xev` prints key names. The panel must be running.
 
