@@ -1659,6 +1659,25 @@ class DockViewTest(unittest.TestCase):
         self.assertEqual(self.highlighted(view), [])
         self.assertEqual(self.listed_tabs(view), order)
 
+    def test_find_ctrl_a_toggles_all_and_all_lists_the_browser_headers(self):
+        view = self.make()
+        ff, zen = self.two(view, mode="auto")
+        view.find_btn.clicked()
+        self.assertEqual([m["kind"] for b, m in view._meta.items() if m["kind"] == "browser"], ["browser", "browser"])
+        self.assertFalse(any(m["findable"] for m in view._meta.values() if m["kind"] == "browser"))
+        self.assertTrue(self.key(view, Gdk.KEY_a, Gdk.ModifierType.CONTROL_MASK))
+        self.assertEqual(self.chosen, ["all"])
+        ff, zen = self.two(view, mode="all")
+        self.assertEqual([m["conn"] for m in view._meta.values() if m["kind"] == "browser" and m["findable"]], [ff, zen])
+        self.key(view, Gdk.KEY_Down)  # the first row is Firefox's header
+        self.assertEqual(self.highlighted(view), [None])
+        view._dialog_entry.emit("activate")  # Enter
+        self.assertEqual(view.collapsed, {(INFO.get("browserPid") or INFO["browser"], None)})
+        self.assertIsNotNone(view._dialog)  # the window stays
+        self.key(view, Gdk.KEY_a, Gdk.ModifierType.CONTROL_MASK)
+        self.assertEqual(self.chosen, ["all", "auto"])
+        self.assertEqual(self.raised, [ff])
+
     def test_find_arrows_reach_an_empty_container_and_a_start_row(self):
         view = self.make()
         conn = object()

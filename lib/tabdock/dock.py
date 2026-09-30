@@ -133,7 +133,7 @@ FIND_ROW_ACTIONS = {Gdk.KEY_k: "pin", Gdk.KEY_t: "new_tab"}
 # The faint reminder along the bottom of the find window.
 FIND_HINT = (
     "↑↓ pick   Enter open   Del close tab   ^K pin tab   ^T new tab\n"
-    "^P pin dock   ^I icons   ^L side   ^N new workspace   ^1/2/3 view"
+    "^P pin dock   ^I icons   ^L side   ^N new workspace   ^A auto/all   ^1/2/3 view"
 )
 
 # The keys of the find window that walk the tab rows: (rows to step, from nothing). Home and End step from
@@ -251,6 +251,7 @@ class DockView:
         self._fetcher = None  # started with the first icon wanted: no threads while icons are off
         self._redraw = False  # a redraw was asked for while a row was pressed: done after the release
         self._names = {}  # conn -> how its browser is called (numbered when two share a name)
+        self._mode = "auto"  # what the chips say: "auto", "all" or a conn
         self._choices = ()  # (conn, label, colour) of the chips built
         self._chip_buttons = []  # (key, button)
         self._ws_buttons = []  # (conn, workspace id or None for "+", button) of the rows built last
@@ -414,6 +415,7 @@ class DockView:
         if focus is None and len(self.sources) == 1:
             focus = self.sources[0][1]
         self._focus = focus
+        self._mode = mode
         for gone in [k for k in self._lists if k[1] not in self._names]:  # a browser that left: forget its lists
             del self._lists[gone]
         self._asked = {k for k in self._asked if k[1] in self._names}
@@ -444,6 +446,7 @@ class DockView:
         self._clear_ghost()  # (its timer would rebuild the list over the waiting text)
         self.sources = []
         self._offline = tuple(offline)
+        self._mode = mode
         self._names = {}
         self._lists, self._asked = {}, set()
         self._last = None
@@ -1260,7 +1263,7 @@ class DockView:
         )
         row = self._row(
             self._label(markup, "sp-bandlabel", markup=True), "browser", None, None, conn, colour,
-            lambda: self._toggle(key), draggable=False,
+            lambda: self._toggle(key), draggable=False, findable=self._mode == "all",
         )
         row.get_style_context().add_class("sp-bhead")
         return row
@@ -1503,9 +1506,9 @@ class DockView:
 
     def _find_accept(self):
         """Enter in the find window: on a highlighted bookmark folder it opens or closes the folder and the window
-        stays; anything else is picked and the window closes."""
+        or a browser header folds or unfolds it and the window stays; anything else is picked and the window closes."""
         box = self._highlighted()
-        if box is not None and self._meta[box]["kind"] == "bookmark_folder":
+        if box is not None and self._meta[box]["kind"] in ("bookmark_folder", "browser"):
             self._meta[box]["click"]()  # the list is rebuilt, and the same row is highlighted again
         else:
             self._dialog_finish(True)
@@ -1542,6 +1545,9 @@ class DockView:
                 self._dialog_finish(False)  # the tab is back: the keyboard goes on to the browser
             return True
         lower = Gdk.keyval_to_lower(event.keyval)
+        if lower == Gdk.KEY_a and event.state & CARET_MODS == Gdk.ModifierType.CONTROL_MASK:
+            self._toggle_all()
+            return True
         if event.state & CARET_MODS == Gdk.ModifierType.CONTROL_MASK and (lower in FIND_ACTIONS or lower in FIND_ROW_ACTIONS):
             if lower in FIND_ACTIONS:
                 getattr(self, FIND_ACTIONS[lower])()
@@ -1589,6 +1595,20 @@ class DockView:
             current = None if from_nothing or self._selected not in keys else keys.index(self._selected)
             self._select(rows[step_index(current, len(rows), step)])
         return True
+
+    def _toggle_all(self):
+        """Ctrl+A: between "all" (the arrows also stop on the browser headers) and "auto". Leaving "all" from a
+        highlighted row makes its browser the one in use, and the keyboard goes on to it."""
+        if len(self._choices) < 2:
+            return
+        if self._mode != "all":
+            self._choose("all")
+            return
+        box = self._highlighted()
+        self._choose("auto")
+        if box is not None:
+            self._raise(self._meta[box]["conn"])
+            self._dialog_finish(False)
 
     def _highlighted(self):
         return next((b for b in self._find_rows() if self._tab_key(b) == self._selected), None)

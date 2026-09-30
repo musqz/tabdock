@@ -21,7 +21,9 @@
   With `launch_offline` they also stop on a "Start …" row: Enter starts the browser.
   Ctrl+1/2/3 (or the buttons at the top of the window)
   search Tabs, Bookmarks or History, whichever are on. While nothing is typed, Left/Right switch view and Ctrl+Left/Right switch workspace. Ctrl+Shift+T reopens the last closed tab.
-  Dock keys, with Ctrl: P pins or unpins the panel, I shows or hides icons, L switches side, N makes a workspace.
+  Dock keys, with Ctrl: P pins or unpins the panel, I shows or hides icons, L switches side, N makes a workspace,
+  A switches between `auto` and `all`.
+  With `all` the arrows also stop on each browser's header: Enter folds or unfolds it, Ctrl+A goes to `auto` for that browser.
   On the highlighted tab: Delete closes it, Ctrl+K pins or unpins it, Ctrl+T opens a new tab in its container.
   Renaming, colours, icons, removing a container and "Move to workspace" stay mouse-only.
 - **Containers:** right-click a section to rename it, change colour or icon, make a new one, or remove it
