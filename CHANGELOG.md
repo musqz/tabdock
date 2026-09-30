@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0
 
 Install the new signed extension in each browser (`docs/INSTALL.md`).
 
