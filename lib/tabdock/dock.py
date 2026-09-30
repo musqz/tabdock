@@ -494,11 +494,22 @@ class DockView:
         self.icons_btn.set_active(not self.icons_btn.get_active())
 
     def new_workspace(self):
-        """As the "+" chip, without asking for a name: the extension names it "Workspace N"."""
+        """As the "+" chip: asks for a name, then makes the workspace in the browser in use. From the find window
+        that window closes first."""
         source = self._keyboard_source()
         window = source and offers_workspaces(source[1], source[2]) and focused_window(source[2])
-        if window:
-            self._command(source[0], {"type": "new_workspace", "windowId": window["id"], "name": ""})
+        if not window or self._dialog not in (None, self._find_dialog):
+            return
+        if self._dialog is not None:
+            self._dialog_finish(False)
+        self.set_hidden(False)
+        self._clear_highlight()
+
+        def make(name):
+            self._command(source[0], {"type": "new_workspace", "windowId": window["id"], "name": name})
+            self._raise(source[0])  # the new tab is in its window: what is typed next goes there
+
+        self._ask_name("New workspace", f"Workspace {len(workspaces(source[2])) + 1}", make)
 
     def _refresh_pin(self):
         # the state must be readable at a glance: the words, the filled pill and the tooltip all change

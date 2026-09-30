@@ -1741,14 +1741,27 @@ class DockViewTest(unittest.TestCase):
         self.assertIsNotNone(view._find_dialog)
         self.assertEqual(view._dialog_entry.get_text(), "")
 
-    def test_find_ctrl_n_makes_a_workspace_without_asking_for_a_name(self):
+    def test_find_ctrl_n_asks_for_a_name_and_makes_a_workspace(self):
         view = self.make()
         conn = object()
         view.show([(conn, INFO, self.WS_STATE)])
         view.find_btn.clicked()
         self.assertTrue(self.key(view, Gdk.KEY_n, Gdk.ModifierType.CONTROL_MASK))
-        self.assertEqual(self.commands, [{"type": "new_workspace", "windowId": 2, "name": ""}])
+        self.assertIsNone(view._find_dialog)  # the find window made way for the name window
+        self.assertEqual(view._dialog_entry.get_text(), "Workspace 4")
+        view._dialog_entry.set_text("Deep work")
+        view._dialog_entry.emit("activate")
+        self.assertEqual(self.commands, [{"type": "new_workspace", "windowId": 2, "name": "Deep work"}])
         self.assertEqual(self.command_conns, [conn])
+        self.assertEqual(self.raised, [conn])
+
+    def test_new_workspace_key_makes_nothing_when_the_name_window_is_cancelled(self):
+        view = self.make()
+        view.show([(object(), INFO, self.WS_STATE)])
+        view.new_workspace()
+        self.assertEqual(view._dialog.get_title(), "New workspace")
+        view._dialog_finish(False)
+        self.assertEqual(self.commands, [])
 
     def test_find_delete_ctrl_k_and_ctrl_t_act_on_the_highlighted_tab(self):
         ctrl = Gdk.ModifierType.CONTROL_MASK
