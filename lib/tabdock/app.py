@@ -119,6 +119,14 @@ class Panel:
         if self.x and xid and (xid != self.active or self.x.active_window() in self.view.xids):
             self.x.activate(xid)  # the browser is not the focused window: bring it forward
 
+    def close_browser(self, conn):
+        pid = self.browsers.get(conn, {}).get("browserPid")
+        if isinstance(pid, int) and pid > 1:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                pass  # already gone: that is what was asked for
+
     def choose(self, mode):
         """A chip was clicked: "auto" follows the browser in use, "all" lists every browser, and a
         Connection shows just that browser, whichever window has the focus."""
@@ -395,6 +403,7 @@ def main(argv=None):
         panel.view = DockView(
             cfg, panel.activate_tab, loop.quit, x,
             on_command=panel.command, on_choose=panel.choose, on_raise=panel.raise_browser,
+            on_close_browser=panel.close_browser,
         )
 
     panel._render()

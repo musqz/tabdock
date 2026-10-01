@@ -262,11 +262,12 @@ def _schedule(ms, fn):
 
 
 class DockView:
-    def __init__(self, cfg, on_activate, on_quit, xconn=None, on_command=None, on_choose=None, on_raise=None):
+    def __init__(self, cfg, on_activate, on_quit, xconn=None, on_command=None, on_choose=None, on_raise=None, on_close_browser=None):
         self.cfg = dict(cfg)
         self.on_activate = on_activate
         self.on_command = on_command  # on_command(conn, message): what a drop asks the browser to do
         self.on_choose = on_choose  # on_choose("auto" | "all" | conn): a chip was clicked
+        self.on_close_browser = on_close_browser  # on_close_browser(conn): quit that browser (a middle click on its chip)
         self.on_raise = on_raise  # on_raise(conn): bring that browser's window forward (a tab was made or brought back)
         self.x = xconn
         self._meta = {}  # row widget -> what it stands for (kind, id, group, conn, click handler, draggable)
@@ -836,7 +837,7 @@ class DockView:
                 self.chips.remove(child)
             self._chip_buttons = []
             entries = [("auto", "auto", None, "Follow the browser you are using")]
-            entries += [(conn, label, colour, f"Show only {label}") for conn, label, colour in choices]
+            entries += [(conn, label, colour, f"Show only {label}. Middle-click to quit it") for conn, label, colour in choices]
             entries.append(("all", "all", None, "Show every open browser"))
             for key, label, colour, tip in entries:
                 button = self._button(label, tip, Gtk.Button)
@@ -844,6 +845,8 @@ class DockView:
                 if colour:
                     button.get_style_context().add_class(acc_class(colour))
                 button.connect("clicked", lambda _b, key=key: self._choose(key))
+                if key not in ("auto", "all"):
+                    button.connect("button-release-event", self._on_chip_release, key, label)
                 self.chips.add(button)
                 self._chip_buttons.append((key, button))
             self.chips.show_all()
@@ -851,6 +854,13 @@ class DockView:
             ctx = button.get_style_context()
             (ctx.add_class if key == mode else ctx.remove_class)("selected")
         self.chips.set_visible(len(self._choices) > 1)
+
+    def _on_chip_release(self, _button, event, conn, label):
+        if event.button != 2 or self.on_close_browser is None:
+            return False
+        self._confirm("Quit browser", f"Quit {label}? All its windows close.", "Quit",
+                      lambda: self.on_close_browser(conn))
+        return True
 
     def _view_source(self, view):
         """(conn, hello, state) whose `view` ("bookmarks" or "history") is on offer, or None: the option is off, the
