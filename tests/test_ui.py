@@ -1045,6 +1045,21 @@ class DockViewTest(unittest.TestCase):
         self.chips(view)["all"].clicked()
         self.assertEqual(self.chosen, [zen, "auto", "all"])
 
+    def test_middle_click_on_a_browser_chip_asks_then_closes_it(self):
+        view = self.make()
+        ff, zen = self.two(view)
+        closed, asked = [], []
+        view.on_close_browser = closed.append
+        view._confirm = lambda title, text, label, done: asked.append(done)
+        release(self.chips(view)["auto"], which=2)
+        release(self.chips(view)["all"], which=2)
+        release(self.chips(view)["Zen"], which=1)
+        self.assertEqual(asked, [])
+        release(self.chips(view)["Zen"], which=2)
+        self.assertEqual(closed, [])  # nothing until confirmed
+        asked[0]()
+        self.assertEqual(closed, [zen])
+
     def test_chips_are_kept_while_the_browsers_stay_the_same(self):
         view = self.make()
         ff, zen = self.two(view)

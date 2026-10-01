@@ -1,5 +1,6 @@
 """Panel routing (which browser is shown, follow modes, actions) with fake view/X/connections."""
 import os
+import signal
 import sys
 import unittest
 from unittest import mock
@@ -142,6 +143,18 @@ class PanelTest(unittest.TestCase):
 
     def shown(self):
         return [c[1] for c in self.view.calls if c[0] == "show"]
+
+    def test_close_browser_terminates_only_a_known_pid(self):
+        self.panel.browsers[self.ff]["browserPid"] = 4242
+        with mock.patch("tabdock.app.os.kill") as kill:
+            self.panel.close_browser(self.ff)
+            self.panel.close_browser(self.zen)  # no pid reported
+            self.panel.browsers[self.zen]["browserPid"] = -1
+            self.panel.close_browser(self.zen)
+            self.panel.close_browser(FakeConn())  # not connected
+        kill.assert_called_once_with(4242, signal.SIGTERM)
+        with mock.patch("tabdock.app.os.kill", side_effect=ProcessLookupError):
+            self.panel.close_browser(self.ff)  # gone already: no error
 
     def test_first_browser_is_shown_and_updates_only_for_current(self):
         self.panel.on_message(self.zen, state())  # not the current browser: no redraw

@@ -4,6 +4,7 @@
 
 - Drag the panel's inner edge to resize it.
 - Add `tabdock --wider` and `--narrower`: change the panel width by 40 px.
+- Middle-click a browser chip to quit that browser (asks first).
 
 ## 0.9.0
 
