@@ -44,5 +44,6 @@ The extension can be find
 - [docs/USAGE.md](docs/USAGE.md) — how it behaves, configuration
 - [docs/PROTOCOL.md](docs/PROTOCOL.md) — the panel/extension/relay wire protocol
 
+<img width="322" height="1440" alt="Image" src="https://github.com/user-attachments/assets/4cae1584-745a-41b0-8f56-e9bbe129b4fb" />
 
-<img width="320" height="1440" alt="Image" src="https://github.com/user-attachments/assets/2947f70e-d2bc-4bfd-8b50-2c61f582804d" />
+<img width="322" height="1440" alt="Image" src="https://github.com/user-attachments/assets/0c6341d5-1b6f-47a9-b76f-3106854fb7c4" />
