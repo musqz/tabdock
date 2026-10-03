@@ -36,7 +36,7 @@ The extension can be find
 /usr/share/tabdock/tabdock.xpi
 ```
 
-**Note:** After the first browser restart the extension may be gone. Install the `.xpi` a second time in that browser; it then stays.
+**Note:** After removing the extension, restart browser and install the `.xpi`.
 
 ## Docs
 
