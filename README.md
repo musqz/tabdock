@@ -1,7 +1,5 @@
 # Tabdock
 
-> Unstable # Still adding new features
-
 An autohiding X11/Openbox side panel that mirrors the tabs and containers of Firefox-based browsers, two-way,
 through a small WebExtension. Chromium-based browsers are not supported.
 
