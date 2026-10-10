@@ -76,10 +76,9 @@ class WlConnTest(unittest.TestCase):
         self.conn._settle()
         self.assertEqual(self.reported, [2])
 
-    def test_closed_windows_are_forgotten_and_own_windows_found(self):
+    def test_closed_windows_are_forgotten(self):
         self.window("tabdock")
         b = self.window("firefox", active=True)
-        self.assertEqual(self.conn.own_windows("tabdock"), {1})
         b.dispatcher["closed"](b)
         self.assertTrue(b.destroyed)
         self.assertEqual(self.conn.client_windows(), [1])

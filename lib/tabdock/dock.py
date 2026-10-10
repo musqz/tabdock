@@ -31,7 +31,6 @@ try:
 except (ValueError, ImportError):
     GtkLayerShell = None
 
-PRGNAME = "tabdock"  # the Wayland app id of our own windows
 LAYER = GtkLayerShell is not None and GtkLayerShell.is_supported()  # a Wayland compositor with wlr-layer-shell
 
 from . import config, favicons, geometry, launch  # noqa: E402
@@ -76,6 +75,7 @@ from .model import (  # noqa: E402
 )
 
 GRIP_PX = 5
+DIALOG_GAP, DIALOG_TOP = 8, 30  # a window beside the panel: its distance from the panel and from the screen's top
 WIDTH_STEP = 40
 
 CSS = """
@@ -321,6 +321,7 @@ class DockView:
         self._holds = set()  # why the panel must stay open whatever the pointer does: "drag", "menu", "dialog"
         self._menu = None  # the context menu up (kept referenced while it is shown)
         self._dialog = None  # the window asking for a workspace name, while it is up
+        self._beside_panel = False  # whether that window sits beside the panel (the find window)
         self._dialog_finish = None  # finish(accepted) of that window
         self.collapsed = set()  # (browser pid, cookieStoreId) of folded container sections; (pid, None) a folded browser
         self.opened = set()  # (browser pid, "/3/0") of the bookmark folders opened: they all start closed
@@ -336,7 +337,7 @@ class DockView:
         self._closed = False
         self._inside = set()  # the strip and panel boxes the pointer is in
 
-        GLib.set_prgname(PRGNAME)
+        GLib.set_prgname("tabdock")
         self._css = Gtk.CssProvider()
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), self._css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
@@ -456,10 +457,14 @@ class DockView:
     # -- view API used by app.Panel ------------------------------------------------
 
     @property
+    def dialog_open(self):
+        return self._dialog is not None
+
+    @property
     def xids(self):
         """XIDs of our own windows (so the panel can ignore them as 'active window')."""
-        if LAYER:  # Wayland: no XIDs, the compositor's toplevel ids of our own windows (the find window, dialogs)
-            return self.x.own_windows(PRGNAME) if self.x is not None else set()
+        if LAYER:
+            return set()  # Wayland: no XIDs, and our windows are layer surfaces, never the active toplevel
         windows = (self.strip, self.win, self._dialog)  # (the name window only while it is up)
         return {w.get_window().get_xid() for w in windows if w is not None and w.get_window() is not None}
 
@@ -786,16 +791,36 @@ class DockView:
                 self._anchor(win, mon, w)
             else:
                 win.move(x, y)
+        if LAYER and self._dialog is not None:
+            self._place_dialog(self._dialog)
         self._sync_strut(mon)
 
-    def _anchor(self, win, mon, width):
-        """Layer-shell placement: full height on one edge of the monitor `mon`, `width` wide."""
+    def _set_layer_monitor(self, win, mon):
+        """Put a layer surface on the monitor with the geometry `mon`; no match (an output going away): the compositor picks."""
         display = Gdk.Display.get_default()
         for i in range(display.get_n_monitors()):
             r = display.get_monitor(i).get_geometry()
             if (r.x, r.y, r.width, r.height) == tuple(mon):
                 GtkLayerShell.set_monitor(win, display.get_monitor(i))
-                break
+                return
+
+    def _place_dialog(self, dialog):
+        """A dialog on the panel's monitor; the find window also beside the panel, wherever the panel is now."""
+        self._set_layer_monitor(dialog, self._monitor_rect())
+        GtkLayerShell.set_exclusive_zone(dialog, -1)  # margins from the output's edge, not from what a pinned panel reserves
+        left = self.cfg["side"] == "left"
+        for edge, on in ((GtkLayerShell.Edge.LEFT, self._beside_panel and left),
+                         (GtkLayerShell.Edge.RIGHT, self._beside_panel and not left),
+                         (GtkLayerShell.Edge.TOP, self._beside_panel)):
+            GtkLayerShell.set_anchor(dialog, edge, on)
+        if self._beside_panel:
+            GtkLayerShell.set_margin(dialog, GtkLayerShell.Edge.TOP, DIALOG_TOP)
+            GtkLayerShell.set_margin(dialog, GtkLayerShell.Edge.LEFT if left else GtkLayerShell.Edge.RIGHT,
+                                     self.cfg["width"] + DIALOG_GAP)
+
+    def _anchor(self, win, mon, width):
+        """Layer-shell placement: full height on one edge of the monitor `mon`, `width` wide."""
+        self._set_layer_monitor(win, mon)
         left = self.cfg["side"] == "left"
         for edge, on in ((GtkLayerShell.Edge.LEFT, left), (GtkLayerShell.Edge.RIGHT, not left),
                          (GtkLayerShell.Edge.TOP, True), (GtkLayerShell.Edge.BOTTOM, True)):
@@ -2283,11 +2308,17 @@ class DockView:
         if self._dialog is not None:
             self._dialog_finish(False)  # replaced is cancelled: its answer undoes what it changed (a find's list)
         dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL, title=title)
-        dialog.set_type_hint(Gdk.WindowTypeHint.DIALOG)
-        dialog.set_keep_above(True)
         dialog.set_resizable(False)
-        dialog.set_skip_taskbar_hint(True)
-        dialog.set_position(Gtk.WindowPosition.MOUSE)
+        if LAYER:  # a layer surface: placed beside the panel; it holds the keyboard until it closes, as a focused window does on X11
+            GtkLayerShell.init_for_window(dialog)
+            GtkLayerShell.set_namespace(dialog, "tabdock-dialog")
+            GtkLayerShell.set_layer(dialog, GtkLayerShell.Layer.TOP)
+            GtkLayerShell.set_keyboard_mode(dialog, GtkLayerShell.KeyboardMode.EXCLUSIVE)
+        else:
+            dialog.set_type_hint(Gdk.WindowTypeHint.DIALOG)
+            dialog.set_keep_above(True)
+            dialog.set_skip_taskbar_hint(True)
+            dialog.set_position(Gtk.WindowPosition.MOUSE)
         ok, cancel = Gtk.Button(label=accept_label), Gtk.Button(label="Cancel")
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         buttons.pack_end(ok, False, False, 0)
@@ -2318,11 +2349,14 @@ class DockView:
         self._dialog_ok = ok
         self._hold("dialog", True)
         box.show_all()
-        if beside:  # where the panel is, or is about to be: it may still be unmapped, and its position stale
+        if LAYER:
+            self._beside_panel = beside
+            self._place_dialog(dialog)
+        elif beside:  # where the panel is, or is about to be: it may still be unmapped, and its position stale
             px, py, pw, _ph = geometry.dock_rect(self._monitor_rect(), self.cfg["side"], self.cfg["width"], True)
             dw = dialog.get_preferred_size()[1].width
             dialog.set_position(Gtk.WindowPosition.NONE)
-            dialog.move(px + pw + 8 if self.cfg["side"] == "left" else max(0, px - dw - 8), py + 30)
+            dialog.move(px + pw + DIALOG_GAP if self.cfg["side"] == "left" else max(0, px - dw - DIALOG_GAP), py + DIALOG_TOP)
         dialog.show()
         (focus or cancel).grab_focus()
         return finish, ok

@@ -111,10 +111,6 @@ class WlConn:
         """Ids, the one activated longest ago first (the compositor does not say how windows are stacked)."""
         return list(self._windows)
 
-    def own_windows(self, app_id):
-        """Ids of this program's own toplevels (the find window and dialogs), told by their app id."""
-        return {wid for wid, w in self._windows.items() if w["app_id"] == app_id}
-
     def activate(self, wid):
         win = self._windows.get(wid)
         if win is not None and self.seat is not None:
