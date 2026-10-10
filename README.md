@@ -19,6 +19,8 @@ Then save the signed `tabdock-*.xpi` from the [latest release](https://github.co
 
 _(right-click → *Save Link As…*)_ and load it in each browser: `about:addons` → gear → *Install Add-on From File…*.
 
+_Look into permissions to activate bookmarks and history search._
+
 #### Uninstall manual installation
 `./install.sh --uninstall` removes what it installed.
 
