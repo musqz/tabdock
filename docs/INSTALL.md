@@ -46,6 +46,7 @@ Any of these; a second instance refuses to start.
   `start_with_browser = false`. A panel you quit with `✕` stays gone until the next browser start.
 - **Menu:** the "Tabdock" entry.
 - **Login:** `(sleep 5.0s && ~/.local/bin/tabdock) &` in `~/.config/openbox/autostart`.
+  In labwc: `~/.local/bin/tabdock &` in `~/.config/labwc/autostart`.
 
 ## Troubleshooting
 

@@ -6,7 +6,7 @@
 pkgname=tabdock
 pkgver=0.9.0
 pkgrel=1
-pkgdesc="Autohiding X11 side panel with the tabs and containers of Firefox-family browsers"
+pkgdesc="Autohiding side panel with the tabs and containers of Firefox-family browsers"
 arch=('any')
 url="https://github.com/musqz/tabdock"
 license=('MIT')

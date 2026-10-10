@@ -12,10 +12,10 @@ side = "left"
 #   monitor = "DP-1"      only on that output (use the names `xrandr` shows, e.g. "HDMI-1")
 #   monitor = "outer"     what you get if you choose nothing: the monitor at the outer edge of the whole
 #                         screen for `side` (the leftmost for "left", the rightmost for "right")
-# Only an outer edge of the whole screen can reserve space when the panel is pinned (tiling and maximising
-# then respect it, and the pointer stops there). A panel on an edge that borders another monitor is an
-# overlay when pinned, and the pin button says so. A named monitor that is not connected falls back to
-# "outer", with a warning.
+# On X11 only an outer edge of the whole screen can reserve space when the panel is pinned (tiling and
+# maximising then respect it, and the pointer stops there). A panel on an edge that borders another monitor
+# is an overlay when pinned, and the pin button says so. On Wayland any edge can reserve space.
+# A named monitor that is not connected falls back to "outer", with a warning.
 monitor = "outer"
 
 # Width in pixels when expanded (100-1000).

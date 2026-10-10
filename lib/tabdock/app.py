@@ -327,7 +327,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         allow_abbrev=False,
         prog="tabdock",
-        description="Autohiding X11 side panel with the tabs and containers of Firefox-family browsers.",
+        description="Autohiding side panel with the tabs and containers of Firefox-family browsers.",
         epilog=_help_files(),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
