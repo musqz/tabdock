@@ -25,6 +25,14 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("GdkX11", "3.0")
 from gi.repository import Gdk, GdkX11, GLib, Gtk, Pango  # noqa: E402,F401
 
+try:
+    gi.require_version("GtkLayerShell", "0.1")
+    from gi.repository import GtkLayerShell  # noqa: E402
+except (ValueError, ImportError):
+    GtkLayerShell = None
+
+LAYER = GtkLayerShell is not None and GtkLayerShell.is_supported()  # a Wayland compositor with wlr-layer-shell
+
 from . import config, favicons, geometry, launch  # noqa: E402
 from .autohide import Autohide  # noqa: E402
 from .model import (  # noqa: E402
@@ -448,6 +456,8 @@ class DockView:
     @property
     def xids(self):
         """XIDs of our own windows (so the panel can ignore them as 'active window')."""
+        if LAYER:
+            return set()  # Wayland windows have no XID
         windows = (self.strip, self.win, self._dialog)  # (the name window only while it is up)
         return {w.get_window().get_xid() for w in windows if w is not None and w.get_window() is not None}
 
@@ -573,7 +583,10 @@ class DockView:
             self._end_grip_drag()  # the release never came (a grab was lost)
         elif self._dragging_grip:
             mon = self._monitor_rect()
-            if self.cfg["side"] == "left":
+            if LAYER:  # no global pointer position on Wayland: the edge moves with the grip, so step by the offset
+                delta = event.x - self._grip_off
+                width = self.cfg["width"] + (delta if self.cfg["side"] == "left" else -delta)
+            elif self.cfg["side"] == "left":
                 width = event.x_root - mon[0] + GRIP_PX - self._grip_off
             else:
                 width = mon[0] + mon[2] - event.x_root + self._grip_off
@@ -705,14 +718,19 @@ class DockView:
     def _dock_window(self, css_class, title):
         win = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
         win.set_title(title)
-        win.set_type_hint(Gdk.WindowTypeHint.DOCK)
         win.set_decorated(False)
-        win.set_keep_above(True)
-        win.set_skip_taskbar_hint(True)
-        win.set_skip_pager_hint(True)
         win.set_accept_focus(False)  # clicks must not steal focus from the browser
         win.set_focus_on_map(False)
-        win.stick()
+        if LAYER:  # Wayland: a layer-shell surface, anchored in _place
+            GtkLayerShell.init_for_window(win)
+            GtkLayerShell.set_namespace(win, title)
+            GtkLayerShell.set_layer(win, GtkLayerShell.Layer.TOP)
+        else:
+            win.set_type_hint(Gdk.WindowTypeHint.DOCK)
+            win.set_keep_above(True)
+            win.set_skip_taskbar_hint(True)
+            win.set_skip_pager_hint(True)
+            win.stick()
         win.get_style_context().add_class(css_class)
         # An EventBox child owns the hover events: a childless GTK toplevel never selects
         # Enter/LeaveWindow, so the bare strip would not see the pointer.
@@ -761,10 +779,32 @@ class DockView:
             x, y, w, h = geometry.dock_rect(mon, self.cfg["side"], self.cfg["width"], expanded)
             win.set_default_size(w, h)
             win.resize(w, h)
-            win.move(x, y)
+            if LAYER:
+                self._anchor(win, mon, w)
+            else:
+                win.move(x, y)
         self._sync_strut(mon)
 
+    def _anchor(self, win, mon, width):
+        """Layer-shell placement: full height on one edge of the monitor `mon`, `width` wide."""
+        display = Gdk.Display.get_default()
+        for i in range(display.get_n_monitors()):
+            r = display.get_monitor(i).get_geometry()
+            if (r.x, r.y, r.width, r.height) == tuple(mon):
+                GtkLayerShell.set_monitor(win, display.get_monitor(i))
+                break
+        left = self.cfg["side"] == "left"
+        for edge, on in ((GtkLayerShell.Edge.LEFT, left), (GtkLayerShell.Edge.RIGHT, not left),
+                         (GtkLayerShell.Edge.TOP, True), (GtkLayerShell.Edge.BOTTOM, True)):
+            GtkLayerShell.set_anchor(win, edge, on)
+        win.set_size_request(width, -1)
+
     def _sync_strut(self, mon):
+        if LAYER:  # a pinned panel reserves its width on any edge: no inner-edge overlay case
+            pinned = self.cfg["pinned"] and not self.hidden
+            GtkLayerShell.set_exclusive_zone(self.win, self.cfg["width"] if pinned else 0)
+            self._set_overlay(False)
+            return
         values = None
         if self.cfg["pinned"] and not self.hidden:
             screen_w = max(x + w for x, _, w, _ in self._layout()[0])

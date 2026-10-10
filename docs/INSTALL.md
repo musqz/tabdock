@@ -52,3 +52,11 @@ Any of these; a second instance refuses to start.
 "Waiting for a browser with the Tabdock extension": the extension is missing or disabled (`about:addons`), or the
 manifest is gone (re-run `./install.sh`). Errors show in `about:debugging#/runtime/this-firefox` → Inspect →
 Console. A panel the browser started logs to `$XDG_RUNTIME_DIR/tabdock.log`.
+
+## Wayland (labwc, sway)
+
+Install `gtk-layer-shell`, then start `tabdock` as usual.
+
+Note: the panel lists the first browser that connects; pick another with the chips.
+
+Note: `follow = "hide"`, raising a browser window on tab click and placing the find window beside the panel need X11.

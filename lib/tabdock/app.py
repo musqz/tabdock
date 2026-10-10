@@ -104,7 +104,7 @@ class Panel:
             self.current = match
             self.view.set_hidden(False)
             self._render()
-        elif self.cfg["follow"] == "hide":
+        elif self.cfg["follow"] == "hide" and self.x:  # (without X nothing ever reports a window to show it again)
             self.view.set_hidden(True)
 
     # -- from the view -------------------------------------------------------------
@@ -376,12 +376,18 @@ def main(argv=None):
 
     loop = GLib.MainLoop()
     x = None
-    try:
-        from . import x11  # python-xlib is only needed to follow the active window
+    wayland = False
+    if not args.debug:
+        from . import dock
 
-        x = x11.connect()
-    except ImportError:
-        print("tabdock: python-xlib not found, the active window will not be followed", file=sys.stderr)
+        wayland = dock.LAYER
+    if not wayland:
+        try:
+            from . import x11  # python-xlib is only needed to follow the active window
+
+            x = x11.connect()
+        except ImportError:
+            print("tabdock: python-xlib not found, the active window will not be followed", file=sys.stderr)
     panel = Panel(cfg, x)
     server = Server(config.socket_path(), panel.on_message, panel.on_close)
     try:
@@ -394,13 +400,11 @@ def main(argv=None):
         panel.view = ConsoleView()
         _watch_stdin(panel)
     else:
-        if x is None:
+        if x is None and not wayland:
             print("tabdock: needs an X display and python-xlib (is DISPLAY set?)", file=sys.stderr)
             server.stop()
             return 1
-        from .dock import DockView
-
-        panel.view = DockView(
+        panel.view = dock.DockView(
             cfg, panel.activate_tab, loop.quit, x,
             on_command=panel.command, on_choose=panel.choose, on_raise=panel.raise_browser,
             on_close_browser=panel.close_browser,
