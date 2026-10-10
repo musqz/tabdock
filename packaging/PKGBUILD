@@ -11,6 +11,7 @@ arch=('any')
 url="https://github.com/musqz/tabdock"
 license=('MIT')
 depends=('python' 'python-gobject' 'python-xlib' 'gtk3')
+optdepends=('gtk-layer-shell: run on Wayland compositors such as labwc')
 install=tabdock.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
         "$pkgname-$pkgver.xpi::$url/releases/download/v$pkgver/$pkgname-$pkgver.xpi")
