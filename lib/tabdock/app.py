@@ -96,6 +96,8 @@ class Panel:
         """The active window changed (or a browser appeared): decide which browser to show."""
         if xid is not None and xid in self.view.xids:
             return  # our own windows: what was active stays "active" from the user's point of view
+        if xid is None and getattr(self.view, "dialog_open", False):
+            return  # a dialog took the keyboard: that is not the browser being left
         self.active = xid
         pid, wm_class = self.x.window_info(xid) if (self.x and xid) else (None, ())
         match = match_browser(self.browsers, pid, wm_class) if xid else None

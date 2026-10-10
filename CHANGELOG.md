@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Open the find window beside the panel on Wayland, and the other dialogs on the panel's monitor; they take the keyboard at once.
 - Follow the active window on Wayland (labwc, sway); `follow = "hide"` and raising a browser on tab click work there. Needs `python-pywayland`.
 
 ## 0.10.0
