@@ -333,6 +333,7 @@ class DockView:
         self._relayout_id = None
         self._screen_handlers = []
         self._closed = False
+        self._inside = set()  # the strip and panel boxes the pointer is in
 
         GLib.set_prgname("tabdock")
         self._css = Gtk.CssProvider()
@@ -737,8 +738,9 @@ class DockView:
         box = Gtk.EventBox()
         box.get_style_context().add_class(css_class)
         box.add_events(Gdk.EventMask.ENTER_NOTIFY_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK)
-        box.connect("enter-notify-event", lambda _w, _e: self.autohide.enter())
+        box.connect("enter-notify-event", self._on_enter)
         box.connect("leave-notify-event", self._on_leave)
+        box.connect("unmap", self._left)  # a hidden window sends no leave
         win.add(box)
         return win
 
@@ -854,8 +856,18 @@ class DockView:
         else:
             self.win.hide()
 
-    def _on_leave(self, _win, event):
-        if event.detail != Gdk.NotifyType.INFERIOR:  # moving onto a child widget is not leaving
+    def _on_enter(self, box, _event):
+        self._inside.add(box)
+        self.autohide.enter()
+
+    def _on_leave(self, box, event):
+        if event.detail == Gdk.NotifyType.INFERIOR:  # moving onto a child widget is not leaving
+            return
+        self._left(box)
+
+    def _left(self, box, *_args):
+        self._inside.discard(box)
+        if not self._inside:  # strip to panel is two windows: Wayland may send the panel's enter first
             self.autohide.leave()
 
     # -- content -------------------------------------------------------------------

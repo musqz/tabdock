@@ -117,6 +117,14 @@ tabdock grabs no key. Bind `tabdock --find` in your window manager. In Openbox, 
 </keybind>
 ```
 
+In labwc, inside `<keyboard>` in `~/.config/labwc/rc.xml`, then `labwc --reconfigure`:
+
+```xml
+<keybind key="W-grave">
+  <action name="Execute" command="tabdock --find" />
+</keybind>
+```
+
 The same toggles work without Find: `tabdock --pin`, `--icons`, `--side` and `--new-workspace`.
 
 The keyboard also works without Find. Bind `tabdock --next`, `--prev`, `--open` and `--all` the same way (for
@@ -135,8 +143,8 @@ the monitor).
 
 ### Multiple monitors
 
-`monitor = "outer"` puts the panel on the screen's outer edge for `side`, the only edge X11 can reserve space on.
-Use `"primary"` or an output name to choose another (a pin there is an overlay). The panel follows monitor changes.
+`monitor = "outer"` puts the panel on the screen's outer edge for `side`, the only edge X11 can reserve space on (on Wayland any edge can).
+Use `"primary"` or an output name to choose another (on X11 a pin there is an overlay). The panel follows monitor changes.
 
 ## Troubleshooting
 

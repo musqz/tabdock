@@ -268,6 +268,7 @@ Next:
        - "Tabdock" in your application menu
        - at login: add this line to ~/.config/openbox/autostart, after picom starts:
              (sleep 5.0s && $(printf '%q' "$bin")) &
+         (labwc: the same line in ~/.config/labwc/autostart)
   3. Settings (side, width, colours, ...): $(printf '%q' "$settings")
      read when the panel starts: quit it with its x and start it again after a change
 EOF

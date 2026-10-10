@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.10.0
 
+The extension only changes its version number; installing the new one is optional.
+
+- Run on Wayland compositors (labwc, sway) as a layer-shell panel; install `gtk-layer-shell`.
 - Drag the panel's inner edge to resize it.
 - Add `tabdock --wider` and `--narrower`: change the panel width by 40 px.
 - Middle-click a browser chip to quit that browser (asks first).

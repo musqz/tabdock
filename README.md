@@ -1,11 +1,14 @@
 # Tabdock
 
-An autohiding X11/Openbox side panel that mirrors the tabs and containers of Firefox-based browsers, two-way,
-through a small WebExtension. Chromium-based browsers are not supported.
+An autohiding side panel for X11 (Openbox) and Wayland (labwc, sway) that mirrors the tabs and containers of
+Firefox-based browsers, two-way, through a small WebExtension. Chromium-based browsers are not supported.
 
 ## Installing 2 way's
 
-Needs `python-gobject` (GTK 3) and `python-xlib`.
+Needs `python-gobject` (GTK 3).
+
+- **X11:** `python-xlib`.
+- **Wayland:** `gtk-layer-shell`. See *Wayland* in [docs/INSTALL.md](docs/INSTALL.md) for what is not available yet.
 
 ### 1. Manual installation
 

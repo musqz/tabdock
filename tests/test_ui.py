@@ -2647,6 +2647,22 @@ class DockViewTest(unittest.TestCase):
             view.wider()
             self.assertEqual(view.cfg["width"], 1000)  # MAX_WIDTH
 
+    def test_hover_holds_between_strip_and_panel_in_either_event_order(self):
+        class Leave:
+            detail = Gdk.NotifyType.NONLINEAR
+
+        view = self.make()
+        strip, panel = view.strip.get_child(), view.win.get_child()
+        view._on_enter(strip, None)
+        view._on_enter(panel, None)  # the panel's enter before the strip's leave
+        view._on_leave(strip, Leave)
+        self.assertTrue(view.autohide.hovering)
+        view._on_leave(panel, Leave)
+        self.assertFalse(view.autohide.hovering)
+        view._on_enter(panel, None)
+        view._left(panel)  # unmapped under the pointer: no leave comes
+        self.assertFalse(view.autohide.hovering)
+
     def test_dragging_the_grip_resizes_on_either_side(self):
         class Ev:
             button = 1
