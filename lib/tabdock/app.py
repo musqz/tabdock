@@ -41,14 +41,14 @@ class Panel:
     def __init__(self, cfg, x=None):
         self.cfg = cfg
         self.colours = accents(cfg.get("theme"))  # each browser's colour, with the config's [theme]
-        self.x = x  # x11.XConn or None (headless)
+        self.x = x  # x11.XConn or wl.WlConn, or None (headless, or no way to follow windows)
         self.view = None
         self.browsers = {}  # Connection -> hello message
         self.states = {}  # Connection -> last state message
         self.current = None  # Connection of the browser in use: the one whose tabs "auto" shows
         self.mode = cfg["view"]  # "auto" (the browser in use), "all", or the Connection chosen with its chip
-        self.active = None  # XID of the active window
-        self.browser_xids = {}  # Connection -> XID of its window when it was last seen active
+        self.active = None  # id of the active window (an XID, or a Wayland toplevel id)
+        self.browser_xids = {}  # Connection -> id of its window when it was last seen active
         self.installed = launch.installed_browsers() if cfg.get("launch_offline") else []  # scanned at start and on reload
 
     # -- from the relays -----------------------------------------------------------
@@ -104,7 +104,7 @@ class Panel:
             self.current = match
             self.view.set_hidden(False)
             self._render()
-        elif self.cfg["follow"] == "hide" and self.x:  # (without X nothing ever reports a window to show it again)
+        elif self.cfg["follow"] == "hide" and self.x:  # (nothing reports windows without a connection: the panel would stay hidden)
             self.view.set_hidden(True)
 
     # -- from the view -------------------------------------------------------------
@@ -162,9 +162,13 @@ class Panel:
             return None
         ours = self.view.xids
         for w in reversed(windows):  # topmost first
-            wpid = None if w in ours else self.x.window_pid(w)
+            if w in ours:
+                continue
+            wpid = self.x.window_pid(w)
             if wpid and owns_window(pid, wpid):
                 return w
+            if wpid is None and match_browser({conn: self.browsers[conn]}, None, self.x.window_info(w)[1]) == conn:
+                return w  # no pids (Wayland): the app id decides
         return None
 
     def command(self, conn, message):
@@ -381,7 +385,14 @@ def main(argv=None):
         from . import dock
 
         wayland = dock.LAYER
-    if not wayland:
+    if wayland:
+        try:
+            from . import wl  # python-pywayland follows the active window
+
+            x = wl.connect()
+        except Exception as e:  # pywayland missing, or a version its generated protocol file does not fit
+            print(f"tabdock: Wayland window tracking is off ({e})", file=sys.stderr)
+    else:
         try:
             from . import x11  # python-xlib is only needed to follow the active window
 

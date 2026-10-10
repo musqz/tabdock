@@ -56,8 +56,8 @@ Console. A panel the browser started logs to `$XDG_RUNTIME_DIR/tabdock.log`.
 
 ## Wayland (labwc, sway)
 
-Install `gtk-layer-shell`, then start `tabdock` as usual.
+Install `gtk-layer-shell` and `python-pywayland`, then start `tabdock` as usual.
 
-Note: the panel lists the first browser that connects; pick another with the chips.
+Note: two browsers of the same kind (two Firefox profiles) are not told apart; pick one with its chip.
 
-Note: `follow = "hide"`, raising a browser window on tab click and placing the find window beside the panel need X11.
+Note: the find window and dialogs open where the compositor puts them, not beside the panel.

@@ -350,6 +350,12 @@ class PanelTest(unittest.TestCase):
         self.panel.raise_browser(self.ff)
         self.assertEqual(self.x.activated, [FIREFOX_XID])
 
+    def test_raise_finds_a_browser_window_by_class_when_windows_have_no_pid(self):
+        self.panel.browsers[self.ff]["browserPid"] = 4242  # never seen active, and no window has a pid (Wayland)
+        self.x.clients = [FIREFOX_XID, ZEN_XID]
+        self.panel.raise_browser(self.ff)
+        self.assertEqual(self.x.activated, [FIREFOX_XID])
+
     def test_debug_console_restores_the_tab_closed_last(self):
         self.panel.on_stdin_line("restore")
         self.panel.on_stdin_line("restore 7")  # (malformed: ignored)

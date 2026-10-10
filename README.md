@@ -8,7 +8,7 @@ Firefox-based browsers, two-way, through a small WebExtension. Chromium-based br
 Needs `python-gobject` (GTK 3).
 
 - **X11:** `python-xlib`.
-- **Wayland:** `gtk-layer-shell`. See *Wayland* in [docs/INSTALL.md](docs/INSTALL.md) for what is not available yet.
+- **Wayland:** `gtk-layer-shell` and `python-pywayland`. See *Wayland* in [docs/INSTALL.md](docs/INSTALL.md).
 
 ### 1. Manual installation
 
