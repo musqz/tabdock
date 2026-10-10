@@ -2647,6 +2647,25 @@ class DockViewTest(unittest.TestCase):
             view.wider()
             self.assertEqual(view.cfg["width"], 1000)  # MAX_WIDTH
 
+    def test_a_layer_dialog_sits_beside_the_panel_on_its_side(self):
+        for side, edge in (("left", "LEFT"), ("right", "RIGHT")):
+            view = self.make(side=side, width=300)
+            view._beside_panel = True
+            with mock.patch("tabdock.dock.GtkLayerShell") as layer, mock.patch.object(view, "_set_layer_monitor"):
+                view._place_dialog(object())
+            anchors = {c.args[1]: c.args[2] for c in layer.set_anchor.call_args_list}
+            self.assertEqual(anchors[getattr(layer.Edge, edge)], True)
+            self.assertEqual(anchors[layer.Edge.TOP], True)
+            margins = {c.args[1]: c.args[2] for c in layer.set_margin.call_args_list}
+            self.assertEqual(margins[getattr(layer.Edge, edge)], 308)  # the panel's width and the gap
+            layer.set_exclusive_zone.assert_called_once()
+        view = self.make()
+        view._beside_panel = False  # another dialog: only the monitor
+        with mock.patch("tabdock.dock.GtkLayerShell") as layer, mock.patch.object(view, "_set_layer_monitor"):
+            view._place_dialog(object())
+        self.assertTrue(all(c.args[2] is False for c in layer.set_anchor.call_args_list))
+        layer.set_margin.assert_not_called()
+
     def test_hover_holds_between_strip_and_panel_in_either_event_order(self):
         class Leave:
             detail = Gdk.NotifyType.NONLINEAR

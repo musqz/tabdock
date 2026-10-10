@@ -31,6 +31,8 @@ def connect():
 
 
 class WlConn:
+    uses_pids = False  # a toplevel has no pid: windows are matched by app id
+
     def __init__(self, display):
         self.display = display
         self.manager = self.seat = None
@@ -50,8 +52,14 @@ class WlConn:
         if interface == "zwlr_foreign_toplevel_manager_v1":
             self.manager = registry.bind(name, ZwlrForeignToplevelManagerV1, min(version, 3))
             self.manager.dispatcher["toplevel"] = self._on_toplevel
+            self.manager.dispatcher["finished"] = self._on_finished
         elif interface == "wl_seat" and self.seat is None:
             self.seat = registry.bind(name, WlSeat, min(version, 1))
+
+    def _on_finished(self, _manager):
+        """The compositor dropped the manager: no more news, the same as losing the connection."""
+        if self._on_lost is not None:
+            self._on_lost()
 
     def _on_toplevel(self, _manager, handle):
         wid = next(self._ids)
@@ -103,9 +111,6 @@ class WlConn:
             return None, ()
         app_id = win["app_id"]
         return None, (app_id, app_id.rsplit(".", 1)[-1])
-
-    def window_pid(self, _wid):
-        return None
 
     def client_windows(self):
         """Ids, the one activated longest ago first (the compositor does not say how windows are stacked)."""
