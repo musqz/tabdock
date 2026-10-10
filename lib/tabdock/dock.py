@@ -31,6 +31,7 @@ try:
 except (ValueError, ImportError):
     GtkLayerShell = None
 
+PRGNAME = "tabdock"  # the Wayland app id of our own windows
 LAYER = GtkLayerShell is not None and GtkLayerShell.is_supported()  # a Wayland compositor with wlr-layer-shell
 
 from . import config, favicons, geometry, launch  # noqa: E402
@@ -335,7 +336,7 @@ class DockView:
         self._closed = False
         self._inside = set()  # the strip and panel boxes the pointer is in
 
-        GLib.set_prgname("tabdock")
+        GLib.set_prgname(PRGNAME)
         self._css = Gtk.CssProvider()
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), self._css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
@@ -457,8 +458,8 @@ class DockView:
     @property
     def xids(self):
         """XIDs of our own windows (so the panel can ignore them as 'active window')."""
-        if LAYER:
-            return set()  # Wayland windows have no XID
+        if LAYER:  # Wayland: no XIDs, the compositor's toplevel ids of our own windows (the find window, dialogs)
+            return self.x.own_windows(PRGNAME) if self.x is not None else set()
         windows = (self.strip, self.win, self._dialog)  # (the name window only while it is up)
         return {w.get_window().get_xid() for w in windows if w is not None and w.get_window() is not None}
 

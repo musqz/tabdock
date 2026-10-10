@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Follow the active window on Wayland (labwc, sway); `follow = "hide"` and raising a browser on tab click work there. Needs `python-pywayland`.
+
 ## 0.10.0
 
 The extension only changes its version number; installing the new one is optional.
