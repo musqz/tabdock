@@ -118,7 +118,9 @@ class Panel:
     def raise_browser(self, conn):
         xid = self._window_of(conn)
         # self.active leaves out our own windows, so a find or rename window holding the keyboard is checked apart
-        if self.x and xid and (xid != self.active or self.x.active_window() in self.view.xids):
+        # (without pids, on Wayland, our keyboard-holding layer windows are never "active": raising an active window is harmless)
+        if self.x and xid and (xid != self.active or not getattr(self.x, "uses_pids", True)
+                               or self.x.active_window() in self.view.xids):
             self.x.activate(xid)  # the browser is not the focused window: bring it forward
 
     def close_browser(self, conn):
@@ -159,17 +161,22 @@ class Panel:
         if xid is not None and (not windows or xid in windows):
             return xid  # (no window list at all: a window manager without it, so trust what we saw)
         self.browser_xids.pop(conn, None)
-        pid = self.browsers.get(conn, {}).get("browserPid")
-        if not pid:
+        info = self.browsers.get(conn)
+        if info is None:
+            return None  # the browser went away
+        pid = info.get("browserPid")
+        uses_pids = getattr(self.x, "uses_pids", True)
+        if not pid and uses_pids:
             return None
         ours = self.view.xids
         for w in reversed(windows):  # topmost first
             if w in ours:
                 continue
-            wpid = self.x.window_pid(w)
-            if wpid and owns_window(pid, wpid):
-                return w
-            if wpid is None and match_browser({conn: self.browsers[conn]}, None, self.x.window_info(w)[1]) == conn:
+            if uses_pids:
+                wpid = self.x.window_pid(w)
+                if wpid and owns_window(pid, wpid):
+                    return w
+            elif match_browser({conn: info}, None, self.x.window_info(w)[1]) == conn:
                 return w  # no pids (Wayland): the app id decides
         return None
 

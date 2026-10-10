@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Wayland: raise the browser after a find or rename window, and show those windows over a fullscreen one.
+
 ## 0.11.0
 
 The extension only changes its version number; installing the new one is optional.

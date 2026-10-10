@@ -2312,7 +2312,7 @@ class DockView:
         if LAYER:  # a layer surface: placed beside the panel; it holds the keyboard until it closes, as a focused window does on X11
             GtkLayerShell.init_for_window(dialog)
             GtkLayerShell.set_namespace(dialog, "tabdock-dialog")
-            GtkLayerShell.set_layer(dialog, GtkLayerShell.Layer.TOP)
+            GtkLayerShell.set_layer(dialog, GtkLayerShell.Layer.OVERLAY)  # shown (and typed into) over a fullscreen window
             GtkLayerShell.set_keyboard_mode(dialog, GtkLayerShell.KeyboardMode.EXCLUSIVE)
         else:
             dialog.set_type_hint(Gdk.WindowTypeHint.DIALOG)

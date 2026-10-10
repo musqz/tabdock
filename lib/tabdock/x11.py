@@ -17,6 +17,8 @@ def connect():
 
 
 class XConn:
+    uses_pids = True  # windows carry a pid: browsers are matched by process
+
     def __init__(self, disp):
         self.d = disp
         self.root = disp.screen().root

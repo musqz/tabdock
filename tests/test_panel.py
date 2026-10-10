@@ -351,10 +351,39 @@ class PanelTest(unittest.TestCase):
         self.assertEqual(self.x.activated, [FIREFOX_XID])
 
     def test_raise_finds_a_browser_window_by_class_when_windows_have_no_pid(self):
-        self.panel.browsers[self.ff]["browserPid"] = 4242  # never seen active, and no window has a pid (Wayland)
+        self.x.uses_pids = False  # Wayland: no window has a pid
         self.x.clients = [FIREFOX_XID, ZEN_XID]
+        self.panel.raise_browser(self.ff)  # even without a browserPid in the hello
+        self.assertEqual(self.x.activated, [FIREFOX_XID])
+
+    def test_raise_ignores_windows_without_a_pid_on_x11(self):
+        self.panel.browsers[self.ff]["browserPid"] = 4242
+        self.x.clients = [FIREFOX_XID]  # window_pid answers None: skipped, not matched by class
+        self.panel.raise_browser(self.ff)
+        self.assertEqual(self.x.activated, [])
+
+    def test_a_dialog_taking_the_keyboard_is_not_leaving_the_browser(self):
+        self.panel.follow(FIREFOX_XID)
+        self.view.dialog_open = True
+        self.panel.follow(None)
+        self.assertEqual(self.panel.active, FIREFOX_XID)
+        self.view.dialog_open = False
+        self.panel.follow(None)
+        self.assertIsNone(self.panel.active)
+
+    def test_raise_browser_always_asks_without_pids_since_layer_windows_are_never_active(self):
+        self.x.uses_pids = False
+        self.x.clients = [FIREFOX_XID]
+        self.panel.follow(FIREFOX_XID)
         self.panel.raise_browser(self.ff)
         self.assertEqual(self.x.activated, [FIREFOX_XID])
+
+    def test_raise_for_a_browser_that_went_away_does_nothing(self):
+        self.x.uses_pids = False
+        self.x.clients = [FIREFOX_XID]
+        self.panel.on_close(self.ff)
+        self.panel.raise_browser(self.ff)
+        self.assertEqual(self.x.activated, [])
 
     def test_debug_console_restores_the_tab_closed_last(self):
         self.panel.on_stdin_line("restore")

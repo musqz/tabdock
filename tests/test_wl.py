@@ -84,6 +84,12 @@ class WlConnTest(unittest.TestCase):
         self.assertEqual(self.conn.client_windows(), [1])
         self.assertIsNone(self.conn.active_window())
 
+    def test_the_manager_finishing_is_a_lost_compositor(self):
+        lost = []
+        self.conn._on_lost = lambda: lost.append(1)
+        self.conn._on_finished(None)
+        self.assertEqual(lost, [1])
+
     def test_activate_asks_the_compositor_with_the_seat(self):
         a = self.window("a")
         self.conn.activate(1)
