@@ -61,6 +61,9 @@ class FakeView:
     def narrower(self):
         self.calls.append(("narrower",))
 
+    def toggle_open(self):
+        self.calls.append(("toggle_open",))
+
     def nav_next(self):
         self.calls.append(("nav_next",))
 
@@ -555,7 +558,7 @@ class PanelTest(unittest.TestCase):
                            ("new_workspace", "new_workspace"), ("next", "nav_next"), ("prev", "nav_prev"),
                            ("open", "nav_open"), ("all", "toggle_all"),
                            ("ws_next", "ws_next"), ("ws_prev", "ws_prev"),
-                           ("wider", "wider"), ("narrower", "narrower")):
+                           ("wider", "wider"), ("narrower", "narrower"), ("toggle", "toggle_open")):
             self.view.calls.clear()
             self.panel.on_message(FakeConn(), {"type": kind})
             self.assertEqual(self.view.calls, [(call,)])

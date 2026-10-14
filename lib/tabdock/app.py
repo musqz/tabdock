@@ -31,7 +31,7 @@ EDITS = {"wsicon": "icon", "wscolor": "color", "wscontainer": "cookieStoreId"}  
 # `tabdock --pin` and the like: the message the panel takes -> the view's method
 DOCK_MESSAGES = {"pin": "toggle_pin", "icons": "toggle_icons", "side": "flip_side", "new_workspace": "new_workspace",
                 "next": "nav_next", "prev": "nav_prev", "open": "nav_open", "all": "toggle_all",
-                "ws_next": "ws_next", "ws_prev": "ws_prev", "wider": "wider", "narrower": "narrower"}
+                "ws_next": "ws_next", "ws_prev": "ws_prev", "wider": "wider", "narrower": "narrower", "toggle": "toggle_open"}
 CONTAINER_VERBS = {"cnew": None, "crm": None, "crename": "name", "ccolor": "color", "cicon": "icon"}
 
 
@@ -370,6 +370,7 @@ def main(argv=None):
         ("ws_prev", "switch to the previous workspace of the browser in use"),
         ("wider", "make the panel wider"),
         ("narrower", "make the panel narrower"),
+        ("toggle", "show or hide"),
     ):
         parser.add_argument(f"--{flag.replace('_', '-')}", dest=flag, action="store_true",
                             help=f"tell the running panel to {what}")

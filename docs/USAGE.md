@@ -56,6 +56,7 @@
 | `bookmarks` | `false` | Tabs / Bookmarks buttons at the bottom of the panel (see Bookmarks) |
 | `history` | `false` | a History view in the same buttons (see Bookmarks) |
 | `pinned` | `false` | start pinned |
+| `hover` | `true` | `false`: the pointer does not open the panel and the strip is not drawn; open it with `tabdock --toggle` |
 | `launch_offline` | `false` | dimmed rows for installed browsers with the extension that are not running; a click starts one (no Flatpak or Snap) |
 | `start_with_browser` | `true` | start the panel when a browser with the extension opens |
 
@@ -126,6 +127,8 @@ In labwc, inside `<keyboard>` in `~/.config/labwc/rc.xml`, then `labwc --reconfi
 ```
 
 The same toggles work without Find: `tabdock --pin`, `--icons`, `--side` and `--new-workspace`.
+
+`tabdock --toggle` shows or hides the panel. With `hover = false` it is the only way to open it: bind it to a key or a hot corner.
 
 The keyboard also works without Find. Bind `tabdock --next`, `--prev`, `--open` and `--all` the same way (for
 example `W-Down`, `W-Up`, `W-Return`, `W-a`). They highlight a row (a 1px border), open it or fold the highlighted

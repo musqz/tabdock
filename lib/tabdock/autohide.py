@@ -18,6 +18,7 @@ class Autohide:
         self.pinned = False
         self.hovering = False
         self.held = False  # a drag is in progress: stay open wherever the pointer goes
+        self.summoned = False  # opened by `tabdock --toggle`: stays open until toggled again
         self._timer = None
 
     def enter(self):
@@ -36,8 +37,12 @@ class Autohide:
         self.held = held
         self._update()
 
+    def toggle_summoned(self):
+        self.summoned = not self.summoned
+        self._update()
+
     def _want(self):
-        return self.pinned or self.hovering or self.held
+        return self.pinned or self.hovering or self.held or self.summoned
 
     def _update(self):
         if self._timer is not None:

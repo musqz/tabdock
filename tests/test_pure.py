@@ -67,6 +67,7 @@ class ConfigTest(unittest.TestCase):
             {"width": "wide"},
             {"width": True},
             {"pinned": "yes"},
+            {"hover": "no"},
             {"launch_offline": "yes"},
             {"start_with_browser": "yes"},
             {"start_with_browser": 1},
@@ -355,6 +356,21 @@ class AutohideTest(unittest.TestCase):
         self.hide.set_pinned(False)
         self.clock.advance(1000)
         self.assertEqual(self.applied[-1], True)  # pointer still inside: stays open
+
+
+class AutohideSummonTest(unittest.TestCase):
+    def test_toggle_opens_and_closes_without_the_pointer(self):
+        clock = FakeClock()
+        applied = []
+        hide = Autohide(applied.append, clock.schedule, clock.cancel, open_ms=100, close_ms=400)
+        hide.toggle_summoned()
+        clock.advance(100)
+        self.assertEqual(applied, [True])
+        clock.advance(5000)
+        self.assertEqual(applied, [True])
+        hide.toggle_summoned()
+        clock.advance(400)
+        self.assertEqual(applied, [True, False])
 
 
 class AutohideHoldTest(unittest.TestCase):

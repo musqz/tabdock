@@ -2700,6 +2700,18 @@ class DockViewTest(unittest.TestCase):
             view._on_strip_pointer(strip, Ev(900))
             self.assertTrue(view.autohide.hovering)
 
+    def test_hover_off_ignores_the_pointer_and_toggle_opens_the_panel(self):
+        class Ev:
+            y = 100
+
+        view = self.make(hover=False)
+        view._on_strip_pointer(view.strip.get_child(), Ev())
+        view._on_enter(view.win.get_child(), Ev())
+        self.assertFalse(view.autohide.hovering)
+        self.assertFalse(view.strip.get_visible())
+        view.toggle_open()
+        self.assertTrue(view.autohide.summoned)
+
     def test_dragging_the_grip_resizes_on_either_side(self):
         class Ev:
             button = 1

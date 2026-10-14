@@ -445,7 +445,8 @@ class DockView:
         self.autohide = Autohide(self._apply, _schedule, GLib.source_remove)
         self.pin_btn.set_active(self.cfg["pinned"])
         self._place()
-        self.strip.show()
+        if self.cfg["hover"]:
+            self.strip.show()
         self.autohide.set_pinned(self.cfg["pinned"])  # pinned: expands (and shows the panel) right away
         self._place()  # the strut needs the panel window realized
         screen = Gdk.Screen.get_default()
@@ -549,7 +550,8 @@ class DockView:
             self.win.hide()
         else:
             self._place()
-            self.strip.show()
+            if self.cfg["hover"]:
+                self.strip.show()
             if self.autohide.expanded:
                 self.win.show()
             self._place()
@@ -631,6 +633,9 @@ class DockView:
 
     def toggle_pin(self):
         self.pin_btn.set_active(not self.pin_btn.get_active())
+
+    def toggle_open(self):
+        self.autohide.toggle_summoned()
 
     def toggle_icons(self):
         self.icons_btn.set_active(not self.icons_btn.get_active())
@@ -889,11 +894,15 @@ class DockView:
             self.win.hide()
 
     def _on_enter(self, box, _event):
+        if not self.cfg["hover"]:
+            return
         self._inside.add(box)
         self.autohide.enter()
 
     def _on_strip_pointer(self, box, event):
         """The collapsed strip opens the panel from its top and bottom quarters only."""
+        if not self.cfg["hover"]:
+            return
         height = box.get_allocated_height()
         if event.y < height * STRIP_ZONE or event.y > height * (1 - STRIP_ZONE):
             if box not in self._inside:

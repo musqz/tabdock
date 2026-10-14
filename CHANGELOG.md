@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add `tabdock --toggle` to show or hide the panel, and `hover = false` to stop the pointer from opening it.
 - Wayland: raise the browser after a find or rename window, and show those windows over a fullscreen one.
 
 ## 0.11.0
