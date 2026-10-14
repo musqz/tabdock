@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Wayland: raise the browser after a find or rename window, and show those windows over a fullscreen one.
+- Open the panel from the top and bottom quarters of the collapsed strip only.
 
 ## 0.11.0
 
