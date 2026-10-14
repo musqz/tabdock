@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.12.0
+
+The extension only changes its version number; installing the new one is optional.
 
 - Add `tabdock --toggle` to show or hide the panel.
 - Add `hover = false` to stop the pointer from opening the panel.
