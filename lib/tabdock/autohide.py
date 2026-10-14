@@ -18,6 +18,7 @@ class Autohide:
         self.pinned = False
         self.hovering = False
         self.held = False  # a drag is in progress: stay open wherever the pointer goes
+        self.summoned = False  # opened by `tabdock --toggle`: stays open until toggled again
         self._timer = None
 
     def enter(self):
@@ -36,18 +37,27 @@ class Autohide:
         self.held = held
         self._update()
 
-    def _want(self):
-        return self.pinned or self.hovering or self.held
+    def toggle(self):
+        """`tabdock --toggle`: open, or close whatever opened it; at once, no pointer delay. A pinned panel stays."""
+        if self.pinned:
+            return
+        self.summoned = not self.expanded
+        if self.expanded:
+            self.hovering = False
+        self._update(now=True)
 
-    def _update(self):
+    def _want(self):
+        return self.pinned or self.hovering or self.held or self.summoned
+
+    def _update(self, now=False):
         if self._timer is not None:
             self.cancel(self._timer)
             self._timer = None
         want = self._want()
         if want == self.expanded:
             return
-        if self.pinned:
-            self._fire()  # pin/unpin toggles need no delay
+        if self.pinned or now:
+            self._fire()  # pin/unpin and key presses need no delay
         else:
             self._timer = self.schedule(self.open_ms if want else self.close_ms, self._fire)
 

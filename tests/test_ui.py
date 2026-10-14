@@ -2700,6 +2700,25 @@ class DockViewTest(unittest.TestCase):
             view._on_strip_pointer(strip, Ev(900))
             self.assertTrue(view.autohide.hovering)
 
+    def test_hover_off_ignores_the_pointer_and_toggle_opens_the_panel(self):
+        class Ev:
+            y = 100
+
+        view = self.make(hover=False)
+        self.assertNotIn(view.strip, self.shown)
+        view._on_strip_pointer(view.strip.get_child(), Ev())
+        view._on_enter(view.win.get_child(), Ev())
+        self.assertFalse(view.autohide.hovering)
+        view.toggle_open()
+        self.assertIn(view.win, self.shown)
+        view.set_hidden(True)
+        view.set_hidden(False)
+        self.assertNotIn(view.strip, self.shown)  # still no strip after a hide and unhide
+        view.reconfigure({**view.cfg, "hover": True})
+        self.assertIn(view.strip, self.shown)
+        view.reconfigure({**view.cfg, "hover": False})
+        self.assertNotIn(view.strip, self.shown)
+
     def test_dragging_the_grip_resizes_on_either_side(self):
         class Ev:
             button = 1

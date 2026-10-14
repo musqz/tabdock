@@ -64,6 +64,10 @@ start_with_browser = true
 # edge only; on an inner edge it stays open as an overlay). false = autohide on hover.
 pinned = false
 
+# false: the pointer does not open the panel and the strip is not drawn. Open and close the panel with
+# `tabdock --toggle` (bind it to a key or a hot corner).
+hover = true
+
 # List installed browsers that have the extension but are not running, dimmed at the bottom of the
 # panel. A click starts the browser (default profile).
 launch_offline = false

@@ -67,6 +67,7 @@ class ConfigTest(unittest.TestCase):
             {"width": "wide"},
             {"width": True},
             {"pinned": "yes"},
+            {"hover": "no"},
             {"launch_offline": "yes"},
             {"start_with_browser": "yes"},
             {"start_with_browser": 1},
@@ -301,6 +302,27 @@ class FakeClock:
 
 
 class AutohideTest(unittest.TestCase):
+    def test_toggle_opens_and_closes_at_once_without_the_pointer(self):
+        self.hide.toggle()
+        self.assertEqual(self.applied, [True])
+        self.clock.advance(5000)
+        self.hide.toggle()
+        self.assertEqual(self.applied, [True, False])
+
+    def test_toggle_closes_a_panel_the_pointer_opened_and_ignores_a_pinned_one(self):
+        self.hide.enter()
+        self.clock.advance(100)
+        self.hide.toggle()
+        self.assertEqual(self.applied, [True, False])
+        self.hide.leave()
+        self.clock.advance(5000)
+        self.assertFalse(self.hide.summoned)
+        self.hide.set_pinned(True)
+        self.hide.toggle()
+        self.hide.set_pinned(False)
+        self.clock.advance(400)
+        self.assertEqual(self.applied, [True, False, True, False])
+
     def setUp(self):
         self.clock = FakeClock()
         self.applied = []
