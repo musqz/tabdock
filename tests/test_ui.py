@@ -2682,6 +2682,24 @@ class DockViewTest(unittest.TestCase):
         view._left(panel)  # unmapped under the pointer: no leave comes
         self.assertFalse(view.autohide.hovering)
 
+    def test_strip_opens_from_its_top_and_bottom_quarters_only(self):
+        class Ev:
+            def __init__(self, y):
+                self.y = y
+
+        view = self.make()
+        strip = view.strip.get_child()
+        height = 1000
+        with mock.patch.object(strip, "get_allocated_height", return_value=height):
+            view._on_strip_pointer(strip, Ev(500))
+            self.assertFalse(view.autohide.hovering)
+            view._on_strip_pointer(strip, Ev(100))
+            self.assertTrue(view.autohide.hovering)
+            view._on_strip_pointer(strip, Ev(500))  # moved on into the middle
+            self.assertFalse(view.autohide.hovering)
+            view._on_strip_pointer(strip, Ev(900))
+            self.assertTrue(view.autohide.hovering)
+
     def test_dragging_the_grip_resizes_on_either_side(self):
         class Ev:
             button = 1
