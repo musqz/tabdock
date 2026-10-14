@@ -370,7 +370,7 @@ def main(argv=None):
         ("ws_prev", "switch to the previous workspace of the browser in use"),
         ("wider", "make the panel wider"),
         ("narrower", "make the panel narrower"),
-        ("toggle", "show or hide"),
+        ("toggle", "show or hide (at once, and it stays open until toggled again)"),
     ):
         parser.add_argument(f"--{flag.replace('_', '-')}", dest=flag, action="store_true",
                             help=f"tell the running panel to {what}")

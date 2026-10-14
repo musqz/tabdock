@@ -445,8 +445,7 @@ class DockView:
         self.autohide = Autohide(self._apply, _schedule, GLib.source_remove)
         self.pin_btn.set_active(self.cfg["pinned"])
         self._place()
-        if self.cfg["hover"]:
-            self.strip.show()
+        self._sync_strip()
         self.autohide.set_pinned(self.cfg["pinned"])  # pinned: expands (and shows the panel) right away
         self._place()  # the strut needs the panel window realized
         screen = Gdk.Screen.get_default()
@@ -540,6 +539,12 @@ class DockView:
         self._set_accent(self._colours["other"])
         self._replace_rows([self._label(waiting_text(), "sp-empty", wrap=True), *self._offline_rows()])
 
+    def _sync_strip(self):
+        if self.cfg["hover"] and not self.hidden:
+            self.strip.show()
+        else:
+            self.strip.hide()
+
     def set_hidden(self, hidden):
         if hidden == self.hidden:
             return
@@ -550,8 +555,7 @@ class DockView:
             self.win.hide()
         else:
             self._place()
-            if self.cfg["hover"]:
-                self.strip.show()
+            self._sync_strip()
             if self.autohide.expanded:
                 self.win.show()
             self._place()
@@ -635,7 +639,8 @@ class DockView:
         self.pin_btn.set_active(not self.pin_btn.get_active())
 
     def toggle_open(self):
-        self.autohide.toggle_summoned()
+        self.set_hidden(False)
+        self.autohide.toggle()
 
     def toggle_icons(self):
         self.icons_btn.set_active(not self.icons_btn.get_active())
@@ -709,6 +714,7 @@ class DockView:
         self.cfg = dict(cfg)
         self._warned_monitor = False
         self.set_pinned(self.cfg["pinned"])  # syncs the button, autohide and strut in one place
+        self._sync_strip()
         self.icons_btn.set_active(self.cfg["icons"])  # (the toggle handler redraws when it changed)
         was = self._view
         self._lists = {k: v for k, v in self._lists.items() if self.cfg[k[0]]}
@@ -901,8 +907,6 @@ class DockView:
 
     def _on_strip_pointer(self, box, event):
         """The collapsed strip opens the panel from its top and bottom quarters only."""
-        if not self.cfg["hover"]:
-            return
         height = box.get_allocated_height()
         if event.y < height * STRIP_ZONE or event.y > height * (1 - STRIP_ZONE):
             if box not in self._inside:

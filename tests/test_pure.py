@@ -302,6 +302,27 @@ class FakeClock:
 
 
 class AutohideTest(unittest.TestCase):
+    def test_toggle_opens_and_closes_at_once_without_the_pointer(self):
+        self.hide.toggle()
+        self.assertEqual(self.applied, [True])
+        self.clock.advance(5000)
+        self.hide.toggle()
+        self.assertEqual(self.applied, [True, False])
+
+    def test_toggle_closes_a_panel_the_pointer_opened_and_ignores_a_pinned_one(self):
+        self.hide.enter()
+        self.clock.advance(100)
+        self.hide.toggle()
+        self.assertEqual(self.applied, [True, False])
+        self.hide.leave()
+        self.clock.advance(5000)
+        self.assertFalse(self.hide.summoned)
+        self.hide.set_pinned(True)
+        self.hide.toggle()
+        self.hide.set_pinned(False)
+        self.clock.advance(400)
+        self.assertEqual(self.applied, [True, False, True, False])
+
     def setUp(self):
         self.clock = FakeClock()
         self.applied = []
@@ -356,21 +377,6 @@ class AutohideTest(unittest.TestCase):
         self.hide.set_pinned(False)
         self.clock.advance(1000)
         self.assertEqual(self.applied[-1], True)  # pointer still inside: stays open
-
-
-class AutohideSummonTest(unittest.TestCase):
-    def test_toggle_opens_and_closes_without_the_pointer(self):
-        clock = FakeClock()
-        applied = []
-        hide = Autohide(applied.append, clock.schedule, clock.cancel, open_ms=100, close_ms=400)
-        hide.toggle_summoned()
-        clock.advance(100)
-        self.assertEqual(applied, [True])
-        clock.advance(5000)
-        self.assertEqual(applied, [True])
-        hide.toggle_summoned()
-        clock.advance(400)
-        self.assertEqual(applied, [True, False])
 
 
 class AutohideHoldTest(unittest.TestCase):

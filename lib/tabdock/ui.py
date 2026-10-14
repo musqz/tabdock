@@ -40,6 +40,9 @@ class ConsoleView:
     def wider(self):
         pass
 
+    def toggle_open(self):
+        pass
+
     def narrower(self):
         pass
 
