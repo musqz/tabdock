@@ -2,7 +2,7 @@
 # Read when the panel starts: after a change, quit the panel with the x in its header and start it again
 # from the menu.
 
-# Tip: pick an outer edge of your monitor layout (the pointer stops there, so hover-to-open is easy). The strip opens the panel from its top and bottom quarters.
+# Which screen edge the panel sits on: "left" or "right".
 # Tip: pick an outer edge of your monitor layout (the pointer stops there, so hover-to-open is easy).
 side = "left"
 
