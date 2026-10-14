@@ -898,7 +898,7 @@ class DockView:
         if event.y < height * STRIP_ZONE or event.y > height * (1 - STRIP_ZONE):
             if box not in self._inside:
                 self._on_enter(box, event)
-        else:
+        elif box in self._inside:
             self._left(box)
 
     def _on_leave(self, box, event):
