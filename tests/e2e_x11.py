@@ -222,7 +222,7 @@ def main():
             return wid is not None and wininfo(wid)["mapped"]
 
         def expand():
-            run("xdotool", "mousemove", "0", "400")
+            run("xdotool", "mousemove", "0", "100")
             wait_for(panel_mapped, "panel expanded on hover")
             wait_for(lambda: wininfo(panel_win())["w"] == WIDTH, "panel at full width")
 
@@ -763,7 +763,7 @@ def main():
         # -- side switch --------------------------------------------------------------------------
         write_cfg(side="right", width=WIDTH)
         wait_for(lambda: wininfo(strip)["x"] == SCREEN[0] - STRIP, "strip moved to the right edge")
-        run("xdotool", "mousemove", str(SCREEN[0] - 1), "400")
+        run("xdotool", "mousemove", str(SCREEN[0] - 1), "100")
         wait_for(panel_mapped, "panel expanded on the right")
         info = wininfo(panel_win())
         assert (info["w"], info["x"]) == (WIDTH, SCREEN[0] - WIDTH), info

@@ -76,6 +76,7 @@ from .model import (  # noqa: E402
 
 GRIP_PX = 5
 DIALOG_GAP, DIALOG_TOP = 8, 30  # a window beside the panel: its distance from the panel and from the screen's top
+STRIP_ZONE = 0.25  # share of the collapsed strip, from the top and from the bottom, that opens the panel
 WIDTH_STEP = 40
 
 CSS = """
@@ -744,7 +745,12 @@ class DockView:
         box = Gtk.EventBox()
         box.get_style_context().add_class(css_class)
         box.add_events(Gdk.EventMask.ENTER_NOTIFY_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK)
-        box.connect("enter-notify-event", self._on_enter)
+        if css_class == "sp-strip":
+            box.add_events(Gdk.EventMask.POINTER_MOTION_MASK)
+            box.connect("enter-notify-event", self._on_strip_pointer)
+            box.connect("motion-notify-event", self._on_strip_pointer)
+        else:
+            box.connect("enter-notify-event", self._on_enter)
         box.connect("leave-notify-event", self._on_leave)
         box.connect("unmap", self._left)  # a hidden window sends no leave
         win.add(box)
@@ -885,6 +891,15 @@ class DockView:
     def _on_enter(self, box, _event):
         self._inside.add(box)
         self.autohide.enter()
+
+    def _on_strip_pointer(self, box, event):
+        """The collapsed strip opens the panel from its top and bottom quarters only."""
+        height = box.get_allocated_height()
+        if event.y < height * STRIP_ZONE or event.y > height * (1 - STRIP_ZONE):
+            if box not in self._inside:
+                self._on_enter(box, event)
+        elif box in self._inside:
+            self._left(box)
 
     def _on_leave(self, box, event):
         if event.detail == Gdk.NotifyType.INFERIOR:  # moving onto a child widget is not leaving

@@ -2,7 +2,7 @@
 
 ## The panel
 
-- **Collapsed:** a 3 px strip in the active browser's colour. Hover opens it (~120 ms), leaving closes it (~400 ms).
+- **Collapsed:** a 3 px strip in the active browser's colour. Hover on its top or bottom quarter opens it (~120 ms), leaving closes it (~400 ms).
 - **Open:** the header names the browser; below it a section per container (colour, icon, name, tab count) with
   its tabs. Click a tab to activate it. The `+` on a section opens a tab there and brings the browser forward with
   the address bar ready.
