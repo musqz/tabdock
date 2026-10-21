@@ -34,7 +34,7 @@ git clone https://github.com/musqz/tabdock.git
 cd packaging && makepkg -si
 ```
 
-The extension can be find
+The extension can be found
 ```
 /usr/share/tabdock/tabdock.xpi
 ```
