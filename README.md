@@ -1,3 +1,6 @@
+> **This repository has moved to Codeberg: https://codeberg.org/linux-bird/tabdock**
+> It is archived here. Please use Codeberg for issues and pull requests.
+
 # Tabdock
 
 An autohiding side panel for X11 (Openbox) and Wayland (labwc, sway) that mirrors the tabs and containers of
