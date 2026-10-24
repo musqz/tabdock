@@ -1,6 +1,3 @@
-> **This repository has moved to Codeberg: https://codeberg.org/linux-bird/tabdock**
-> It is archived here. Please use Codeberg for issues and pull requests.
-
 # Tabdock
 
 An autohiding side panel for X11 (Openbox) and Wayland (labwc, sway) that mirrors the tabs and containers of
@@ -16,12 +13,12 @@ Needs `python-gobject` (GTK 3).
 ### 1. Manual installation
 
 ```bash
-git clone https://github.com/musqz/tabdock.git
+git clone https://codeberg.org/linux-bird/tabdock.git
 cd tabdock
 ./install.sh
 ```
 
-Then save the signed `tabdock-*.xpi` from the [latest release](https://github.com/musqz/tabdock/releases/latest).
+Then save the signed `tabdock-*.xpi` from the [latest release](https://codeberg.org/linux-bird/tabdock/releases/latest).
 
 _(right-click → *Save Link As…*)_ and load it in each browser: `about:addons` → gear → *Install Add-on From File…*.
 
@@ -33,11 +30,11 @@ _Look into permissions to activate bookmarks and history search._
 ### 2. Arch Linux: installs the latest release system-wide
 
 ```
-git clone https://github.com/musqz/tabdock.git
+git clone https://codeberg.org/linux-bird/tabdock.git
 cd packaging && makepkg -si
 ```
 
-The extension can be find
+The extension can be found
 ```
 /usr/share/tabdock/tabdock.xpi
 ```
