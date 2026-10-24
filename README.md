@@ -13,12 +13,12 @@ Needs `python-gobject` (GTK 3).
 ### 1. Manual installation
 
 ```bash
-git clone https://codeberg.org/linux-bird/tabdock.git
+git clone https://github.com/musqz/tabdock.git
 cd tabdock
 ./install.sh
 ```
 
-Then save the signed `tabdock-*.xpi` from the [latest release](https://codeberg.org/linux-bird/tabdock/releases/latest).
+Then save the signed `tabdock-*.xpi` from the [latest release](https://github.com/musqz/tabdock/releases/latest).
 
 _(right-click → *Save Link As…*)_ and load it in each browser: `about:addons` → gear → *Install Add-on From File…*.
 
@@ -30,7 +30,7 @@ _Look into permissions to activate bookmarks and history search._
 ### 2. Arch Linux: installs the latest release system-wide
 
 ```
-git clone https://codeberg.org/linux-bird/tabdock.git
+git clone https://github.com/musqz/tabdock.git
 cd packaging && makepkg -si
 ```
 
