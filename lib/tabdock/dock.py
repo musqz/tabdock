@@ -132,6 +132,7 @@ button.sp-btn.sp-view {{ border: 1px solid #454b58; border-radius: 9px; padding:
 button.sp-btn.sp-view:hover {{ border-color: #7d8594; color: #ffffff; }}
 button.sp-btn.sp-view.selected {{ background-color: {accent}; border-color: {accent}; color: {on_accent}; font-weight: bold; }}
 .sp-views {{ padding: 5px 8px; background-color: #23262e; }}
+.sp-version {{ color: #5f6675; font-size: 8pt; }}
 .sp-ghost {{ color: #7d8594; }}
 button.sp-btn.sp-reopen {{ padding: 0 4px; color: #dfe3ea; }}
 button.sp-btn.sp-reopen:hover {{ color: #ffffff; }}
@@ -419,6 +420,10 @@ class DockView:
             self.views.pack_start(button, False, False, 0)
             self._view_buttons.append((key, button))
 
+        version = Gtk.Label(label=f"v{config.version()}")
+        version.get_style_context().add_class("sp-version")
+        self.views.pack_end(version, False, False, 0)
+
         self.content.pack_start(header, False, False, 0)
         self.content.pack_start(self.chips, False, False, 0)
         self.content.pack_start(self.scroll, True, True, 0)
@@ -439,7 +444,7 @@ class DockView:
         self._place_grip()
         self.win.get_child().add(self.frame)
         self.win.get_child().show_all()  # the panel window itself is only shown while expanded
-        self.views.set_visible(False)
+        self._set_views()
         self.strip.get_child().show()
         self.clear()
 
@@ -533,7 +538,7 @@ class DockView:
         self._meta, self._row_order = {}, []
         self._ws_buttons = []
         self._set_chips(mode, choices)
-        self.views.set_visible(False)
+        self._set_views()
         self.browser_name.set_text("")
         self.browser_name.set_tooltip_text(None)
         self._current_source = None
@@ -996,11 +1001,10 @@ class DockView:
         offered = {view for view in ("bookmarks", "history") if self._view_source(view) is not None}
         if self._view not in offered:
             self._view = "tabs"
-        self.views.set_visible(bool(offered))
         if self._find_switch is not None:
             self._find_switch.set_visible(bool(offered))
         for key, button in (*self._view_buttons, *self._find_view_buttons):
-            button.set_visible(key == "tabs" or key in offered)
+            button.set_visible(key in offered or (key == "tabs" and bool(offered)))
             ctx = button.get_style_context()
             (ctx.add_class if key == self._view else ctx.remove_class)("selected")
 
@@ -1832,7 +1836,7 @@ class DockView:
         finish, _ok = self._small_window("Find", content, "Go", answer, focus=entry, beside=True, hint=FIND_HINT)
         self._find_dialog = self._dialog
         self._find_switch, self._find_view_buttons = switch, buttons
-        self._set_views()  # hides the buttons of the views not on offer
+        self._set_views()  # hides the buttons of the views not on offer (the version stays)
         entry.connect("changed", narrow)
         entry.connect("activate", lambda _e: self._find_accept())
         entry.connect("key-press-event", self._on_find_key)

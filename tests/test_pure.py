@@ -229,6 +229,10 @@ class GeometryTest(unittest.TestCase):
         self.assertEqual(dock_rect(self.HDMI, "left", 320, True, 10, 10), (0, 10, 320, 1420))
         self.assertEqual(dock_rect(self.DP, "right", 320, False, 15, 0), (4480 - TRIGGER_PX, 195, TRIGGER_PX, 1065))
 
+    def test_version_is_the_version_file(self):
+        with open(os.path.join(os.path.dirname(__file__), "..", "VERSION")) as f:
+            self.assertEqual(config.version(), f.read().strip())
+
     def test_margins_must_be_small_integers(self):
         self.assertEqual(config.validate({"margin_top": 10, "margin_bottom": 0})["margin_top"], 10)
         for bad in ({"margin_top": -1}, {"margin_bottom": 201}, {"margin_top": "10"}, {"margin_bottom": True}):

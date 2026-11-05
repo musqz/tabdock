@@ -27,6 +27,15 @@ THEME_KEYS = ("accent", *ACCENTS, "other")
 _COLOUR_RE = re.compile(r"#(?:[0-9a-f]{3}){1,2}", re.IGNORECASE)
 
 
+def version():
+    """VERSION sits two levels above this package, in a checkout and once installed."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "VERSION")) as f:
+            return f.read().strip()
+    except OSError:
+        return "unknown"
+
+
 def socket_path():
     return os.environ.get("TABDOCK_SOCKET") or os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "tabdock.sock")
 
