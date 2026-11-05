@@ -8,6 +8,8 @@ DEFAULTS = {
     "side": "left",
     "monitor": "outer",
     "width": 320,
+    "margin_top": 0,  # px between the panel and the top / bottom of the screen
+    "margin_bottom": 0,
     "follow": "last",
     "view": "auto",
     "icons": False,  # site icons before the tab titles: off until asked for, the panel downloads them (see docs/USAGE.md)
@@ -59,6 +61,9 @@ def validate(user):
             raise ValueError(f'{key} must be one of: {", ".join(allowed)} (got {cfg[key]!r})')
     if isinstance(cfg["width"], bool) or not isinstance(cfg["width"], int) or not 100 <= cfg["width"] <= 1000:
         raise ValueError(f'width must be an integer between 100 and 1000 (got {cfg["width"]!r})')
+    for key in ("margin_top", "margin_bottom"):
+        if isinstance(cfg[key], bool) or not isinstance(cfg[key], int) or not 0 <= cfg[key] <= 200:
+            raise ValueError(f"{key} must be an integer between 0 and 200 (got {cfg[key]!r})")
     if not isinstance(cfg["monitor"], str) or not cfg["monitor"]:
         raise ValueError('monitor must be "outer", "primary" or an output name such as "HDMI-1"')
     for key in ("icons", "badges", "bookmarks", "history", "pinned", "hover", "launch_offline", "start_with_browser"):

@@ -332,6 +332,7 @@ class DockView:
         self._starting = set()  # names clicked lately: no row until the browser connects, or 30 s pass
         self._accent = None
         self._warned_monitor = False
+        self._connectors = None  # wl.output_names(), read once per layout change
         self._overlay = False  # pinned, but on an inner edge where no space can be reserved
         self._relayout_id = None
         self._screen_handlers = []
@@ -779,7 +780,19 @@ class DockView:
             r = m.get_geometry()
             rects.append((r.x, r.y, r.width, r.height))
         primary = display.get_primary_monitor()
-        return rects, [m.get_model() for m in monitors], (monitors.index(primary) if primary in monitors else None)
+        if LAYER:  # GTK's model is "Unknown" on Wayland: name the monitors by connector, found by position
+            connectors = self._connectors
+            if connectors is None:
+                try:
+                    from . import wl  # needs python-pywayland, which is optional
+                    connectors = wl.output_names()
+                except ImportError:
+                    connectors = {}
+                self._connectors = connectors
+            names = [connectors.get((r[0], r[1])) for r in rects]
+        else:
+            names = [m.get_model() for m in monitors]
+        return rects, names, (monitors.index(primary) if primary in monitors else None)
 
     def _monitor_rect(self):
         """The monitor the panel sits on: "outer" (the screen-edge monitor for the side), "primary",
@@ -801,7 +814,8 @@ class DockView:
     def _place(self):
         mon = self._monitor_rect()
         for win, expanded in ((self.strip, False), (self.win, True)):
-            x, y, w, h = geometry.dock_rect(mon, self.cfg["side"], self.cfg["width"], expanded)
+            x, y, w, h = geometry.dock_rect(mon, self.cfg["side"], self.cfg["width"], expanded,
+                                              self.cfg["margin_top"], self.cfg["margin_bottom"])
             win.set_default_size(w, h)
             win.resize(w, h)
             if LAYER:
@@ -842,6 +856,8 @@ class DockView:
         for edge, on in ((GtkLayerShell.Edge.LEFT, left), (GtkLayerShell.Edge.RIGHT, not left),
                          (GtkLayerShell.Edge.TOP, True), (GtkLayerShell.Edge.BOTTOM, True)):
             GtkLayerShell.set_anchor(win, edge, on)
+        GtkLayerShell.set_margin(win, GtkLayerShell.Edge.TOP, self.cfg["margin_top"])
+        GtkLayerShell.set_margin(win, GtkLayerShell.Edge.BOTTOM, self.cfg["margin_bottom"])
         win.set_size_request(width, -1)
 
     def _sync_strut(self, mon):
@@ -865,6 +881,7 @@ class DockView:
             self._refresh_pin()
 
     def _on_monitors_changed(self, *_args):
+        self._connectors = None
         # plugging a screen or an xrandr change emits several signals in a burst: re-place once, after
         if self._relayout_id is None:
             self._relayout_id = GLib.timeout_add(300, self._relayout)
@@ -2381,7 +2398,8 @@ class DockView:
             self._beside_panel = beside
             self._place_dialog(dialog)
         elif beside:  # where the panel is, or is about to be: it may still be unmapped, and its position stale
-            px, py, pw, _ph = geometry.dock_rect(self._monitor_rect(), self.cfg["side"], self.cfg["width"], True)
+            px, py, pw, _ph = geometry.dock_rect(self._monitor_rect(), self.cfg["side"], self.cfg["width"], True,
+                                               self.cfg["margin_top"], self.cfg["margin_bottom"])
             dw = dialog.get_preferred_size()[1].width
             dialog.set_position(Gtk.WindowPosition.NONE)
             dialog.move(px + pw + DIALOG_GAP if self.cfg["side"] == "left" else max(0, px - dw - DIALOG_GAP), py + DIALOG_TOP)

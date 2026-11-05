@@ -27,11 +27,11 @@ def outer_monitor(rects, side, primary=None):
     return max(candidates, key=lambda i: (rects[i][3], -i))
 
 
-def dock_rect(mon, side, width, expanded):
+def dock_rect(mon, side, width, expanded, top=0, bottom=0):
     mx, my, mw, mh = mon
     w = width if expanded else TRIGGER_PX
     x = mx if side == "left" else mx + mw - w
-    return (x, my, w, mh)
+    return (x, my + top, w, max(1, mh - top - bottom))
 
 
 def strut(mon, screen_w, side, width):
