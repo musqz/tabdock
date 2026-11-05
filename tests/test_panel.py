@@ -347,6 +347,15 @@ class PanelTest(unittest.TestCase):
         self.panel.raise_browser(self.ff)
         self.assertEqual(self.x.activated, [FIREFOX_XID])
 
+    def test_choosing_a_browser_raises_it_but_auto_and_all_do_not(self):
+        self.panel.follow(ZEN_XID)
+        self.panel.follow(FIREFOX_XID)
+        self.panel.choose(self.zen)
+        self.assertEqual(self.x.activated, [ZEN_XID])
+        self.panel.choose("all")
+        self.panel.choose("auto")
+        self.assertEqual(self.x.activated, [ZEN_XID])
+
     def test_raise_browser_also_when_our_own_window_has_the_keyboard(self):
         self.panel.follow(FIREFOX_XID)  # the browser was in use, then the find window took the keyboard
         self.x.focused = PANEL_XID
