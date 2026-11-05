@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.14.0
+
+The extension only changes its version number; installing the new one is optional.
+
 - Show the version at the bottom right of the panel.
 - Take the panel's greys from `~/.config/gtk-3.0/noctalia.css` when it exists, and restyle when it changes.
 
