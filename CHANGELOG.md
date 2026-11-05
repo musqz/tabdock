@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Show the version at the bottom right of the panel.
+- Take the panel's greys from `~/.config/gtk-3.0/noctalia.css` when it exists, and restyle when it changes.
 
 ## 0.13.0
 

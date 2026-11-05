@@ -21,7 +21,52 @@ from tabdock.model import (  # noqa: E402
     match_browser,
     on_accent,
     owns_window,
+    palette_css,
+    readable_on,
+    system_palette,
 )
+
+
+class PaletteTest(unittest.TestCase):
+    def css(self, text=None):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "noctalia.css")
+            if text is not None:
+                with open(path, "w") as f:
+                    f.write(text)
+            return palette_css(system_palette(path))
+
+    def test_takes_the_system_colours(self):
+        css = self.css("@define-color window_bg_color #112233;\n@define-color headerbar_bg_color #223344;\n"
+                       "@define-color window_fg_color #eeeeee;\n")
+        self.assertIn("@define-color sp_bg #112233;", css)
+        self.assertIn("@define-color sp_bar #223344;", css)
+        self.assertIn("@define-color sp_fg #eeeeee;", css)
+
+    def test_keeps_the_dark_default_for_the_error_colour_the_file_lacks(self):
+        css = self.css("@define-color window_bg_color #112233;\n@define-color headerbar_bg_color #223344;\n"
+                       "@define-color window_fg_color #eeeeee;\n")
+        self.assertIn("@define-color sp_err #e64553;", css)
+
+    def test_missing_file_gives_the_dark_defaults(self):
+        css = self.css()
+        self.assertIn("@define-color sp_bg #1b1d23;", css)
+        self.assertIn("@define-color sp_fg #dfe3ea;", css)
+
+    def test_a_colour_that_is_a_reference_is_ignored(self):
+        css = self.css("@define-color headerbar_bg_color @window_bg_color;")
+        self.assertIn("@define-color sp_bar #23262e;", css)
+
+    def test_a_half_readable_file_gives_all_dark_defaults(self):
+        css = self.css("@define-color window_fg_color #202020;\n@define-color window_bg_color @other;\n"
+                       "@define-color headerbar_bg_color #ffffff;")
+        for line in ("sp_bg #1b1d23", "sp_bar #23262e", "sp_fg #dfe3ea"):
+            self.assertIn("@define-color " + line + ";", css)
+
+    def test_readable_on(self):
+        self.assertTrue(readable_on("#f7abee", "#23262e"))
+        self.assertFalse(readable_on("#f7abee", "#ffffff"))
+        self.assertFalse(readable_on("#2815ef", "#23262e"))
 
 
 class ConfigTest(unittest.TestCase):

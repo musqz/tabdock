@@ -301,6 +301,46 @@ def _luminance(colour):
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
+# The system palette Noctalia writes for GTK apps: the panel takes its greys from it. Each entry maps a
+# @define-color name there to the panel's own name and the built-in dark colour used when it is missing.
+SYSTEM_PALETTE_FILE = "~/.config/gtk-3.0/noctalia.css"
+_PALETTE = {
+    "window_bg_color": ("sp_bg", "#1b1d23"),
+    "headerbar_bg_color": ("sp_bar", "#23262e"),
+    "window_fg_color": ("sp_fg", "#dfe3ea"),
+    "destructive_bg_color": ("sp_err", "#e64553"),
+}
+
+
+def system_palette(path=None):
+    """The panel's colours by name (sp_bg, sp_bar, sp_fg, sp_err), from the system palette file. The three that
+    must read against each other come from the file together or not at all, so a half-readable file never
+    mixes system colours with dark defaults."""
+    found = {}
+    try:
+        with open(os.path.expanduser(path or SYSTEM_PALETTE_FILE)) as f:
+            for name, value in re.findall(r"@define-color\s+(\w+)\s+(#[0-9a-fA-F]{6})\s*;", f.read()):
+                found[name] = value
+    except OSError:
+        pass
+    pal = {mine: found.get(theirs, default) for theirs, (mine, default) in _PALETTE.items()}
+    if not all(theirs in found for theirs in ("window_bg_color", "headerbar_bg_color", "window_fg_color")):
+        pal.update(sp_bg=_PALETTE["window_bg_color"][1], sp_bar=_PALETTE["headerbar_bg_color"][1],
+                   sp_fg=_PALETTE["window_fg_color"][1])
+    return pal
+
+
+def palette_css(pal):
+    """@define-color lines for the colours in `pal`."""
+    return "".join(f"@define-color {name} {value};" for name, value in pal.items())
+
+
+def readable_on(colour, background):
+    """True when text of `colour` has enough contrast on `background` (both "#rrggbb")."""
+    hi, lo = sorted((_luminance(colour), _luminance(background)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05) >= 3
+
+
 def on_accent(colour):
     """The text colour that reads best on a fill of `colour`: the panel's dark one on the built-in accents
     (all light), white on a dark accent chosen in [theme]."""

@@ -2,6 +2,7 @@
 mapped on screen. Skipped when there is no X display."""
 import os
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -107,6 +108,12 @@ NO_EMPTY_STATE = {**DRAG_STATE, "containers": DRAG_STATE["containers"][:1]}  # n
 class DockViewTest(unittest.TestCase):
     def setUp(self):
         self.shown = set()
+        self.palette_file = tempfile.NamedTemporaryFile("w", suffix=".css")
+        self.addCleanup(self.palette_file.close)
+        for target in ("tabdock.dock.SYSTEM_PALETTE_FILE", "tabdock.model.SYSTEM_PALETTE_FILE"):
+            patcher = mock.patch(target, self.palette_file.name)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         for name, fn in (("show", self.shown.add), ("hide", self.shown.discard)):
             patcher = mock.patch.object(Gtk.Window, name, lambda w, fn=fn: fn(w))
             patcher.start()
@@ -338,10 +345,22 @@ class DockViewTest(unittest.TestCase):
         pinned = next(line for line in view._css_data.splitlines() if line.startswith("button.sp-btn.sp-pin:checked"))
         self.assertIn("color: #ffffff", pinned)  # a dark accent: the text on it turns white
         name = next(line for line in view._css_data.splitlines() if line.startswith(".sp-browser"))
-        self.assertIn("color: #dfe3ea", name)  # ...and the browser's name, on the dark header, the usual text colour
+        self.assertIn("color: @sp_fg", name)  # ...and the browser's name, on the dark header, the usual text colour
         self.assertTrue(all(r.get_style_context().has_class("acc-1e3a8a") for r in view.list.get_children()))
         # (as GTK prints the rules back, so they were parsed): white text on a browser band in that colour too
         self.assertIn(".acc-1e3a8a.sp-bhead .sp-bandlabel {\n  color: rgb(255,255,255);", view._per_browser.to_string())
+
+    def test_a_new_system_palette_restyles_the_panel(self):
+        view = self.make()
+        self.assertIn("@define-color sp_bar #23262e;", view._palette_css)
+        self.assertIn("color: #8f9bb3", next(l for l in view._css_data.splitlines() if l.startswith(".sp-browser")))
+        self.palette_file.write("@define-color window_bg_color #fafafa;@define-color headerbar_bg_color #ffffff;"
+                                "@define-color window_fg_color #202020;")
+        self.palette_file.flush()
+        view._reload_palette()
+        self.assertIn("@define-color sp_bar #ffffff;", view._palette_css)
+        # the light accent cannot be read on the light header any more: the name takes the text colour
+        self.assertIn("color: @sp_fg", next(l for l in view._css_data.splitlines() if l.startswith(".sp-browser")))
 
     def test_right_click_on_the_header_name_sets_its_theme_colour(self):
         view = self.make()

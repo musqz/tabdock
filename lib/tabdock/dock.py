@@ -23,7 +23,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("GdkX11", "3.0")
-from gi.repository import Gdk, GdkX11, GLib, Gtk, Pango  # noqa: E402,F401
+from gi.repository import Gdk, GdkX11, Gio, GLib, Gtk, Pango  # noqa: E402,F401
 
 try:
     gi.require_version("GtkLayerShell", "0.1")
@@ -40,6 +40,7 @@ from .model import (  # noqa: E402
     DEFAULT_ACCENT,
     FEATURES,
     NO_CONTAINER,
+    SYSTEM_PALETTE_FILE,
     WS_COLORS,
     accent,
     accents,
@@ -63,8 +64,11 @@ from .model import (  # noqa: E402
     offers_workspaces,
     on_accent,
     ordered_containers,
+    palette_css,
+    readable_on,
     reordered,
     step_index,
+    system_palette,
     tab_badge,
     tab_label,
     tab_move_index,
@@ -83,59 +87,59 @@ CSS = """
 .sp-strip {{ background-color: {accent}; }}
 .sp-grip {{ background-color: transparent; }}
 .sp-grip:hover {{ background-color: {accent}; }}
-.sp-panel {{ background-color: #1b1d23; }}
-.sp-content {{ background-color: #1b1d23; color: #dfe3ea; }}
-.sp-header {{ background-color: #23262e; border-top: 3px solid {accent}; padding: 5px 8px; }}
+.sp-panel {{ background-color: @sp_bg; }}
+.sp-content {{ background-color: @sp_bg; color: @sp_fg; }}
+.sp-header {{ background-color: @sp_bar; border-top: 3px solid {accent}; padding: 5px 8px; }}
 .sp-browser {{ font-weight: bold; color: {name}; }}
 .sp-sectionbox {{ padding: 6px 8px 3px 6px; }}
-.sp-section {{ padding: 0; color: #aab2c0; }}
+.sp-section {{ padding: 0; color: alpha(@sp_fg, 0.7); }}
 .sp-row {{ border-left: 3px solid transparent; }}
-.sp-row:hover {{ background-color: #2a2e38; }}
-.sp-row.active {{ background-color: #2f3542; border-left-color: {accent}; }}
+.sp-row:hover {{ background-color: mix(@sp_bg, @sp_fg, 0.08); }}
+.sp-row.active {{ background-color: mix(@sp_bg, @sp_fg, 0.14); border-left-color: {accent}; }}
 .sp-row.active label {{ font-weight: bold; }}
-.sp-row.kbd {{ background-color: #2a2e38; border-left-color: {accent}; box-shadow: inset 0 0 0 1px {accent}; }}
+.sp-row.kbd {{ background-color: mix(@sp_bg, @sp_fg, 0.08); border-left-color: {accent}; box-shadow: inset 0 0 0 1px {accent}; }}
 .sp-tabbox {{ padding: 4px 10px 4px 19px; }}
 .sp-tab {{ padding: 0; }}
-.sp-badge {{ background-color: #e64553; color: #ffffff; font-weight: bold; font-size: 0.8em; padding: 0 5px; border-radius: 8px; }}
-.sp-empty {{ padding: 16px; color: #7d8594; }}
-button.sp-btn {{ padding: 0 6px; min-height: 0; min-width: 0; background: none; border: none; box-shadow: none; color: #aab2c0; }}
-button.sp-btn:hover {{ color: #ffffff; }}
-button.sp-btn.sp-pin {{ border: 1px solid #454b58; border-radius: 9px; padding: 0 8px; }}
-button.sp-btn.sp-pin:hover {{ border-color: #7d8594; }}
+.sp-badge {{ background-color: @sp_err; color: #ffffff; font-weight: bold; font-size: 0.8em; padding: 0 5px; border-radius: 8px; }}
+.sp-empty {{ padding: 16px; color: alpha(@sp_fg, 0.55); }}
+button.sp-btn {{ padding: 0 6px; min-height: 0; min-width: 0; background: none; border: none; box-shadow: none; color: alpha(@sp_fg, 0.7); }}
+button.sp-btn:hover {{ color: @sp_fg; }}
+button.sp-btn.sp-pin {{ border: 1px solid alpha(@sp_fg, 0.3); border-radius: 9px; padding: 0 8px; }}
+button.sp-btn.sp-pin:hover {{ border-color: alpha(@sp_fg, 0.55); }}
 button.sp-btn.sp-pin:checked {{ background-color: {accent}; border-color: {accent}; color: {on_accent}; font-weight: bold; }}
 button.sp-btn.sp-quit {{ margin-left: 6px; }}
-button.sp-btn.sp-quit:hover {{ color: #ff6b6b; }}
+button.sp-btn.sp-quit:hover {{ color: @sp_err; }}
 button.sp-btn.sp-newtab {{ margin-left: 4px; }}
 .sp-row.dragging {{ opacity: 0.45; }}
 .sp-row.drop-before {{ box-shadow: inset 0 2px 0 0 {accent}; }}
 .sp-row.drop-after {{ box-shadow: inset 0 -2px 0 0 {accent}; }}
-.sp-chips {{ padding: 4px 6px 3px 6px; background-color: #1b1d23; }}
-button.sp-btn.sp-chip {{ border: 1px solid #454b58; border-radius: 9px; padding: 0 8px; }}
-button.sp-btn.sp-chip:hover {{ border-color: #7d8594; color: #ffffff; }}
+.sp-chips {{ padding: 4px 6px 3px 6px; background-color: @sp_bg; }}
+button.sp-btn.sp-chip {{ border: 1px solid alpha(@sp_fg, 0.3); border-radius: 9px; padding: 0 8px; }}
+button.sp-btn.sp-chip:hover {{ border-color: alpha(@sp_fg, 0.55); color: @sp_fg; }}
 button.sp-btn.sp-chip.selected {{ background-color: {accent}; border-color: {accent}; color: {on_accent}; font-weight: bold; }}
 .sp-row.sp-bhead {{ border-left: none; margin-top: 6px; }}
-.sp-bandlabel {{ padding: 5px 8px; color: #1b1d23; font-weight: bold; }}
+.sp-bandlabel {{ padding: 5px 8px; color: @sp_bg; font-weight: bold; }}
 .sp-wsrow {{ padding: 5px 6px 2px 6px; }}
 button.sp-btn.sp-ws {{ border-radius: 4px; padding: 1px 8px; }}
-button.sp-btn.sp-ws:hover {{ background-color: #2a2e38; color: #ffffff; }}
-button.sp-btn.sp-ws.selected {{ background-color: #2f3542; color: #fff; font-weight: bold; box-shadow: inset 0 -2px 0 0 {accent}; }}
+button.sp-btn.sp-ws:hover {{ background-color: mix(@sp_bg, @sp_fg, 0.08); color: @sp_fg; }}
+button.sp-btn.sp-ws.selected {{ background-color: mix(@sp_bg, @sp_fg, 0.14); color: @sp_fg; font-weight: bold; box-shadow: inset 0 -2px 0 0 {accent}; }}
 .sp-pinmark {{ font-size: 0.8em; }}
-.sp-where {{ color: #7d8594; font-size: 0.85em; }}
+.sp-where {{ color: alpha(@sp_fg, 0.55); font-size: 0.85em; }}
 .sp-group {{ font-size: 0.85em; font-weight: bold; }}
 .sp-grouprow {{ padding: 5px 10px 1px 19px; }}
 .sp-pill {{ border-radius: 9px; padding: 0 10px; font-weight: bold; }}
 .sp-ingroup {{ margin-left: 22px; padding-left: 8px; }}
 button.sp-btn.sp-close {{ opacity: 0; padding: 0 4px; }}
 .sp-row:hover button.sp-btn.sp-close {{ opacity: 1; }}
-button.sp-btn.sp-close:hover {{ color: #ff6b6b; }}
-button.sp-btn.sp-view {{ border: 1px solid #454b58; border-radius: 9px; padding: 0 10px; }}
-button.sp-btn.sp-view:hover {{ border-color: #7d8594; color: #ffffff; }}
+button.sp-btn.sp-close:hover {{ color: @sp_err; }}
+button.sp-btn.sp-view {{ border: 1px solid alpha(@sp_fg, 0.3); border-radius: 9px; padding: 0 10px; }}
+button.sp-btn.sp-view:hover {{ border-color: alpha(@sp_fg, 0.55); color: @sp_fg; }}
 button.sp-btn.sp-view.selected {{ background-color: {accent}; border-color: {accent}; color: {on_accent}; font-weight: bold; }}
-.sp-views {{ padding: 5px 8px; background-color: #23262e; }}
-.sp-version {{ color: #5f6675; font-size: 8pt; }}
-.sp-ghost {{ color: #7d8594; }}
-button.sp-btn.sp-reopen {{ padding: 0 4px; color: #dfe3ea; }}
-button.sp-btn.sp-reopen:hover {{ color: #ffffff; }}
+.sp-views {{ padding: 5px 8px; background-color: @sp_bar; }}
+.sp-version {{ color: alpha(@sp_fg, 0.4); font-size: 8pt; }}
+.sp-ghost {{ color: alpha(@sp_fg, 0.55); }}
+button.sp-btn.sp-reopen {{ padding: 0 4px; color: alpha(@sp_fg, 0.85); }}
+button.sp-btn.sp-reopen:hover {{ color: @sp_fg; }}
 """
 
 
@@ -204,7 +208,7 @@ def browser_css(colours):
     return "".join(
         f".sp-row.active.{acc_class(c)} {{ border-left-color: {c}; }}"
         f".sp-row.kbd.{acc_class(c)} {{ border-left-color: {c}; box-shadow: inset 0 0 0 1px {c}; }}"
-        f".sp-row.sp-bhead.kbd.{acc_class(c)} {{ box-shadow: inset 0 0 0 2px #1b1d23; }}"
+        f".sp-row.sp-bhead.kbd.{acc_class(c)} {{ box-shadow: inset 0 0 0 2px @sp_bg; }}"
         f".sp-row.drop-before.{acc_class(c)} {{ box-shadow: inset 0 2px 0 0 {c}; }}"
         f".sp-row.drop-after.{acc_class(c)} {{ box-shadow: inset 0 -2px 0 0 {c}; }}"
         f"button.sp-btn.sp-chip.{acc_class(c)} {{ border-color: {c}; }}"
@@ -341,6 +345,8 @@ class DockView:
         self._inside = set()  # the strip and panel boxes the pointer is in
 
         GLib.set_prgname("tabdock")
+        self._palette = system_palette()
+        self._palette_css = palette_css(self._palette)
         self._css = Gtk.CssProvider()
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), self._css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
@@ -348,10 +354,21 @@ class DockView:
         self._colours = accents(cfg.get("theme"))  # each browser's colour, with the config's [theme]
         self._set_accent(self._colours["other"])
         self._per_browser = Gtk.CssProvider()
-        self._per_browser.load_from_data((browser_css(self._colours.values()) + STATIC_CSS).encode())
+        self._load_browser_css()
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), self._per_browser, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
+
+        # a theme change rewrites the palette file: restyle without a restart
+        self._palette_timer = None
+        self._palette_monitor = None
+        try:
+            self._palette_monitor = Gio.File.new_for_path(os.path.expanduser(SYSTEM_PALETTE_FILE)).monitor_file(
+                Gio.FileMonitorFlags.WATCH_MOVES, None
+            )
+            self._palette_monitor.connect("changed", self._palette_file_changed)
+        except GLib.Error:
+            pass  # no live restyle, the colours read at start still apply
 
         self.strip = self._dock_window("sp-strip", "tabdock-strip")
         self.win = self._dock_window("sp-panel", "tabdock-panel")
@@ -733,7 +750,7 @@ class DockView:
         colours = accents(self.cfg.get("theme"))
         if colours != self._colours:  # new [theme] colours: the next show() rebuilds the rows in them
             self._colours = colours
-            self._per_browser.load_from_data((browser_css(colours.values()) + STATIC_CSS).encode())
+            self._load_browser_css()
             self._last = None
             if not self.sources:
                 self._set_accent(colours["other"])  # (nothing listed: no show() to come)
@@ -902,6 +919,11 @@ class DockView:
         self._closed = True
         self._clear_ghost()
         self._end_nav()
+        if self._palette_timer is not None:
+            GLib.source_remove(self._palette_timer)
+            self._palette_timer = None
+        if self._palette_monitor is not None:
+            self._palette_monitor.cancel()
         if self._relayout_id is not None:
             GLib.source_remove(self._relayout_id)
             self._relayout_id = None
@@ -1410,14 +1432,34 @@ class DockView:
         os.replace(path + ".tmp", path)
         return False
 
+    def _palette_file_changed(self, *_args):
+        if self._palette_timer is None:  # the file is written in several steps: restyle once it settles
+            self._palette_timer = GLib.timeout_add(300, self._reload_palette)
+
+    def _reload_palette(self):
+        self._palette_timer = None
+        pal = system_palette()
+        if pal != self._palette:
+            self._palette, self._palette_css = pal, palette_css(pal)
+            accent, self._accent = self._accent, None
+            self._set_accent(accent)  # the browser name's colour depends on the header colour
+            self._load_browser_css()
+        return False
+
+    def _load_browser_css(self):
+        self._per_browser.load_from_data(
+            (self._palette_css + browser_css(self._colours.values()) + STATIC_CSS).encode()
+        )
+
     def _set_accent(self, colour):
         if colour == self._accent:
             return  # reloading the provider restyles every widget: only do it on a real change
         self._accent = colour
         text = on_accent(colour)
-        # the browser's name is written in the accent on the dark header, unless the accent is too dark to read there
-        self._css_data = CSS.format(accent=colour, on_accent=text, name=colour if text == DARK_TEXT else "#dfe3ea")
-        self._css.load_from_data(self._css_data.encode())
+        # the browser's name is written in the accent on the header, unless the accent cannot be read there
+        name = colour if readable_on(colour, self._palette["sp_bar"]) else "@sp_fg"
+        self._css_data = CSS.format(accent=colour, on_accent=text, name=name)
+        self._css.load_from_data((self._palette_css + self._css_data).encode())
 
     def _replace_rows(self, rows):
         adj = self.scroll.get_vadjustment()
