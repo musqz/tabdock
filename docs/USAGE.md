@@ -47,8 +47,9 @@
 | key | default | meaning |
 |-----|---------|---------|
 | `side` | `"left"` | `"left"` or `"right"` |
-| `monitor` | `"outer"` | `"outer"` (screen's outer edge for `side`), `"primary"`, or an `xrandr` output name |
+| `monitor` | `"outer"` | `"outer"` (screen's outer edge for `side`), `"primary"`, or an `xrandr` output name (`wlr-randr` on Wayland) |
 | `width` | `320` | px, 100-1000; a drag on the panel's edge or `--wider`/`--narrower` updates it |
+| `margin_top`, `margin_bottom` | `0` | pixels between the panel and the top / bottom of the screen |
 | `follow` | `"last"` | while a non-browser window is active: `"last"` keeps the last browser, `"hide"` hides |
 | `view` | `"auto"` | `"auto"` or `"all"` at start |
 | `icons` | `false` | site icons before titles (see Site icons); the header's `icons` button switches them for the session |
@@ -147,7 +148,7 @@ the monitor).
 ### Multiple monitors
 
 `monitor = "outer"` puts the panel on the screen's outer edge for `side`, the only edge X11 can reserve space on (on Wayland any edge can).
-Use `"primary"` or an output name to choose another (on X11 a pin there is an overlay). The panel follows monitor changes.
+Use `"primary"` or an output name to choose another (on X11 a pin there is an overlay). On Wayland the names are the ones `wlr-randr` shows; this needs `python-pywayland`. The panel follows monitor changes.
 
 ## Troubleshooting
 

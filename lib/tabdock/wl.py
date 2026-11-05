@@ -7,7 +7,7 @@ import sys
 
 from gi.repository import GLib
 from pywayland.client import Display
-from pywayland.protocol.wayland import WlSeat
+from pywayland.protocol.wayland import WlOutput, WlSeat
 
 from .wlr_foreign_toplevel import ZwlrForeignToplevelHandleV1, ZwlrForeignToplevelManagerV1
 
@@ -140,3 +140,44 @@ class WlConn:
             self._on_lost()
             return False
         return True
+
+
+def output_names():
+    """{(x, y): connector name, e.g. "HDMI-A-2"} of the outputs, or {} without a Wayland display or xdg-output.
+
+    GTK only gives "Unknown" as a monitor's model on Wayland, so the connector is matched by position.
+    """
+    try:
+        from pywayland.protocol.xdg_output_unstable_v1 import ZxdgOutputManagerV1
+        display = Display()
+        display.connect()
+    except Exception:  # no display, or a pywayland without xdg-output
+        return {}
+    try:
+        return _read_output_names(display, ZxdgOutputManagerV1)
+    finally:
+        display.disconnect()
+
+
+def _read_output_names(display, ZxdgOutputManagerV1):
+    found = {"outputs": [], "manager": None}
+
+    def on_global(registry, name, interface, version):
+        if interface == "wl_output":
+            found["outputs"].append(registry.bind(name, WlOutput, min(version, 1)))
+        elif interface == "zxdg_output_manager_v1" and version >= 2:
+            found["manager"] = registry.bind(name, ZxdgOutputManagerV1, 2)  # v2 sends the name
+
+    registry = display.get_registry()
+    registry.dispatcher["global"] = on_global
+    display.roundtrip()
+    infos = []
+    if found["manager"] is not None:
+        for out in found["outputs"]:
+            info = {}
+            xdg = found["manager"].get_xdg_output(out)
+            xdg.dispatcher["logical_position"] = lambda _x, x, y, info=info: info.update(pos=(x, y))
+            xdg.dispatcher["name"] = lambda _x, value, info=info: info.update(name=value)
+            infos.append(info)
+        display.roundtrip()
+    return {i["pos"]: i["name"] for i in infos if "pos" in i and "name" in i}
