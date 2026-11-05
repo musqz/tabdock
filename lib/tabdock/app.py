@@ -133,10 +133,12 @@ class Panel:
 
     def choose(self, mode):
         """A chip was clicked: "auto" follows the browser in use, "all" lists every browser, and a
-        Connection shows just that browser, whichever window has the focus."""
+        Connection shows just that browser, whichever window has the focus, and brings it forward."""
         if mode in ("auto", "all") or mode in self.browsers:
             self.mode = mode
             self._render()
+            if mode not in ("auto", "all"):
+                self.raise_browser(mode)
 
     def reconfigure(self, cfg):
         self.cfg = cfg
