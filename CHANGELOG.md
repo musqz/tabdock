@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.0
+
+The extension only changes its version number; installing the new one is optional.
+
+- Add `margin_top` and `margin_bottom` to inset the panel from the top and bottom of the screen.
+- Wayland: `monitor` accepts an output name such as `HDMI-A-2` (needs python-pywayland).
+- Clicking a browser's chip raises that browser.
+
 ## 0.12.0
 
 The extension only changes its version number; installing the new one is optional.
