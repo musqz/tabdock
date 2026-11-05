@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Show the version at the bottom right of the panel.
+
 ## 0.13.0
 
 The extension only changes its version number; installing the new one is optional.
