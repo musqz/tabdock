@@ -297,14 +297,6 @@ def _root(*parts):
     return os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", *parts))
 
 
-def _version():
-    try:
-        with open(_root("VERSION")) as f:
-            return f.read().strip()
-    except OSError:
-        return "unknown"
-
-
 def _help_files():
     """The end of --help: where the files are on this machine, and how the panel usually starts."""
     path, home = config.config_path(), os.path.join(config.config_dir(), "config.toml")
@@ -346,7 +338,7 @@ def main(argv=None):
         epilog=_help_files(),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--version", action="version", version=f"tabdock {_version()}")
+    parser.add_argument("--version", action="version", version=f"tabdock {config.version()}")
     parser.add_argument(
         "--debug",
         action="store_true",
