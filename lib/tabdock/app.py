@@ -293,7 +293,7 @@ def _watch_stdin(panel):
 
 
 def _root(*parts):
-    """VERSION and configs/ sit two levels above this package, in a checkout and once installed."""
+    """VERSION and configs/ sit two levels above this package, in a checkout and once installed (tabdock.xpi only in the package)."""
     return os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", *parts))
 
 
@@ -306,11 +306,14 @@ def _help_files():
         note = f"\n          (from before the rename to tabdock: move it to {home})"
     else:
         note = ""
+    xpi_file = _root("tabdock.xpi")
+    xpi = xpi_file if os.path.exists(xpi_file) else "https://github.com/musqz/tabdock/releases/latest"
     return (
         "files:\n"
         f"  config  {path}{note}\n"
         f"  log     {config.log_path()}\n"
-        "          (the output of a panel the browser started)\n\n"
+        "          (the output of a panel the browser started)\n"
+        f"  xpi     {xpi}\n\n"
         "Usually started by the browser when it opens with the Tabdock extension (start_with_browser),\n"
         'from the "Tabdock" menu entry, or an autostart line. https://github.com/musqz/tabdock'
     )
