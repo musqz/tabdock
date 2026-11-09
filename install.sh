@@ -262,7 +262,9 @@ do_install() {
     cat <<EOF
 
 Next:
-  1. Install the signed browser extension: see docs/INSTALL.md
+  1. Install the signed browser extension: save tabdock-*.xpi from
+     https://github.com/musqz/tabdock/releases/latest, then in each browser: about:addons -> gear ->
+     Install Add-on From File (docs/INSTALL.md)
   2. Starting the panel, any of these:
        - it starts by itself when a browser with the extension opens (start_with_browser in config.toml)
        - "Tabdock" in your application menu
