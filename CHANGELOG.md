@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `tabdock --help` and `install.sh` say where to get the signed extension.
+
 ## 0.14.0
 
 The extension only changes its version number; installing the new one is optional.
