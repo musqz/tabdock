@@ -34,6 +34,12 @@ git clone https://github.com/musqz/tabdock.git
 cd packaging && makepkg -si
 ```
 
+### 3. Mabox users can use
+
+```
+sudo pacman -S tabdock
+```
+
 The extension can be found
 ```
 /usr/share/tabdock/tabdock.xpi
