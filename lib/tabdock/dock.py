@@ -475,6 +475,8 @@ class DockView:
         for signal in ("monitors-changed", "size-changed"):  # docking, xrandr: follow the new layout
             self._screen_handlers.append((screen, screen.connect(signal, self._on_monitors_changed)))
         self.win.connect("destroy", self._teardown)
+        if LAYER:
+            self.win.connect("size-allocate", self._on_panel_allocate)
         if self._dump_path:  # test hook, see _dump_layout: costs nothing in normal use
             self.win.connect("size-allocate", lambda *_a: self._schedule_dump())
 
@@ -869,7 +871,7 @@ class DockView:
         if self._beside_panel:
             GtkLayerShell.set_margin(dialog, GtkLayerShell.Edge.TOP, DIALOG_TOP)
             GtkLayerShell.set_margin(dialog, GtkLayerShell.Edge.LEFT if left else GtkLayerShell.Edge.RIGHT,
-                                     self.cfg["width"] + DIALOG_GAP)
+                                     self._panel_width() + DIALOG_GAP)
 
     def _anchor(self, win, mon, width):
         """Layer-shell placement: full height on one edge of the monitor `mon`, `width` wide."""
@@ -885,7 +887,8 @@ class DockView:
     def _sync_strut(self, mon):
         if LAYER:  # a pinned panel reserves its width on any edge: no inner-edge overlay case
             pinned = self.cfg["pinned"] and not self.hidden
-            GtkLayerShell.set_exclusive_zone(self.win, self.cfg["width"] if pinned else 0)
+            # the content can need more than `width` (a very narrow panel): reserve what is really covered
+            GtkLayerShell.set_exclusive_zone(self.win, self._panel_width() if pinned else 0)
             self._set_overlay(False)
             return
         values = None
@@ -896,6 +899,13 @@ class DockView:
         self._set_overlay(self.cfg["pinned"] and not self.hidden and values is None)
         if self.x is not None and self.win.get_realized():
             self.x.set_strut(self.win.get_window().get_xid(), values)
+
+    def _panel_width(self):
+        return max(self.cfg["width"], self.win.get_allocated_width())
+
+    def _on_panel_allocate(self, _w, _alloc):
+        if self.cfg["pinned"]:
+            self._sync_strut(None)  # (the layer-shell branch does not use the monitor)
 
     def _set_overlay(self, overlay):
         if overlay != self._overlay:
