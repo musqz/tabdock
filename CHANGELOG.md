@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.14.1
+
+The extension only changes its version number; installing the new one is optional.
+
 - `tabdock --help` and `install.sh` say where to get the signed extension.
 - Reserve the panel's real width when pinned on Wayland, so windows no longer sit under a narrow panel.
 
