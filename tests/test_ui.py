@@ -422,10 +422,16 @@ class DockViewTest(unittest.TestCase):
     def test_section_folds_and_unfolds(self):
         view = self.make()
         view.show([(object(), INFO, STATE)])
-        click(view.list.get_children()[0])  # "No container" has a tab, so it is clickable
+        click(view.list.get_children()[2])  # "Personal & Co" has a tab, so it is clickable
         self.assertEqual(len(view.list.get_children()), 4)
-        click(view.list.get_children()[0])
+        click(view.list.get_children()[2])
         self.assertEqual(len(view.list.get_children()), 5)
+
+    def test_a_folded_section_keeps_its_active_tab_listed(self):
+        view = self.make()
+        view.show([(object(), INFO, STATE)])
+        click(view.list.get_children()[0])  # "No container" holds the active tab
+        self.assertEqual(self.listed_tabs(view), [10, 11])
 
     def test_new_tab_button_sends_new_tab_for_its_own_container_and_window(self):
         view = self.make()
@@ -487,7 +493,7 @@ class DockViewTest(unittest.TestCase):
     def test_folding_is_per_browser_process(self):
         view = self.make()
         view.show([(object(), {**INFO, "browserPid": 1}, STATE)])
-        click(view.list.get_children()[0])  # fold "No container" in the first profile
+        click(view.list.get_children()[2])  # fold "Personal & Co" in the first profile
         self.assertEqual(len(view.list.get_children()), 4)
         view.show([(object(), {**INFO, "browserPid": 2}, STATE)])  # another Firefox profile: not folded
         self.assertEqual(len(view.list.get_children()), 5)
