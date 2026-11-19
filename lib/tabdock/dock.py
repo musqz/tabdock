@@ -1530,17 +1530,19 @@ class DockView:
                 key = (browser, container["cookieStoreId"])
                 folded = key in self.collapsed and not finding  # a match is never folded away
                 rows.append(self._section(container, tabs, key, folded, conn, colour, state, window["id"], can))
-                if not folded:
-                    tab_rows = [
-                        self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour, spaces, can,
-                                      ordered_containers(state), window.get("workspaceId") if finding else None)
-                        for tab in tabs if finding or not self._hidden_by_fold(browser, state, tab)
-                    ]
-                    ghost = None if finding else self._ghost_row(conn, container["cookieStoreId"], tabs, colour, window)
-                    if ghost is not None:
-                        tab_rows.insert(min(self._ghost["position"], len(tab_rows)), ghost)
-                    rows.extend(tab_rows if finding else self._group_rows(tab_rows, tabs, browser, conn, colour, state,
-                                                                          container["cookieStoreId"]))
+                # a folded container keeps its active tab in view, as a folded tab group does
+                listed = [t for t in tabs if t.get("active")] if folded else tabs
+                tab_rows = [
+                    self._tab_row(tab, window["id"], container["cookieStoreId"], conn, colour, spaces, can,
+                                  ordered_containers(state), window.get("workspaceId") if finding else None,
+                                  draggable=not folded)
+                    for tab in listed if finding or folded or not self._hidden_by_fold(browser, state, tab)
+                ]
+                ghost = None if finding else self._ghost_row(conn, container["cookieStoreId"], tabs, colour, window)
+                if ghost is not None:
+                    tab_rows.insert(min(self._ghost["position"], len(tab_rows)), ghost)
+                rows.extend(tab_rows if finding or folded else self._group_rows(tab_rows, tabs, browser, conn, colour,
+                                                                                state, container["cookieStoreId"]))
                 if finding and tabs and self._first_match is None:
                     self._first_match = (conn, tabs[0]["id"], window["id"])
         self._row_order = [r for r in rows if r in self._meta]  # (an undo row is made last but sits among the tabs)
@@ -1719,7 +1721,7 @@ class DockView:
         self._last = None
         self._rebuild()
 
-    def _tab_row(self, tab, window_id, group, conn, colour, spaces=(), can=(), containers=(), shown=None):
+    def _tab_row(self, tab, window_id, group, conn, colour, spaces=(), can=(), containers=(), shown=None, draggable=True):
         """A tab: its site icon (optional), the title, an unread badge, a pin if pinned, and a ✕ that shows while
         the row is hovered. Middle-click closes it too; right-click pins, groups, moves (to another workspace) or closes.
         `can`: what the extension handles ("close_tab", "pin_tab", "reopen_in_container", "tab_groups"); the rest is not offered.
@@ -1818,6 +1820,7 @@ class DockView:
         return self._row(
             box, "tab", tab["id"], group, conn, colour, lambda: self.on_activate(conn, tab["id"], window_id),
             active=bool(tab.get("active")), pinned=pinned, menu=menu, closable="close_tab" in can, keys=keys,
+            draggable=draggable,
         )
 
     def find(self):
