@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep the active tab listed when its container is folded.
+
 ## 0.14.1
 
 The extension only changes its version number; installing the new one is optional.
