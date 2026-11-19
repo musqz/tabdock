@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Keep the active tab listed when its container is folded.
+- Colour the find window and the other small dialogs like the panel.
 
 ## 0.14.1
 
