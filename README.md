@@ -3,7 +3,7 @@
 An autohiding side panel for X11 (Openbox) and Wayland (labwc, sway) that mirrors the tabs and containers of
 Firefox-based browsers, two-way, through a small WebExtension. Chromium-based browsers are not supported.
 
-## Installing 2 way's
+## Installing
 
 Needs `python-gobject` (GTK 3).
 
@@ -34,7 +34,15 @@ git clone https://github.com/musqz/tabdock.git
 cd packaging && makepkg -si
 ```
 
-### 3. Mabox users can use
+### 3. AUR
+
+```
+yay -S tabdock-bin
+```
+
+The signed extension is `/usr/share/tabdock/tabdock.xpi`. Use this or the Mabox package, not both.
+
+### 4. Mabox users can use
 
 ```
 sudo pacman -S tabdock
