@@ -257,7 +257,6 @@ class InstallTest(unittest.TestCase):
         self.assertTrue(os.path.isfile(page))
         self.assertEqual(self.run_install("--uninstall").returncode, 0)
         self.assertFalse(os.path.exists(page))
-        self.assertFalse(os.path.exists(os.path.dirname(page)))  # the directory install made goes too
 
     def test_installs_a_menu_entry_and_removes_it_again(self):
         self.assertEqual(self.run_install().returncode, 0)

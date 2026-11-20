@@ -304,8 +304,6 @@ do_uninstall() {
     done
     tidy "$share"
     tidy "$old_share"
-    # (install created it; man and share are not ours)
-    [[ ! -d $PREFIX/share/man/man1 ]] || $SUDO rmdir --ignore-fail-on-non-empty -- "$PREFIX/share/man/man1"
 }
 
 case "${1:-}" in
