@@ -15,6 +15,9 @@ the rename to tabdock and points at autostart or `rc.xml` lines that still start
 `/usr/share/tabdock/tabdock.xpi`. Use the package or `install.sh`, not both: a per-user manifest overrides the
 package's.
 
+**AUR:** `yay -S tabdock-bin` (or another AUR helper). It ships the same files and replaces the Mabox `tabdock`
+package, so use one of the two.
+
 ## Extension
 
 Firefox-based browsers keep only **signed** extensions. Install the signed `tabdock-<version>.xpi` from the
