@@ -2,63 +2,134 @@
 
 ## Program
 
+Pick one.
+
+**AUR:**
+
 ```bash
-./install.sh     # ~/.local/share/tabdock, ~/.local/bin/tabdock, a "Tabdock" menu entry, a config to edit, `man tabdock`
+yay -S tabdock-bin
 ```
 
-`PREFIX=/usr SUDO=sudo ./install.sh` installs system-wide; `./install.sh --uninstall` removes what it installed.
-It also writes the native-messaging manifest `~/.mozilla/native-messaging-hosts/openbox_sidepanel.json`, which
-every Firefox-based browser reads (the name is the extension's id and stays). It removes an install from before
-the rename to tabdock and points at autostart or `rc.xml` lines that still start `sidepanel`.
+**Mabox:**
 
-**Arch:** `cd packaging && makepkg -si` installs everything system-wide, with the extension at
-`/usr/share/tabdock/tabdock.xpi`. Use the package or `install.sh`, not both: a per-user manifest overrides the
-package's.
+```bash
+sudo pacman -S tabdock
+```
 
-**AUR:** `yay -S tabdock-bin` (or another AUR helper). It ships the same files and replaces the Mabox `tabdock`
-package, so use one of the two.
+**Arch, built from the latest release:**
+
+```bash
+git clone https://github.com/musqz/tabdock.git
+cd tabdock/packaging && makepkg -si
+```
+
+**Manual, per user:**
+
+```bash
+git clone https://github.com/musqz/tabdock.git
+cd tabdock
+./install.sh
+```
+
+Installs to `~/.local/share/tabdock` and `~/.local/bin/tabdock`, with a "Tabdock" menu entry, a config to edit and `man tabdock`.
+Also writes the native-messaging manifest `~/.mozilla/native-messaging-hosts/openbox_sidepanel.json`
+(the name is the extension's id and stays).
+
+```bash
+PREFIX=/usr SUDO=sudo ./install.sh   # system-wide
+./install.sh --uninstall             # remove what it installed
+```
+
+Use one of these, not two: a per-user manifest overrides the package's, and `tabdock-bin` replaces the Mabox `tabdock`.
+`install.sh` also removes an install from before the rename to tabdock and points at autostart or `rc.xml` lines that still start `sidepanel`.
+
+### Dependencies
+
+The packages pull in the X11 ones; on Wayland also install `gtk-layer-shell` and `python-pywayland`.
+For a manual install:
+
+```bash
+sudo pacman -S python-gobject gtk3 python-xlib                                  # X11
+sudo pacman -S python-gobject gtk3 gtk-layer-shell python-pywayland             # Wayland (labwc, sway)
+```
 
 ## Extension
 
-Firefox-based browsers keep only **signed** extensions. Install the signed `tabdock-<version>.xpi` from the
-GitHub release (the package ships it as `/usr/share/tabdock/tabdock.xpi`): `about:addons` → gear →
-*Install Add-on From File…*, once per browser. If it is gone after the first restart, install it again.
+Firefox-based browsers keep only signed extensions.
 
-`about:debugging` loads an unsigned build, only until the browser restarts. To sign your own,
-`packaging/sign-extension.sh` asks for your addons.mozilla.org API keys and leaves the `.xpi` in
-`web-ext-artifacts/`.
+1. Get `tabdock-<version>.xpi` from the [latest release](https://github.com/musqz/tabdock/releases/latest).
+   The packages ship it as `/usr/share/tabdock/tabdock.xpi`.
+2. In each browser: `about:addons` → gear → *Install Add-on From File…*.
+3. If it is gone after the first restart, install it again.
+
+Your own build: `packaging/sign-extension.sh` asks for your addons.mozilla.org API keys and leaves the `.xpi` in `web-ext-artifacts/`.
+`about:debugging` loads an unsigned build until the browser restarts.
 
 A newer extension adds features; an older one keeps working and the panel offers only what it says it handles.
 
 Permissions: `tabs`, `contextualIdentities` + `cookies` (containers), `nativeMessaging`, `storage` (container order,
 workspaces), `tabHide` (workspaces), `sessions` (remember workspaces), `tabGroups` (group names and colours; naming a new group).
-Optional, switched on in `about:addons` → Tabdock → *Permissions and data*: `bookmarks`, `history` (the panel's Bookmarks and History views).
+Optional, in `about:addons` → Tabdock → *Permissions and data*: `bookmarks`, `history` (the Bookmarks and History views).
 Nothing leaves your computer.
-
-## Update
-
-`git pull`, then `./install.sh` again (it copies the panel; a pull alone changes nothing installed) and restart the
-panel (`✕`, then open a browser or use the menu). Extensions are unlisted and never update themselves: when a
-release says so, install the new signed `.xpi` in each browser again.
 
 ## Start the panel
 
 Any of these; a second instance refuses to start.
 
-- **With the browser** (default): opening a browser with the extension starts it. Turn off with
-  `start_with_browser = false`. A panel you quit with `✕` stays gone until the next browser start.
+- **With the browser** (default): opening a browser with the extension starts it.
+  Turn off: `start_with_browser = false` in `~/.config/tabdock/config.toml`. A panel you quit with `✕` stays gone until the next browser start.
 - **Menu:** the "Tabdock" entry.
-- **Login:** `(sleep 5.0s && ~/.local/bin/tabdock) &` in `~/.config/openbox/autostart`.
-  In labwc: `~/.local/bin/tabdock &` in `~/.config/labwc/autostart`.
+- **Login, Openbox**, in `~/.config/openbox/autostart`:
 
-## Troubleshooting
+  ```bash
+  (sleep 5.0s && ~/.local/bin/tabdock) &    # manual install; /usr/bin/tabdock for a package
+  ```
 
-"Waiting for a browser with the Tabdock extension": the extension is missing or disabled (`about:addons`), or the
-manifest is gone (re-run `./install.sh`). Errors show in `about:debugging#/runtime/this-firefox` → Inspect →
-Console. A panel the browser started logs to `$XDG_RUNTIME_DIR/tabdock.log`.
+- **Login, labwc**, in `~/.config/labwc/autostart`:
+
+  ```bash
+  ~/.local/bin/tabdock &                    # manual install; /usr/bin/tabdock for a package
+  ```
+
+## Update
+
+AUR or Mabox package: update with your package manager.
+
+Built from the release with `makepkg -si`:
+
+```bash
+cd tabdock
+git pull
+cd packaging && makepkg -si
+```
+
+Manual:
+
+```bash
+cd tabdock
+git pull
+./install.sh
+```
+
+Then restart the panel: `✕`, then open a browser or use the menu.
+Extensions never update themselves: when a release says so, install the new signed `.xpi` in each browser again.
 
 ## Wayland (labwc, sway)
 
-Install `gtk-layer-shell` and `python-pywayland`, then start `tabdock` as usual.
+```bash
+sudo pacman -S gtk-layer-shell python-pywayland
+tabdock
+```
 
-Note: two browsers of the same kind (two Firefox profiles) are not told apart; pick one with its chip.
+Two browsers of the same kind (two Firefox profiles) are not told apart; pick one with its chip.
+
+## Troubleshooting
+
+"Waiting for a browser with the Tabdock extension": the extension is missing or disabled (`about:addons`), or the manifest is gone.
+
+```bash
+./install.sh                        # manual install only: writes the manifest again
+tail "$XDG_RUNTIME_DIR/tabdock.log" # a panel the browser started logs here
+```
+
+Extension errors: `about:debugging#/runtime/this-firefox` → Inspect → Console.
