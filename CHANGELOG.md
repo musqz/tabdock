@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a man page (`man tabdock`), installed by `install.sh`.
+
 ## 0.15.0
 
 The extension only changes its version number; installing the new one is optional.
