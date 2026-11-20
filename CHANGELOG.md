@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Add a man page (`man tabdock`), installed by `install.sh`.
+- Stop `tabdock --debug` on Wayland from printing an Xlib xauthority warning.
 
 ## 0.15.0
 
