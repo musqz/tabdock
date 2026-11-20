@@ -240,7 +240,7 @@ class InstallTest(unittest.TestCase):
         for rel in ("install.sh", "tabdock", "VERSION"):
             os.makedirs(os.path.dirname(os.path.join(checkout, rel)), exist_ok=True)
             shutil.copy2(os.path.join(ROOT, rel), os.path.join(checkout, rel))
-        for sub in ("lib", "configs", "extension"):
+        for sub in ("lib", "configs", "extension", "man"):
             shutil.copytree(os.path.join(ROOT, sub), os.path.join(checkout, sub), ignore=shutil.ignore_patterns("__pycache__"))
         os.makedirs(os.path.join(checkout, "lib", "tabdock", "newpkg"))
         for rel in ("newpkg/__init__.py", "newpkg/data.css"):
@@ -250,6 +250,18 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         for rel in ("newpkg/__init__.py", "newpkg/data.css"):
             self.assertTrue(os.path.isfile(os.path.join(self.share, "lib", "tabdock", rel)), rel)
+
+    def test_installs_the_man_page_and_removes_it_again(self):
+        self.assertEqual(self.run_install().returncode, 0)
+        page = os.path.join(self.home, ".local", "share", "man", "man1", "tabdock.1")
+        with open(page) as f:
+            text = f.read()
+        with open(os.path.join(ROOT, "VERSION")) as f:
+            version = f.read().strip()
+        self.assertIn(f'TABDOCK 1 "{version}"', text)
+        self.assertNotIn("@VERSION@", text)
+        self.assertEqual(self.run_install("--uninstall").returncode, 0)
+        self.assertFalse(os.path.exists(page))
 
     def test_installs_a_menu_entry_and_removes_it_again(self):
         self.assertEqual(self.run_install().returncode, 0)

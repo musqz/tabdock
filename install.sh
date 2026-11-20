@@ -5,10 +5,10 @@
 #   PREFIX=/usr SUDO=sudo ./install.sh    program files system-wide (manifests stay per-user)
 #   ./install.sh --uninstall              remove exactly what install created
 #
-# Installed under $PREFIX/share/tabdock, with $PREFIX/bin/tabdock linking to it, plus the
-# native-messaging manifest that lets the browser start the relay, and ~/.config/tabdock/config.toml
-# to edit when you have none (never overwritten). Nothing outside those paths is touched (your
-# Openbox autostart is only mentioned, never edited).
+# Installed under $PREFIX/share/tabdock, with $PREFIX/bin/tabdock linking to it, the man page in
+# $PREFIX/share/man/man1, the native-messaging manifest that lets the browser start the relay, and
+# ~/.config/tabdock/config.toml to edit when you have none (never overwritten). Nothing outside those
+# paths is touched (your Openbox autostart is only mentioned, never edited).
 set -euo pipefail
 
 shopt -u patsub_replacement 2>/dev/null || true  # keep '&' in paths literal
@@ -93,6 +93,17 @@ install_files() {
     put 755 "$root/lib/native-host/tabdock-nmhost" "$relay"
     put 644 "$root/configs/config.toml" "$share/configs/config.toml"
     put 644 "$root/extension/icons/icon-96.png" "$share/icon.png"  # for the menu entry
+    put_man_page
+}
+
+# the man page names the version, filled in from VERSION
+put_man_page() {
+    local tmp content
+    tmp="$(mktemp)"
+    content="$(<"$root/man/tabdock.1")"
+    printf '%s\n' "${content//@VERSION@/$(<"$root/VERSION")}" > "$tmp"
+    put 644 "$tmp" "$PREFIX/share/man/man1/tabdock.1"
+    rm -f -- "$tmp"
 }
 
 link_bin() {

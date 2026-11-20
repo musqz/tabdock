@@ -3,7 +3,7 @@
 ## Program
 
 ```bash
-./install.sh     # ~/.local/share/tabdock, ~/.local/bin/tabdock, a "Tabdock" menu entry, a config to edit
+./install.sh     # ~/.local/share/tabdock, ~/.local/bin/tabdock, a "Tabdock" menu entry, a config to edit, `man tabdock`
 ```
 
 `PREFIX=/usr SUDO=sudo ./install.sh` installs system-wide; `./install.sh --uninstall` removes what it installed.
