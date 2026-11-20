@@ -93,7 +93,17 @@ install_files() {
     put 755 "$root/lib/native-host/tabdock-nmhost" "$relay"
     put 644 "$root/configs/config.toml" "$share/configs/config.toml"
     put 644 "$root/extension/icons/icon-96.png" "$share/icon.png"  # for the menu entry
-    put 644 "$root/man/tabdock.1" "$PREFIX/share/man/man1/tabdock.1"
+    put_man_page
+}
+
+# the man page names the version, filled in from VERSION
+put_man_page() {
+    local tmp content
+    tmp="$(mktemp)"
+    content="$(<"$root/man/tabdock.1")"
+    printf '%s\n' "${content//@VERSION@/$(<"$root/VERSION")}" > "$tmp"
+    put 644 "$tmp" "$PREFIX/share/man/man1/tabdock.1"
+    rm -f -- "$tmp"
 }
 
 link_bin() {
