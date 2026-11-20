@@ -1,0 +1,91 @@
+.TH TABDOCK 1 "" "tabdock" "User Commands"
+.SH NAME
+tabdock \- autohiding side panel with the tabs and containers of Firefox-family browsers
+.SH SYNOPSIS
+.B tabdock
+[\fIOPTION\fR]
+.SH DESCRIPTION
+tabdock shows the tabs and containers of Firefox-family browsers in a panel at the edge of the screen.
+It runs on X11 and on Wayland compositors with layer-shell (labwc, sway).
+The Tabdock extension in the browser feeds it.
+.PP
+The browser starts the panel when it opens with the extension.
+It can also be started from the Tabdock menu entry or an autostart line.
+.PP
+Without an option tabdock starts the panel.
+Every option except
+.BR \-\-debug ,
+.B \-\-help
+and
+.B \-\-version
+tells the running panel what to do, and is meant to be bound to a key in the window manager.
+.SH OPTIONS
+.TP
+.B \-h, \-\-help
+Show the help and exit.
+.TP
+.B \-\-version
+Show the version and exit.
+.TP
+.B \-\-debug
+No GUI: print each snapshot to stdout, and read
+.BI "activate " tabId ,
+.BI "move " "tabId index"
+and
+.BI "order " cookieStoreId ,...
+from stdin.
+.TP
+.B \-\-find
+Show the find window. Arrows and Enter pick a tab, Escape closes it. The same key closes it again.
+.TP
+.B \-\-pin
+Pin the panel open, or unpin it.
+.TP
+.B \-\-icons
+Show or hide the site icons.
+.TP
+.B \-\-side
+Switch the panel to the other screen edge.
+.TP
+.B \-\-new\-workspace
+Make a new workspace in the browser in use.
+.TP
+.B \-\-next, \-\-prev
+Highlight the next or previous row.
+.TP
+.B \-\-open
+Open the highlighted tab, or fold or unfold the highlighted browser.
+.TP
+.B \-\-all
+Switch between auto and all browsers.
+.TP
+.B \-\-ws\-next, \-\-ws\-prev
+Switch to the next or previous workspace of the browser in use.
+.TP
+.B \-\-wider, \-\-narrower
+Make the panel wider or narrower.
+.TP
+.B \-\-toggle
+Show or hide the panel at once. It stays open until toggled again.
+.SH FILES
+.TP
+.I ~/.config/tabdock/config.toml
+Settings. Read at start; SIGHUP reloads it.
+.TP
+.I configs/config.toml
+The example with every option explained, under the install directory:
+.I /usr/share/tabdock
+(package) or
+.I ~/.local/share/tabdock
+(install.sh).
+.TP
+.I tabdock.xpi
+The signed extension, in the package's install directory and on the GitHub release.
+Install it in each browser: about:addons, gear icon, Install Add-on From File.
+.TP
+.I $XDG_RUNTIME_DIR/tabdock.log
+The output of a panel the browser started.
+.SH SEE ALSO
+Full usage and settings:
+.UR https://github.com/musqz/tabdock
+.UE .
