@@ -1,8 +1,4 @@
-# Install
-
-## Program
-
-Pick one.
+# Installation methods
 
 **AUR:**
 
