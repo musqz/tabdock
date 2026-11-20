@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.15.0
+
+The extension only changes its version number; installing the new one is optional.
+
 - Keep the active tab listed when its container is folded.
 - Colour the find window and the other small dialogs like the panel.
 
