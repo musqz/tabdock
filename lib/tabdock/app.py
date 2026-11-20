@@ -392,7 +392,9 @@ def main(argv=None):
         from . import dock
 
         wayland = dock.LAYER
-    if wayland:
+    if args.debug and os.environ.get("WAYLAND_DISPLAY"):
+        pass  # the console does not follow the active window on a Wayland session: Xlib would only warn about xauthority
+    elif wayland:
         try:
             from . import wl  # python-pywayland follows the active window
 
